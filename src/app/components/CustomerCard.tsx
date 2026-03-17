@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import type { FurnitureItemAdmin } from "@/types/furniture";
+import type { FurnitureItemAdmin } from "../../types/furniture";
 
 interface Props {
   item: FurnitureItemAdmin;

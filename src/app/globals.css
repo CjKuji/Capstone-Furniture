@@ -42,3 +42,8 @@ body {
   border-right-color: black;
   border-bottom-color: black;
 }
+
+/* styles/furniture-detail.css */
+.hidden-model-viewer {
+  display: none;
+}

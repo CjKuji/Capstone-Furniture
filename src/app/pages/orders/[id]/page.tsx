@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useParams, useRouter } from "next/navigation";
 import Navbar from "@/app/components/Navbar";
-import type { FurnitureSize, OrderStatus } from "@/types/furniture";
+import type { FurnitureSize, OrderStatus } from "../../../../types/furniture";
 
 interface OrderDetails {
   id: string;

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "@/app/components/Navbar";
 import { supabase } from "@/lib/supabase";
-import type { FurnitureItemAdmin, FurnitureSize } from "@/types/furniture";
+import type { FurnitureItemAdmin, FurnitureSize } from "../types/furniture";
 import CustomerFurnitureCard from "@/app/components/CustomerCard";
 
 // ---------------- SIZE MAPPING ----------------

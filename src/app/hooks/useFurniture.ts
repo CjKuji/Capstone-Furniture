@@ -6,7 +6,7 @@ import type {
   FurnitureItemAdmin,
   FurnitureRelation,
   Profile,
-} from "@/types/furniture";
+} from "../../types/furniture";
 
 interface UseFurnitureOptions {
   isAdmin?: boolean;

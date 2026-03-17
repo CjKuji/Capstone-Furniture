@@ -9,7 +9,7 @@ import Furniture3DViewer from "@/app/components/Furniture3DViewer";
 import FurnitureCard from "@/app/components/FurnitureCard";
 import { supabase } from "@/lib/supabase";
 import { generateThumbnail } from "@/lib/generateThumbnail";
-import type { FurnitureItem, FurnitureSize } from "@/types/furniture";
+import type { FurnitureItem, FurnitureSize } from "../../../types/furniture";
 
 /* ---------------- SIZE MAPPING ---------------- */
 const sizeMap: Record<FurnitureSize, number> = {

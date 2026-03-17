@@ -1,14 +1,28 @@
-// src/types/model-viewer.d.ts
-declare namespace JSX {
-  interface IntrinsicElements {
-    'model-viewer': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement> & {
-      src?: string;
-      alt?: string;
-      ar?: boolean;
-      'ar-modes'?: string;
-      'auto-rotate'?: boolean;
-      'camera-controls'?: boolean;
-      style?: React.CSSProperties;
-    };
+import React from "react";
+
+declare global {
+  interface HTMLModelViewerElement extends HTMLElement {
+    enterAR(): Promise<void>;
   }
 }
+
+declare module "react" {
+  namespace JSX {
+    interface IntrinsicElements {
+      "model-viewer": React.DetailedHTMLProps<
+        React.HTMLAttributes<HTMLModelViewerElement>,
+        HTMLModelViewerElement
+      > & {
+        src?: string;
+        "ios-src"?: string;
+        alt?: string;
+        ar?: boolean;
+        "ar-modes"?: string;
+        "camera-controls"?: boolean;
+        "auto-rotate"?: boolean;
+      };
+    }
+  }
+}
+
+export {};

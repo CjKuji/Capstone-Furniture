@@ -1,7 +1,7 @@
 "use client";
 
 import { Edit, Trash2, Eye } from "lucide-react";
-import type { FurnitureItemAdmin } from "@/types/furniture";
+import type { FurnitureItemAdmin } from "../../types/furniture";
 
 interface FurnitureCardProps {
   item: FurnitureItemAdmin;

@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import type { FurnitureItemAdmin, FurnitureSize } from "@/types/furniture";
+import type { FurnitureItemAdmin, FurnitureSize } from "../../../../types/furniture";
 import Furniture3DViewer from "@/app/components/Furniture3DViewer";
 import QRCode from "react-qr-code";
+import "@google/model-viewer";
 
-/* ---------------- SIZE MAPPING ---------------- */
+// ---------------- SIZE MAPPING ----------------
+
 const sizeMap: Record<FurnitureSize, number> = {
   small: 0.5,
   medium: 2,
@@ -19,7 +21,8 @@ function mapSizeToNumber(size: FurnitureSize | null | undefined): number | null 
   return sizeMap[size];
 }
 
-/* ---------------- PAGE COMPONENT ---------------- */
+// ---------------- PAGE COMPONENT ----------------
+
 export default function FurnitureDetailPage() {
   const router = useRouter();
   const params = useParams();
@@ -29,15 +32,20 @@ export default function FurnitureDetailPage() {
   const [loading, setLoading] = useState(true);
   const [ordering, setOrdering] = useState(false);
 
-  // customization state
   const [size, setSize] = useState<FurnitureSize>("medium");
   const [colorId, setColorId] = useState<string | null>(null);
   const [materialId, setMaterialId] = useState<string | null>(null);
 
-  // AR state
   const [arUrl, setArUrl] = useState<string | null>(null);
 
-  /* ---------------- FETCH FURNITURE ---------------- */
+ const modelViewerRef = useRef<HTMLModelViewerElement | null>(null);
+
+  const isMobile =
+    typeof navigator !== "undefined" &&
+    /Mobi|Android/i.test(navigator.userAgent);
+
+  // ---------------- FETCH FURNITURE ----------------
+
   useEffect(() => {
     const fetchFurniture = async () => {
       try {
@@ -84,12 +92,17 @@ export default function FurnitureDetailPage() {
     if (furnitureId) fetchFurniture();
   }, [furnitureId]);
 
-  /* ---------------- PLACE ORDER ---------------- */
+  // ---------------- PLACE ORDER ----------------
+
   const handleOrder = async () => {
     if (!furniture) return;
+
     setOrdering(true);
 
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
     if (!user) {
       alert("You must be logged in to place an order.");
       setOrdering(false);
@@ -132,19 +145,34 @@ export default function FurnitureDetailPage() {
     }
   };
 
-  /* ---------------- GENERATE AR LINK ---------------- */
+  // ---------------- GENERATE AR ----------------
+
   const handleGenerateAR = () => {
     if (!furniture?.model_url) {
       alert("No model available for AR view.");
       return;
     }
-    setArUrl(furniture.model_url); // public bucket URL
+
+    setArUrl(furniture.model_url);
+
+    if (isMobile) {
+      modelViewerRef.current?.enterAR();
+    }
   };
 
   if (loading)
-    return <div className="text-center py-20 text-black font-semibold">Loading furniture...</div>;
+    return (
+      <div className="text-center py-20 text-black font-semibold">
+        Loading furniture...
+      </div>
+    );
+
   if (!furniture)
-    return <div className="text-center py-20 text-black font-semibold">Furniture not found.</div>;
+    return (
+      <div className="text-center py-20 text-black font-semibold">
+        Furniture not found.
+      </div>
+    );
 
   return (
     <div className="min-h-screen bg-[#FFF8F0] p-4 md:p-8 lg:p-12">
@@ -156,7 +184,9 @@ export default function FurnitureDetailPage() {
       </button>
 
       <div className="flex flex-col md:flex-row gap-6 max-w-7xl mx-auto">
-        {/* LEFT: 3D Viewer + Details */}
+
+        {/* LEFT SIDE */}
+
         <div className="flex-1 flex flex-col gap-4">
           <div className="bg-white shadow-lg rounded-xl overflow-hidden flex justify-center items-center min-h-[28rem] md:min-h-[32rem]">
             <Furniture3DViewer
@@ -167,33 +197,60 @@ export default function FurnitureDetailPage() {
           </div>
 
           <div className="bg-white p-6 rounded-xl shadow-lg flex flex-col gap-2">
-            <h1 className="text-2xl md:text-3xl font-bold text-black">{furniture.name}</h1>
-            <p className="text-black">{furniture.description ?? "No description available"}</p>
+            <h1 className="text-2xl md:text-3xl font-bold text-black">
+              {furniture.name}
+            </h1>
+
+            <p className="text-black">
+              {furniture.description ?? "No description available"}
+            </p>
 
             <div className="flex flex-col gap-1 text-black mt-2">
-              <span><strong>Size:</strong> {size}</span>
-              <span><strong>Material:</strong> {furniture.material?.name ?? "Unknown"}</span>
+              <span>
+                <strong>Size:</strong> {size}
+              </span>
+
+              <span>
+                <strong>Material:</strong>{" "}
+                {furniture.material?.name ?? "Unknown"}
+              </span>
+
               <span className="flex items-center gap-2">
                 <strong>Color:</strong>
+
                 <span
                   className="w-5 h-5 rounded border"
-                  style={{ backgroundColor: furniture.color?.hex_code ?? "#ffffff" }}
+                  style={{
+                    backgroundColor:
+                      furniture.color?.hex_code ?? "#ffffff",
+                  }}
                 />
+
                 {furniture.color?.name ?? "Unknown"}
               </span>
-              <span><strong>Category:</strong> {furniture.category?.name ?? "Uncategorized"}</span>
+
+              <span>
+                <strong>Category:</strong>{" "}
+                {furniture.category?.name ?? "Uncategorized"}
+              </span>
             </div>
           </div>
         </div>
 
-        {/* RIGHT: Customization + Actions + AR */}
-        <div className="w-full md:w-96 flex flex-col gap-4">
-          <div className="bg-white p-6 rounded-xl shadow-lg flex flex-col gap-3 sticky top-20">
-            <h2 className="text-xl md:text-2xl font-semibold text-black">Customize</h2>
+        {/* RIGHT SIDE */}
 
-            {/* Size */}
+        <div className="w-full md:w-96 flex flex-col gap-4">
+
+          {/* CUSTOMIZATION */}
+
+          <div className="bg-white p-6 rounded-xl shadow-lg flex flex-col gap-3 sticky top-20">
+            <h2 className="text-xl md:text-2xl font-semibold text-black">
+              Customize
+            </h2>
+
             <div className="flex flex-col gap-2">
               <label className="text-black font-medium">Size</label>
+
               <select
                 value={size}
                 onChange={(e) => setSize(e.target.value as FurnitureSize)}
@@ -205,50 +262,63 @@ export default function FurnitureDetailPage() {
               </select>
             </div>
 
-            {/* Material */}
             <div className="flex flex-col gap-2">
               <label className="text-black font-medium">Material</label>
+
               <select
                 value={materialId ?? ""}
                 onChange={(e) => setMaterialId(e.target.value)}
                 className="border rounded px-3 py-2"
               >
-                {furniture.material && <option value={furniture.material.id}>{furniture.material.name}</option>}
+                {furniture.material && (
+                  <option value={furniture.material.id}>
+                    {furniture.material.name}
+                  </option>
+                )}
               </select>
             </div>
 
-            {/* Color */}
             <div className="flex flex-col gap-2">
               <label className="text-black font-medium">Color</label>
+
               <input
                 type="color"
                 value={furniture.color?.hex_code ?? "#ffffff"}
-                onChange={(e) => setColorId(furniture.color?.id ?? null)}
+                onChange={() => setColorId(furniture.color?.id ?? null)}
                 className="w-16 h-10 cursor-pointer"
               />
             </div>
           </div>
 
           {/* ACTIONS */}
+
           <div className="bg-white p-6 rounded-xl shadow-lg flex flex-col gap-3">
+
             <button
               className="px-6 py-3 bg-[#A16B4C] text-white rounded-lg hover:bg-[#8C593F] transition shadow-md font-semibold"
               onClick={handleGenerateAR}
             >
-              Generate AR View 🔗
+              View in AR 🔗
             </button>
 
             {arUrl && (
               <div className="flex flex-col items-center gap-2 mt-2">
-                <QRCode value={arUrl} size={128} />
-                <a
-                  href={arUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[#A16B4C] hover:underline mt-1 break-words text-center"
-                >
-                  Open AR Link
-                </a>
+
+                {!isMobile && (
+                  <>
+                    <QRCode value={arUrl} size={128} />
+
+                    <a
+                      href={arUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[#A16B4C] hover:underline mt-1 break-words text-center"
+                    >
+                      Open AR on Mobile
+                    </a>
+                  </>
+                )}
+
                 <button
                   onClick={() => navigator.clipboard.writeText(arUrl)}
                   className="px-3 py-1 mt-1 bg-[#A16B4C] text-white rounded hover:bg-[#8C593F] transition"
@@ -256,7 +326,20 @@ export default function FurnitureDetailPage() {
                   Copy Link 🔗
                 </button>
 
-                            </div>
+                {isMobile && (
+              <model-viewer
+  ref={modelViewerRef}
+  className="hidden-model-viewer"
+  src={furniture.model_url}
+  ios-src={furniture.model_url.replace(".glb", ".usdz")}
+  alt="Furniture AR"
+  ar
+  ar-modes="scene-viewer quick-look webxr"
+  camera-controls
+  auto-rotate
+/>
+                )}
+              </div>
             )}
 
             <button
