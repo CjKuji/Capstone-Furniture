@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 
 interface FurnitureARViewerProps {
   modelUrl: string;
@@ -11,38 +11,54 @@ export default function FurnitureARViewer({
   modelUrl,
   selectedSize = 1,
 }: FurnitureARViewerProps) {
+  const [scriptsLoaded, setScriptsLoaded] = useState(false);
   const scale = `${selectedSize} ${selectedSize} ${selectedSize}`;
 
   useEffect(() => {
     const loadScripts = async () => {
-      if (!document.getElementById("aframe")) {
-        const aframe = document.createElement("script");
-        aframe.src = "https://aframe.io/releases/1.4.2/aframe.min.js";
-        aframe.id = "aframe";
-        aframe.async = true;
-        document.body.appendChild(aframe);
-      }
+      const loadScript = (id: string, src: string) =>
+        new Promise<void>((resolve, reject) => {
+          if (document.getElementById(id)) return resolve();
+          const script = document.createElement("script");
+          script.src = src;
+          script.id = id;
+          script.async = true;
+          script.onload = () => resolve();
+          script.onerror = () => reject(`Failed to load ${src}`);
+          document.body.appendChild(script);
+        });
 
-      if (!document.getElementById("arjs")) {
-        const arjs = document.createElement("script");
-        arjs.src =
-          "https://cdn.rawgit.com/jeromeetienne/AR.js/3.3.2/aframe/build/aframe-ar.js";
-        arjs.id = "arjs";
-        arjs.async = true;
-        document.body.appendChild(arjs);
+      try {
+        await loadScript("aframe", "https://aframe.io/releases/1.4.2/aframe.min.js");
+        await loadScript(
+          "arjs",
+          "https://cdn.rawgit.com/jeromeetienne/AR.js/3.3.2/aframe/build/aframe-ar.js"
+        );
+        setScriptsLoaded(true);
+      } catch (err) {
+        console.error(err);
       }
     };
+
     loadScripts();
   }, []);
 
+  if (!scriptsLoaded) {
+    return (
+      <div className="ar-scene-container flex items-center justify-center text-white font-semibold">
+        Loading AR...
+      </div>
+    );
+  }
+
   return (
-    <div className="w-full h-[500px] bg-gray-100 rounded-lg shadow-md">
+    <div className="ar-scene-container">
       <a-scene
         className="ar-scene"
-        embedded
+        embedded={false}
         arjs="trackingMethod: best; sourceType: webcam;"
+        vr-mode-ui="enabled: false"
       >
-        {/* Marker */}
         <a-marker preset="hiro">
           <a-entity
             gltf-model={modelUrl}
@@ -52,7 +68,6 @@ export default function FurnitureARViewer({
           ></a-entity>
         </a-marker>
 
-        {/* Camera */}
         <a-entity camera></a-entity>
       </a-scene>
     </div>
