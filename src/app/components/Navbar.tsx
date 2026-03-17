@@ -13,7 +13,7 @@ export default function Navbar() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  /* ---------------- GET CURRENT USER ---------------- */
+  // ---------------- GET CURRENT USER ----------------
   useEffect(() => {
     const getSessionUser = async () => {
       const {
@@ -23,7 +23,7 @@ export default function Navbar() {
     };
     getSessionUser();
 
-    // Listen for auth state changes (login/logout)
+    // Listen for auth state changes
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
     });
@@ -31,7 +31,7 @@ export default function Navbar() {
     return () => listener.subscription.unsubscribe();
   }, []);
 
-  /* ---------------- FETCH ROLE ---------------- */
+  // ---------------- FETCH ROLE ----------------
   useEffect(() => {
     const fetchRole = async () => {
       if (!user) return;
@@ -45,7 +45,7 @@ export default function Navbar() {
     fetchRole();
   }, [user]);
 
-  /* ---------------- CLOSE DROPDOWN ON OUTSIDE CLICK ---------------- */
+  // ---------------- CLOSE DROPDOWN ON OUTSIDE CLICK ----------------
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownOpen && dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -63,10 +63,11 @@ export default function Navbar() {
     router.push("/auth/login");
   };
 
+  // ---------------- NAV ITEMS ----------------
   const navItems = [
     { label: "Home", route: "/" },
-    { label: "Catalog", route: "/pages/catalog" },
-    { label: "About Us", route: "/pages/about" },
+    { label: "Catalog", route: "/catalog" },
+    { label: "About Us", route: "/about" },
   ];
 
   return (
@@ -95,11 +96,11 @@ export default function Navbar() {
 
       {/* RIGHT SIDE */}
       <div className="flex items-center gap-4">
-        {user && (
+        {user ? (
           <>
             <button
               title="Saved furniture"
-              onClick={() => router.push("/pages/saved")}
+              onClick={() => router.push("/saved")}
               className="p-2 rounded-full hover:bg-[#FFF0E0] transition"
             >
               <Heart className="w-5 h-5 text-[#4B3F3F]" />
@@ -107,7 +108,7 @@ export default function Navbar() {
 
             <button
               title="Your orders"
-              onClick={() => router.push("/pages/orders")}
+              onClick={() => router.push("/orders")}
               className="p-2 rounded-full hover:bg-[#FFF0E0] transition"
             >
               <ShoppingBag className="w-5 h-5 text-[#4B3F3F]" />
@@ -131,7 +132,7 @@ export default function Navbar() {
                   </div>
 
                   <button
-                    onClick={() => router.push("/pages/profile")}
+                    onClick={() => router.push("/profile")}
                     className="block w-full text-left px-4 py-2 hover:bg-[#FFF0E0] transition"
                   >
                     Profile
@@ -156,9 +157,7 @@ export default function Navbar() {
               )}
             </div>
           </>
-        )}
-
-        {!user && (
+        ) : (
           <div className="flex gap-4">
             <button
               onClick={() => router.push("/auth/login")}
