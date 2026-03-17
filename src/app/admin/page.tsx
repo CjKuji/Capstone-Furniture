@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import AdminSidebar from "@/app/components/AdminSidebar";
-import { User } from "@supabase/supabase-js";
+import type { User } from "@supabase/supabase-js";
 
 interface Stats {
   totalFurniture: number;
@@ -14,7 +14,7 @@ interface Stats {
 
 export default function AdminDashboard() {
   const [user, setUser] = useState<User | null>(null);
-  const [activePage, setActivePage] = useState("dashboard");
+  const [activePage, setActivePage] = useState<"dashboard" | string>("dashboard");
   const [stats, setStats] = useState<Stats>({
     totalFurniture: 0,
     publishedFurniture: 0,
@@ -23,34 +23,54 @@ export default function AdminDashboard() {
   });
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      const session = data.session;
-      if (!session) return window.location.replace("/auth/login");
-      setUser(session.user);
-    });
-  }, []);
+    const init = async () => {
+      try {
+        // Get current session
+        const { data, error } = await supabase.auth.getSession();
+        if (error || !data?.session) {
+          window.location.replace("/auth/login");
+          return;
+        }
+        setUser(data.session.user);
 
-  useEffect(() => {
-    const fetchStats = async () => {
-      const { count: totalFurniture } = await supabase.from("furniture").select("*", { count: "exact" });
-      const { count: publishedFurniture } = await supabase
-        .from("furniture")
-        .select("*", { count: "exact" })
-        .eq("is_published", true);
-      const { count: totalUsers } = await supabase.from("profiles").select("*", { count: "exact" });
-      const { count: savedConfigs } = await supabase.from("saved_configurations").select("*", { count: "exact" });
+        // Fetch stats
+        const { count: totalFurniture } = await supabase
+          .from("furniture")
+          .select("*", { count: "exact" });
 
-      setStats({
-        totalFurniture: totalFurniture || 0,
-        publishedFurniture: publishedFurniture || 0,
-        totalUsers: totalUsers || 0,
-        savedConfigs: savedConfigs || 0,
-      });
+        const { count: publishedFurniture } = await supabase
+          .from("furniture")
+          .select("*", { count: "exact" })
+          .eq("is_published", true);
+
+        const { count: totalUsers } = await supabase
+          .from("profiles")
+          .select("*", { count: "exact" });
+
+        const { count: savedConfigs } = await supabase
+          .from("furniture_configurations")
+          .select("*", { count: "exact" });
+
+        setStats({
+          totalFurniture: totalFurniture || 0,
+          publishedFurniture: publishedFurniture || 0,
+          totalUsers: totalUsers || 0,
+          savedConfigs: savedConfigs || 0,
+        });
+      } catch (err) {
+        console.error("Failed to fetch admin data:", err);
+      }
     };
-    fetchStats();
+
+    init();
   }, []);
 
-  if (!user) return <div className="text-center mt-20 text-lg">Loading...</div>;
+  if (!user)
+    return (
+      <div className="text-center mt-20 text-lg text-black">
+        Loading...
+      </div>
+    );
 
   return (
     <div className="flex min-h-screen bg-gray-50">

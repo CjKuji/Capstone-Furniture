@@ -3,21 +3,16 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import AdminSidebar from "@/app/components/AdminSidebar";
-import { User } from "@supabase/supabase-js";
+import type { FurnitureSize, OrderStatus } from "@/types/furniture";
+import type { User } from "@supabase/supabase-js";
 
-type OrderStatus =
-  | "pending"
-  | "rejected"
-  | "in_production"
-  | "ready_to_claim"
-  | "claimed";
-
-interface AdminOrder {
+// ---------------- TYPES ----------------
+export interface AdminOrder {
   id: string;
   user_id: string;
-  product_name: string;
-  product_thumbnail: string | null;
-  selected_size: string | null;
+  furniture_name: string;
+  furniture_thumbnail: string | null;
+  selected_size: FurnitureSize | null;
   selected_material: string | null;
   selected_color: string | null;
   color_hex: string | null;
@@ -27,117 +22,106 @@ interface AdminOrder {
   created_at: string;
 }
 
-type RawOrder = {
+// Raw response type from Supabase
+interface RawOrderResponse {
   id: string;
   user_id: string;
   total_price: number | null;
   status: OrderStatus;
-  notes: string | null;
+  notes?: string | null;
   created_at: string;
-
-  configuration: {
-    selected_size: string | null;
-
-    furniture: {
+  configuration?: {
+    selected_size?: FurnitureSize | null;
+    furniture?: {
       name: string;
-      thumbnail_url: string | null;
-    } | null;
+      thumbnail_url?: string | null;
+    }[];
+    material?: { name: string }[];
+    color?: { name: string; hex_code?: string }[];
+  }[];
+}
 
-    material: {
-      name: string;
-    } | null;
-
-    color: {
-      name: string;
-      hex_code: string;
-    } | null;
-
-  } | null;
-};
-
+// ---------------- PAGE COMPONENT ----------------
 export default function AdminOrders() {
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activePage, setActivePage] = useState("orders");
   const [user, setUser] = useState<User | null>(null);
+  const [activePage, setActivePage] = useState("orders");
 
-  /* ================= FETCH ORDERS ================= */
-
+  // ---------------- FETCH ORDERS ----------------
   const fetchOrders = async () => {
     setLoading(true);
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData?.user) return;
 
-    const { data, error } = await supabase
-      .from("furniture_orders")
-      .select(`
-        id,
-        user_id,
-        total_price,
-        status,
-        notes,
-        created_at,
-        configuration:furniture_configurations(
-          selected_size,
-          furniture:furniture(
-            name,
-            thumbnail_url
-          ),
-          material:furniture_materials!selected_material_id(
-            name
-          ),
-          color:furniture_colors!selected_color_id(
-            name,
-            hex_code
+      setUser(userData.user);
+
+      const { data, error } = await supabase
+        .from("furniture_orders")
+        .select(`
+          id,
+          user_id,
+          total_price,
+          status,
+          notes,
+          created_at,
+          configuration:configuration_id (
+            selected_size,
+            furniture:furniture_id (
+              name,
+              thumbnail_url
+            ),
+            material:furniture_materials!selected_material_id (
+              name
+            ),
+            color:furniture_colors!selected_color_id (
+              name,
+              hex_code
+            )
           )
-        )
-      `)
-      .order("created_at", { ascending: false });
+        `)
+        .order("created_at", { ascending: false });
 
-    if (error) {
-      console.error("Fetch orders error:", error);
-      setLoading(false);
-      return;
-    }
+      if (error) throw error;
 
-  const mapped: AdminOrder[] = ((data ?? []) as RawOrder[]).map((order) => {
-  const config = order.configuration;
+      // ---------------- MAP RAW TO ADMIN ORDER ----------------
+     const mappedOrders: AdminOrder[] = (data ?? []).map((order: RawOrderResponse) => {
+  const config = order.configuration?.[0] ?? ({} as NonNullable<RawOrderResponse["configuration"]>[0]);
+  const furniture = config.furniture?.[0] ?? ({} as NonNullable<typeof config.furniture>[0]);
+  const material = config.material?.[0] ?? ({} as NonNullable<typeof config.material>[0]);
+  const color = config.color?.[0] ?? ({} as NonNullable<typeof config.color>[0]);
 
   return {
     id: order.id,
     user_id: order.user_id,
-    product_name: config?.furniture?.name ?? "Unknown furniture",
-    product_thumbnail: config?.furniture?.thumbnail_url ?? null,
-    selected_size: config?.selected_size ?? null,
-    selected_material: config?.material?.name ?? null,
-    selected_color: config?.color?.name ?? null,
-    color_hex: config?.color?.hex_code ?? null,
-    total_price: order.total_price,
+    furniture_name: furniture.name ?? "Unknown Furniture",
+    furniture_thumbnail: furniture.thumbnail_url ?? null,
+    selected_size: config.selected_size ?? null,
+    selected_material: material.name ?? null,
+    selected_color: color.name ?? null,
+    color_hex: color.hex_code ?? null,
+    total_price: order.total_price ?? 0,
     status: order.status,
-    notes: order.notes,
-    created_at: order.created_at
+    notes: order.notes ?? null,
+    created_at: order.created_at,
   };
 });
 
-    setOrders(mapped);
-    setLoading(false);
+      setOrders(mappedOrders);
+    } catch (err) {
+      console.error("Failed to fetch orders:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  /* ================= AUTH ================= */
-
+  // ---------------- AUTH & INITIAL FETCH ----------------
   useEffect(() => {
-    const checkUser = async () => {
-      const { data } = await supabase.auth.getUser();
-
-      if (!data.user) return;
-
-      setUser(data.user);
-      await fetchOrders();
-    };
-
-    checkUser();
+    fetchOrders();
   }, []);
 
-  /* ================= UPDATE STATUS ================= */
-
+  // ---------------- UPDATE STATUS ----------------
   const updateStatus = async (orderId: string, status: OrderStatus) => {
     const { error } = await supabase
       .from("furniture_orders")
@@ -154,14 +138,7 @@ export default function AdminOrders() {
     );
   };
 
-  /* ================= HELPERS ================= */
-
-  const formatStatus = (status: string) =>
-    status.replaceAll("_", " ").toUpperCase();
-
-  const formatPrice = (price: number | null) =>
-    price ? `₱${price.toLocaleString()}` : "TBD";
-
+  // ---------------- HELPERS ----------------
   const statusBadge = (status: OrderStatus) => {
     switch (status) {
       case "pending":
@@ -177,13 +154,17 @@ export default function AdminOrders() {
     }
   };
 
+  const formatPrice = (price: number | null) =>
+    price ? `₱${price.toLocaleString()}` : "TBD";
+
   if (!user)
     return (
-      <div className="text-center mt-20 font-semibold text-black">
+      <div className="text-center mt-20 text-black font-semibold">
         Loading admin session...
       </div>
     );
 
+  // ---------------- RENDER ----------------
   return (
     <div className="flex min-h-screen bg-white">
       <AdminSidebar activePage={activePage} setActivePage={setActivePage} />
@@ -192,7 +173,7 @@ export default function AdminOrders() {
         <h1 className="text-3xl font-bold text-black mb-6">Orders</h1>
 
         {loading ? (
-          <div className="text-center mt-10 font-semibold text-black">
+          <div className="text-center mt-10 text-black font-semibold">
             Loading orders...
           </div>
         ) : orders.length === 0 ? (
@@ -207,18 +188,16 @@ export default function AdminOrders() {
                 className="bg-white rounded-xl shadow-lg overflow-hidden flex flex-col hover:shadow-2xl transition"
               >
                 {/* IMAGE */}
-
                 <img
-                  src={order.product_thumbnail || "/placeholder.png"}
-                  alt={order.product_name}
+                  src={order.furniture_thumbnail ?? "/placeholder.png"}
+                  alt={order.furniture_name}
                   className="w-full h-64 object-cover"
                 />
 
                 {/* DETAILS */}
-
-                <div className="p-5 flex-1">
+                <div className="p-5 flex flex-col flex-1">
                   <h2 className="text-xl font-semibold text-[#4B3F3F]">
-                    {order.product_name}
+                    {order.furniture_name}
                   </h2>
 
                   <p className="text-sm mt-2 text-[#6B584B]">
@@ -227,30 +206,24 @@ export default function AdminOrders() {
 
                   <div className="mt-3 flex flex-col gap-1 text-sm text-[#6B584B]">
                     <span>
-                      <strong>Size:</strong> {order.selected_size}
+                      <strong>Size:</strong> {order.selected_size ?? "-"}
                     </span>
-
                     <span>
-                      <strong>Material:</strong> {order.selected_material}
+                      <strong>Material:</strong> {order.selected_material ?? "-"}
                     </span>
-
                     <span className="flex items-center gap-2">
                       <strong>Color:</strong>
-
                       {order.color_hex && (
                         <span
                           className="w-4 h-4 rounded border"
                           style={{ backgroundColor: order.color_hex }}
                         />
                       )}
-
-                      {order.selected_color}
+                      {order.selected_color ?? "-"}
                     </span>
-
                     <span>
                       <strong>Total:</strong> {formatPrice(order.total_price)}
                     </span>
-
                     {order.notes && (
                       <span>
                         <strong>Notes:</strong> {order.notes}
@@ -260,14 +233,13 @@ export default function AdminOrders() {
                 </div>
 
                 {/* STATUS */}
-
                 <div className="p-4 border-t flex flex-col gap-3">
                   <span
                     className={`px-3 py-1 rounded-full text-sm font-semibold w-fit ${statusBadge(
                       order.status
                     )}`}
                   >
-                    {formatStatus(order.status)}
+                    {order.status.replaceAll("_", " ").toUpperCase()}
                   </span>
 
                   <div className="flex flex-wrap gap-2">
