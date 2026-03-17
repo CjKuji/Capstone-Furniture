@@ -5,7 +5,9 @@ import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import type { FurnitureItemAdmin, FurnitureSize } from "../../../../types/furniture";
 import Furniture3DViewer from "@/app/components/Furniture3DViewer";
-import QRCode from "react-qr-code";
+
+// ---------------- MODEL VIEWER TYPES ----------------
+
 
 // ---------------- SIZE MAPPING ----------------
 const sizeMap: Record<FurnitureSize, number> = {
@@ -18,6 +20,19 @@ function mapSizeToNumber(size: FurnitureSize | null | undefined): number | null 
   if (!size) return null;
   return sizeMap[size];
 }
+
+// ---------------- DEBUG LOGGER ----------------
+const sendDebug = async (message: string) => {
+  try {
+    await fetch("/api/ar-debug", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message }),
+    });
+  } catch (err) {
+    console.error("Debug send failed", err);
+  }
+};
 
 // ---------------- PAGE COMPONENT ----------------
 export default function FurnitureDetailPage() {
@@ -32,15 +47,50 @@ export default function FurnitureDetailPage() {
   const [colorId, setColorId] = useState<string | null>(null);
   const [materialId, setMaterialId] = useState<string | null>(null);
 
-  const modelViewerRef = useRef<HTMLModelViewerElement | null>(null);
+const modelViewerRef = useRef<HTMLModelViewerElement | null>(null);
+
   const isMobile =
     typeof navigator !== "undefined" &&
     /Mobi|Android/i.test(navigator.userAgent);
 
-  // ---------------- DYNAMIC MODEL-VIEWER IMPORT ----------------
+  // ---------------- IMPORT MODEL VIEWER ----------------
   useEffect(() => {
     import("@google/model-viewer");
   }, []);
+
+  // ---------------- MODEL VIEWER DEBUG EVENTS ----------------
+  useEffect(() => {
+  const viewer = modelViewerRef.current;
+  if (!viewer) return;
+
+  sendDebug("ModelViewer mounted");
+
+  const onLoad = () => sendDebug("Model loaded");
+  const onError = () => sendDebug("Model load error");
+
+  // Custom event wrapper
+  const onARStatus = (e: Event) => {
+    const ev = e as CustomEvent<{ status: string }>;
+    sendDebug("AR status: " + ev.detail.status);
+  };
+
+  const onTracking = (e: Event) => {
+    const ev = e as CustomEvent<{ status: string }>;
+    sendDebug("AR tracking: " + ev.detail.status);
+  };
+
+  viewer.addEventListener("load", onLoad);
+  viewer.addEventListener("error", onError);
+  viewer.addEventListener("ar-status", onARStatus as EventListener);
+  viewer.addEventListener("ar-tracking", onTracking as EventListener);
+
+  return () => {
+    viewer.removeEventListener("load", onLoad);
+    viewer.removeEventListener("error", onError);
+    viewer.removeEventListener("ar-status", onARStatus as EventListener);
+    viewer.removeEventListener("ar-tracking", onTracking as EventListener);
+  };
+}, []);
 
   // ---------------- FETCH FURNITURE ----------------
   useEffect(() => {
@@ -77,8 +127,11 @@ export default function FurnitureDetailPage() {
         setSize(data.size ?? "medium");
         setColorId(colorRelation?.id ?? null);
         setMaterialId(materialRelation?.id ?? null);
+
+        sendDebug("Furniture loaded: " + data.name);
       } catch (err) {
         console.error("Failed to fetch furniture:", err);
+        sendDebug("Furniture fetch error");
         setFurniture(null);
       } finally {
         setLoading(false);
@@ -112,6 +165,7 @@ export default function FurnitureDetailPage() {
         })
         .select()
         .single();
+
       if (configError) throw configError;
 
       const { error: orderError } = await supabase
@@ -122,6 +176,7 @@ export default function FurnitureDetailPage() {
           status: "pending",
           total_price: furniture.base_price ?? 0,
         });
+
       if (orderError) throw orderError;
 
       alert("Order placed successfully!");
@@ -135,17 +190,42 @@ export default function FurnitureDetailPage() {
   };
 
   // ---------------- OPEN AR ----------------
-  const handleOpenAR = () => {
-    if (!furniture?.model_url) {
-      alert("No model available for AR view.");
+  const handleOpenAR = async () => {
+    const viewer = modelViewerRef.current;
+
+    if (!viewer) {
+      sendDebug("Viewer not initialized");
       return;
     }
-    if (!isMobile) return;
+    if (!furniture?.model_url) {
+      sendDebug("Model URL missing");
+      return;
+    }
 
-    const viewer = modelViewerRef.current;
-    if (!viewer) return;
+    try {
+      sendDebug("Attempting AR launch");
 
-    viewer.addEventListener("load", () => viewer.enterAR(), { once: true });
+      let supported = false;
+if (viewer?.canActivateAR) {
+  supported = await viewer.canActivateAR(); // callable because type is () => Promise<boolean>
+}else if (typeof viewer.canActivateAR === "boolean") {
+        supported = viewer.canActivateAR;
+      }
+
+      sendDebug("AR supported: " + supported);
+
+      if (!supported) {
+        alert("AR not supported on this device.");
+        return;
+      }
+
+      if (viewer.activateAR) await viewer.activateAR();
+
+      sendDebug("AR activated");
+    } catch (err) {
+      sendDebug("AR failed");
+      console.error(err);
+    }
   };
 
   if (loading)
@@ -173,15 +253,16 @@ export default function FurnitureDetailPage() {
               selectedColor={furniture.color?.hex_code ?? undefined}
               selectedSize={mapSizeToNumber(size) ?? 1}
             />
-            {/* Edit button overlay */}
+
             <button className="absolute top-2 left-2 bg-[#A16B4C] text-white px-2 py-1 rounded hover:bg-[#8C593F]">
               Edit
             </button>
           </div>
         </div>
 
-        {/* RIGHT SIDE - DESCRIPTION */}
+        {/* RIGHT SIDE */}
         <div className="w-full md:w-96 flex flex-col gap-4">
+          {/* DESCRIPTION */}
           <div className="bg-white p-6 rounded-xl shadow-lg flex flex-col gap-2 sticky top-20">
             <h1 className="text-2xl md:text-3xl font-bold text-black">{furniture.name}</h1>
             <p className="text-black">{furniture.description ?? "No description available"}</p>
@@ -189,51 +270,40 @@ export default function FurnitureDetailPage() {
             <div className="flex flex-col gap-1 text-black mt-2">
               <span><strong>Size:</strong> {size}</span>
               <span><strong>Material:</strong> {furniture.material?.name ?? "Unknown"}</span>
+
               <span className="flex items-center gap-2">
                 <strong>Color:</strong>
                 <span className="w-5 h-5 rounded border" style={{ backgroundColor: furniture.color?.hex_code ?? "#ffffff" }} />
                 {furniture.color?.name ?? "Unknown"}
               </span>
+
               <span><strong>Category:</strong> {furniture.category?.name ?? "Uncategorized"}</span>
             </div>
           </div>
 
           {/* ACTIONS */}
           <div className="bg-white p-6 rounded-xl shadow-lg flex flex-col gap-3">
-            {furniture.model_url && (
-              <div className="flex flex-col items-center gap-2 mt-2">
-                {!isMobile && (
-                  <>
-                    <QRCode value={furniture.model_url} size={128} />
-                    <p className="text-center text-[#6B584B]">
-                      AR view is only available on mobile. Scan the QR code to view it on your phone.
-                    </p>
-                  </>
-                )}
-
-                {isMobile && (
-                  <model-viewer
-                    ref={modelViewerRef}
-                    src={furniture.model_url}
-                    ios-src={furniture.model_url.replace(".glb", ".usdz")}
-                    alt="Furniture AR"
-                    ar
-                    ar-modes="scene-viewer quick-look webxr"
-                    camera-controls
-                    auto-rotate
-                    style={{ display: "none" }}
-                  />
-                )}
-
-                {isMobile && (
-                  <button
-                    className="px-3 py-1 mt-1 bg-[#A16B4C] text-white rounded hover:bg-[#8C593F] transition"
-                    onClick={handleOpenAR}
-                  >
-                    Open in AR
-                  </button>
-                )}
-              </div>
+            {/* AR VIEWER */}
+            {furniture.model_url && isMobile && (
+              <>
+                <model-viewer
+  className="ar-viewer"
+  ref={modelViewerRef as React.Ref<HTMLModelViewerElement>}
+  src={furniture.model_url}
+  ios-src={furniture.model_url.replace(".glb", ".usdz")}
+  alt="Furniture AR"
+  ar
+  ar-modes="scene-viewer quick-look webxr"
+  camera-controls
+  auto-rotate
+/>
+                <button
+                  className="px-4 py-2 bg-[#A16B4C] text-white rounded hover:bg-[#8C593F]"
+                  onClick={handleOpenAR}
+                >
+                  View in AR
+                </button>
+              </>
             )}
 
             <button

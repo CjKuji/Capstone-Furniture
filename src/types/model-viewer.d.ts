@@ -1,8 +1,11 @@
+// types/model-viewer.d.ts
 import React from "react";
 
 declare global {
   interface HTMLModelViewerElement extends HTMLElement {
     enterAR(): Promise<void>;
+    activateAR(): Promise<void>;
+    canActivateAR?: () => Promise<boolean>; // ALWAYS a function, optional
   }
 }
 
