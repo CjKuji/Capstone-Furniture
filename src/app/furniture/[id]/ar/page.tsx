@@ -17,7 +17,6 @@ export default function FurnitureARPage() {
   useEffect(() => {
     const fetchFurniture = async () => {
       try {
-        // Fetch required fields for FurnitureItemAdmin
         const { data, error } = await supabase
           .from("furniture")
           .select(`
@@ -30,13 +29,11 @@ export default function FurnitureARPage() {
           .single();
 
         if (error) throw error;
-
         if (!data) {
           setFurniture(null);
           return;
         }
 
-        // Ensure type safety by matching FurnitureItemAdmin
         setFurniture({
           id: data.id,
           name: data.name,
@@ -56,20 +53,21 @@ export default function FurnitureARPage() {
 
   if (loading)
     return (
-      <div className="text-center py-20 text-white font-semibold">
+      <div className="flex justify-center items-center h-screen text-white font-semibold text-lg">
         Loading AR...
       </div>
     );
 
   if (!furniture)
     return (
-      <div className="text-center py-20 text-white font-semibold">
+      <div className="flex justify-center items-center h-screen text-white font-semibold text-lg">
         Furniture not found
       </div>
     );
 
   return (
     <div className="w-full h-screen bg-black relative">
+      {/* Back button */}
       <button
         className="absolute top-4 left-4 z-50 px-4 py-2 bg-white rounded shadow hover:bg-gray-200 transition"
         onClick={() => router.back()}
@@ -77,10 +75,13 @@ export default function FurnitureARPage() {
         ← Back
       </button>
 
-      <FurnitureARViewer
-        modelUrl={furniture.model_url}
-        selectedSize={1} // You can map size if needed
-      />
+      {/* AR Viewer */}
+      <div className="w-full h-full">
+        <FurnitureARViewer
+          modelUrl={furniture.model_url}
+          selectedSize={1} // map size here if needed
+        />
+      </div>
     </div>
   );
 }

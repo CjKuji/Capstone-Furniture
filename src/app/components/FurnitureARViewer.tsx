@@ -29,11 +29,15 @@ export default function FurnitureARViewer({
         });
 
       try {
-        await loadScript("aframe", "https://aframe.io/releases/1.4.2/aframe.min.js");
+        // Latest A-Frame
+        await loadScript("aframe", "https://cdn.jsdelivr.net/npm/aframe@1.4.2/dist/aframe.min.js");
+
+        // Latest AR.js
         await loadScript(
           "arjs",
-          "https://cdn.rawgit.com/jeromeetienne/AR.js/3.3.2/aframe/build/aframe-ar.js"
+          "https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.js"
         );
+
         setScriptsLoaded(true);
       } catch (err) {
         console.error(err);
@@ -52,12 +56,12 @@ export default function FurnitureARViewer({
   }
 
   return (
-    <div className="ar-scene-container">
+    <div className="ar-scene-container w-full h-full">
       <a-scene
-        className="ar-scene"
-        embedded={false}
-        arjs="trackingMethod: best; sourceType: webcam;"
+        embedded
         vr-mode-ui="enabled: false"
+        arjs="trackingMethod: best; sourceType: webcam;"
+        style={{ width: "100%", height: "100%" }}
       >
         <a-marker preset="hiro">
           <a-entity
