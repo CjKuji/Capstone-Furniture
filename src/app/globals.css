@@ -47,3 +47,29 @@ body {
 .hidden-model-viewer {
   display: none;
 }
+
+.viewer-wrapper {
+  position: relative;
+  background: #fff;
+  border-radius: 1rem;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  min-height: 28rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+}
+
+/* Overlay edit button on top-left of the model */
+.edit-btn {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.5rem;
+  background-color: rgba(161, 107, 76, 0.9);
+  color: #fff;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  font-weight: 600;
+  cursor: pointer;
+  z-index: 10;
+}
