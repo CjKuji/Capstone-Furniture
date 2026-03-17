@@ -24,3 +24,21 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Color box for furniture orders */
+.color-box {
+  width: 20px;                 /* same as Tailwind w-5 */
+  height: 20px;                /* same as Tailwind h-5 */
+  border-radius: 0.25rem;      /* rounded corners */
+  border: 1px solid #ccc;
+  display: inline-block;
+  background-color: var(--box-color, #ffffff); /* fallback white */
+}
+
+/* In your global CSS or tailwind config */
+.loader {
+  border-top-color: transparent;
+  border-left-color: black;
+  border-right-color: black;
+  border-bottom-color: black;
+}
