@@ -9,10 +9,12 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@ar-js-org/ar.js": "^3.4.8",
     "@google/model-viewer": "^4.2.0",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.5.0",
     "@supabase/supabase-js": "^2.99.0",
+    "aframe": "^1.7.1",
     "lucide-react": "^0.577.0",
     "next": "^16.1.6",
     "pg": "^8.20.0",

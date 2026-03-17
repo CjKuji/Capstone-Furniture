@@ -1,13 +1,11 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import type { FurnitureItemAdmin, FurnitureSize } from "../../../../types/furniture";
 import Furniture3DViewer from "@/app/components/Furniture3DViewer";
-
-// ---------------- MODEL VIEWER TYPES ----------------
-
+import FurnitureARViewer from "@/app/components/FurnitureARViewer"; // <-- Import AR component
 
 // ---------------- SIZE MAPPING ----------------
 const sizeMap: Record<FurnitureSize, number> = {
@@ -47,50 +45,12 @@ export default function FurnitureDetailPage() {
   const [colorId, setColorId] = useState<string | null>(null);
   const [materialId, setMaterialId] = useState<string | null>(null);
 
-const modelViewerRef = useRef<HTMLModelViewerElement | null>(null);
+  // Toggle AR view
+  const [showAR, setShowAR] = useState(false);
 
   const isMobile =
     typeof navigator !== "undefined" &&
     /Mobi|Android/i.test(navigator.userAgent);
-
-  // ---------------- IMPORT MODEL VIEWER ----------------
-  useEffect(() => {
-    import("@google/model-viewer");
-  }, []);
-
-  // ---------------- MODEL VIEWER DEBUG EVENTS ----------------
-  useEffect(() => {
-  const viewer = modelViewerRef.current;
-  if (!viewer) return;
-
-  sendDebug("ModelViewer mounted");
-
-  const onLoad = () => sendDebug("Model loaded");
-  const onError = () => sendDebug("Model load error");
-
-  // Custom event wrapper
-  const onARStatus = (e: Event) => {
-    const ev = e as CustomEvent<{ status: string }>;
-    sendDebug("AR status: " + ev.detail.status);
-  };
-
-  const onTracking = (e: Event) => {
-    const ev = e as CustomEvent<{ status: string }>;
-    sendDebug("AR tracking: " + ev.detail.status);
-  };
-
-  viewer.addEventListener("load", onLoad);
-  viewer.addEventListener("error", onError);
-  viewer.addEventListener("ar-status", onARStatus as EventListener);
-  viewer.addEventListener("ar-tracking", onTracking as EventListener);
-
-  return () => {
-    viewer.removeEventListener("load", onLoad);
-    viewer.removeEventListener("error", onError);
-    viewer.removeEventListener("ar-status", onARStatus as EventListener);
-    viewer.removeEventListener("ar-tracking", onTracking as EventListener);
-  };
-}, []);
 
   // ---------------- FETCH FURNITURE ----------------
   useEffect(() => {
@@ -189,45 +149,6 @@ const modelViewerRef = useRef<HTMLModelViewerElement | null>(null);
     }
   };
 
-  // ---------------- OPEN AR ----------------
-  const handleOpenAR = async () => {
-    const viewer = modelViewerRef.current;
-
-    if (!viewer) {
-      sendDebug("Viewer not initialized");
-      return;
-    }
-    if (!furniture?.model_url) {
-      sendDebug("Model URL missing");
-      return;
-    }
-
-    try {
-      sendDebug("Attempting AR launch");
-
-      let supported = false;
-if (viewer?.canActivateAR) {
-  supported = await viewer.canActivateAR(); // callable because type is () => Promise<boolean>
-}else if (typeof viewer.canActivateAR === "boolean") {
-        supported = viewer.canActivateAR;
-      }
-
-      sendDebug("AR supported: " + supported);
-
-      if (!supported) {
-        alert("AR not supported on this device.");
-        return;
-      }
-
-      if (viewer.activateAR) await viewer.activateAR();
-
-      sendDebug("AR activated");
-    } catch (err) {
-      sendDebug("AR failed");
-      console.error(err);
-    }
-  };
-
   if (loading)
     return <div className="text-center py-20 text-black font-semibold">Loading furniture...</div>;
 
@@ -253,7 +174,6 @@ if (viewer?.canActivateAR) {
               selectedColor={furniture.color?.hex_code ?? undefined}
               selectedSize={mapSizeToNumber(size) ?? 1}
             />
-
             <button className="absolute top-2 left-2 bg-[#A16B4C] text-white px-2 py-1 rounded hover:bg-[#8C593F]">
               Edit
             </button>
@@ -270,13 +190,11 @@ if (viewer?.canActivateAR) {
             <div className="flex flex-col gap-1 text-black mt-2">
               <span><strong>Size:</strong> {size}</span>
               <span><strong>Material:</strong> {furniture.material?.name ?? "Unknown"}</span>
-
               <span className="flex items-center gap-2">
                 <strong>Color:</strong>
                 <span className="w-5 h-5 rounded border" style={{ backgroundColor: furniture.color?.hex_code ?? "#ffffff" }} />
                 {furniture.color?.name ?? "Unknown"}
               </span>
-
               <span><strong>Category:</strong> {furniture.category?.name ?? "Uncategorized"}</span>
             </div>
           </div>
@@ -286,23 +204,19 @@ if (viewer?.canActivateAR) {
             {/* AR VIEWER */}
             {furniture.model_url && isMobile && (
               <>
-                <model-viewer
-  className="ar-viewer"
-  ref={modelViewerRef as React.Ref<HTMLModelViewerElement>}
-  src={furniture.model_url}
-  ios-src={furniture.model_url.replace(".glb", ".usdz")}
-  alt="Furniture AR"
-  ar
-  ar-modes="scene-viewer quick-look webxr"
-  camera-controls
-  auto-rotate
-/>
-                <button
-                  className="px-4 py-2 bg-[#A16B4C] text-white rounded hover:bg-[#8C593F]"
-                  onClick={handleOpenAR}
-                >
-                  View in AR
-                </button>
+                {!showAR ? (
+                  <button
+                    className="px-4 py-2 bg-[#A16B4C] text-white rounded hover:bg-[#8C593F]"
+                    onClick={() => setShowAR(true)}
+                  >
+                    View in AR
+                  </button>
+                ) : (
+                  <FurnitureARViewer
+                    modelUrl={furniture.model_url}
+                    selectedSize={mapSizeToNumber(size) ?? 1}
+                  />
+                )}
               </>
             )}
 

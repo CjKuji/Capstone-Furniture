@@ -175,24 +175,6 @@ export default function OrderDetailsPage() {
 
       <section className="max-w-5xl mx-auto grid md:grid-cols-2 gap-10 px-8 pb-16">
 
-        {/* IMAGE OR 3D */}
-
-        {!show3D ? (
-          <img
-            src={furniture?.thumbnail_url ?? "/placeholder.png"}
-            className="w-full h-[400px] object-cover rounded-xl shadow"
-          />
-        ) : (
-          <model-viewer
-            src={furniture?.model_url ?? ""}
-            ar
-            ar-modes="webxr scene-viewer quick-look"
-            camera-controls
-            auto-rotate
-            style={{ width: "100%", height: "400px" }}
-          ></model-viewer>
-        )}
-
         {/* DETAILS */}
 
         <div className="flex flex-col gap-4">
