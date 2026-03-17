@@ -3,9 +3,8 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import type { FurnitureItemAdmin, FurnitureSize } from "../../../../types/furniture";
+import type { FurnitureItemAdmin, FurnitureSize } from "@/types/furniture";
 import Furniture3DViewer from "@/app/components/Furniture3DViewer";
-import FurnitureARViewer from "@/app/components/FurnitureARViewer"; // <-- Import AR component
 
 // ---------------- SIZE MAPPING ----------------
 const sizeMap: Record<FurnitureSize, number> = {
@@ -42,11 +41,6 @@ export default function FurnitureDetailPage() {
   const [loading, setLoading] = useState(true);
   const [ordering, setOrdering] = useState(false);
   const [size, setSize] = useState<FurnitureSize>("medium");
-  const [colorId, setColorId] = useState<string | null>(null);
-  const [materialId, setMaterialId] = useState<string | null>(null);
-
-  // Toggle AR view
-  const [showAR, setShowAR] = useState(false);
 
   const isMobile =
     typeof navigator !== "undefined" &&
@@ -85,8 +79,6 @@ export default function FurnitureDetailPage() {
         });
 
         setSize(data.size ?? "medium");
-        setColorId(colorRelation?.id ?? null);
-        setMaterialId(materialRelation?.id ?? null);
 
         sendDebug("Furniture loaded: " + data.name);
       } catch (err) {
@@ -120,8 +112,8 @@ export default function FurnitureDetailPage() {
           user_id: user.id,
           furniture_id: furniture.id,
           selected_size: size,
-          selected_color_id: colorId,
-          selected_material_id: materialId,
+          selected_color_id: furniture.color?.id ?? null,
+          selected_material_id: furniture.material?.id ?? null,
         })
         .select()
         .single();
@@ -150,10 +142,18 @@ export default function FurnitureDetailPage() {
   };
 
   if (loading)
-    return <div className="text-center py-20 text-black font-semibold">Loading furniture...</div>;
+    return (
+      <div className="text-center py-20 text-black font-semibold">
+        Loading furniture...
+      </div>
+    );
 
   if (!furniture)
-    return <div className="text-center py-20 text-black font-semibold">Furniture not found.</div>;
+    return (
+      <div className="text-center py-20 text-black font-semibold">
+        Furniture not found.
+      </div>
+    );
 
   // ---------------- RENDER ----------------
   return (
@@ -201,23 +201,14 @@ export default function FurnitureDetailPage() {
 
           {/* ACTIONS */}
           <div className="bg-white p-6 rounded-xl shadow-lg flex flex-col gap-3">
-            {/* AR VIEWER */}
+            {/* AR BUTTON REDIRECT */}
             {furniture.model_url && isMobile && (
-              <>
-                {!showAR ? (
-                  <button
-                    className="px-4 py-2 bg-[#A16B4C] text-white rounded hover:bg-[#8C593F]"
-                    onClick={() => setShowAR(true)}
-                  >
-                    View in AR
-                  </button>
-                ) : (
-                  <FurnitureARViewer
-                    modelUrl={furniture.model_url}
-                    selectedSize={mapSizeToNumber(size) ?? 1}
-                  />
-                )}
-              </>
+              <button
+                className="px-4 py-2 bg-[#A16B4C] text-white rounded hover:bg-[#8C593F]"
+                onClick={() => router.push(`/pages/furniture/ar/${furniture.id}`)}
+              >
+                View in AR
+              </button>
             )}
 
             <button
