@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "@/app/components/Navbar";
 import { supabase } from "@/lib/supabase";
-import type { FurnitureItemAdmin, FurnitureSize } from "../types/furniture";
+import type { FurnitureItemAdmin, FurnitureSize } from "@/types/furniture";
 import CustomerFurnitureCard from "@/app/components/CustomerCard";
 
 // ---------------- SIZE MAPPING ----------------
@@ -24,6 +24,7 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
+  // ---------------- FETCH FURNITURE ----------------
   useEffect(() => {
     const fetchFurniture = async () => {
       try {
@@ -116,27 +117,26 @@ export default function HomePage() {
         </div>
       </section>
 
-     {/* FEATURED FURNITURE */}
-<section className="py-20 px-6">
-  <div className="max-w-7xl mx-auto">
-    <div className="flex justify-between items-center mb-10 flex-wrap">
-      <h2 className="text-3xl font-bold">Featured Furniture</h2>
-      <button
-        onClick={() => router.push("/catalog")}
-        className="text-[#A16B4C] font-semibold hover:underline"
-      >
-        View All
-      </button>
-    </div>
+      {/* FEATURED FURNITURE */}
+      <section className="py-20 px-6">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex justify-between items-center mb-10 flex-wrap">
+            <h2 className="text-3xl font-bold">Featured Furniture</h2>
+            <button
+              onClick={() => router.push("/catalog")}
+              className="text-[#A16B4C] font-semibold hover:underline"
+            >
+              View All
+            </button>
+          </div>
 
-    <div className="grid gap-8 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-      {furniture.map((item) => (
-        <CustomerFurnitureCard key={item.id} item={item} />
-      ))}
-    </div>
-
-  </div>
-</section>
+          <div className="grid gap-8 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+            {furniture.map((item) => (
+              <CustomerFurnitureCard key={item.id} item={item} />
+            ))}
+          </div>
+        </div>
+      </section>
 
       {/* CONTACT */}
       <section className="py-20 px-6 bg-[#FFF0E0]">

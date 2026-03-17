@@ -13,7 +13,7 @@ export default function CustomerFurnitureCard({ item }: Props) {
   return (
     <div
       className="bg-white rounded-xl shadow-md hover:shadow-xl transition flex flex-col cursor-pointer"
-      onClick={() => router.push(`/pages/furniture/${item.id}`)}
+      onClick={() => router.push(`/furniture/${item.id}`)}
     >
       {/* IMAGE */}
       <img
