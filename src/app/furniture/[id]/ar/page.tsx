@@ -6,6 +6,20 @@ import FurnitureARViewer from "@/app/components/FurnitureARViewer";
 import { supabase } from "@/lib/supabase";
 import type { FurnitureItemAdmin } from "@/types/furniture";
 
+// ---------------- DEBUG LOGGER ----------------
+const sendDebug = async (message: string) => {
+  try {
+    await fetch("/api/ar-debug", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message }),
+    });
+    console.log("AR DEBUG:", message);
+  } catch (err) {
+    console.error("Failed to send AR debug:", err);
+  }
+};
+
 export default function FurnitureARPage() {
   const router = useRouter();
   const params = useParams();
@@ -17,22 +31,21 @@ export default function FurnitureARPage() {
   useEffect(() => {
     const fetchFurniture = async () => {
       try {
+        sendDebug("Fetching furniture ID: " + furnitureId);
         const { data, error } = await supabase
           .from("furniture")
-          .select(`
-            id,
-            name,
-            model_url,
-            is_published
-          `)
+          .select("id,name,model_url,is_published")
           .eq("id", furnitureId)
           .single();
 
         if (error) throw error;
         if (!data) {
+          sendDebug("No furniture found for ID: " + furnitureId);
           setFurniture(null);
           return;
         }
+
+        sendDebug("Furniture loaded: " + data.name + " | URL: " + data.model_url);
 
         setFurniture({
           id: data.id,
@@ -41,7 +54,8 @@ export default function FurnitureARPage() {
           is_published: data.is_published,
         });
       } catch (err) {
-        console.error("Failed to fetch furniture:", err);
+        sendDebug("Fetch furniture error: " + JSON.stringify(err));
+        console.error(err);
         setFurniture(null);
       } finally {
         setLoading(false);
@@ -79,7 +93,8 @@ export default function FurnitureARPage() {
       <div className="w-full h-full">
         <FurnitureARViewer
           modelUrl={furniture.model_url}
-          selectedSize={1} // map size here if needed
+          selectedSize={1}
+          onDebug={sendDebug} // pass debugger to component
         />
       </div>
     </div>
