@@ -204,11 +204,11 @@ export default function FurnitureDetailPage() {
             {/* AR BUTTON REDIRECT */}
             {furniture.model_url && isMobile && (
               <button
-                className="px-4 py-2 bg-[#A16B4C] text-white rounded hover:bg-[#8C593F]"
-                onClick={() => router.push(`/pages/furniture/ar/${furniture.id}`)}
-              >
-                View in AR
-              </button>
+  className="px-4 py-2 bg-[#A16B4C] text-white rounded hover:bg-[#8C593F]"
+  onClick={() => router.push(`/furniture/${furniture.id}/ar`)}
+>
+  View in AR
+</button>
             )}
 
             <button
