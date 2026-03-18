@@ -8,49 +8,16 @@ import {
   useGLTF,
   Html,
   Environment,
-  ContactShadows,
 } from "@react-three/drei";
 
 /* -------------------------- */
 /* Props */
 /* -------------------------- */
-
 interface Furniture3DViewerProps {
   modelUrl: string;
-  selectedColor?: string; // hex string for custom color
-  selectedMaterialColor?: string; // hex string for material override
+  selectedColor?: string; // hex string for color overlay
+  selectedMaterialTextureUrl?: string; // texture map URL
   selectedSize?: number; // scale multiplier
-}
-
-/* -------------------------- */
-/* Floor */
-/* -------------------------- */
-function Floor({ size = 6 }: { size?: number }) {
-  return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-      <planeGeometry args={[size, size]} />
-      <meshStandardMaterial color="#e5e5e5" />
-    </mesh>
-  );
-}
-
-/* -------------------------- */
-/* Back Wall */
-/* -------------------------- */
-function Wall({ width = 6, height = 3 }: { width?: number; height?: number }) {
-  return (
-    <mesh position={[0, height / 2, -width / 2]} receiveShadow>
-      <planeGeometry args={[width, height]} />
-      <meshStandardMaterial color="#d4d4d4" />
-    </mesh>
-  );
-}
-
-/* -------------------------- */
-/* Grid Helper */
-/* -------------------------- */
-function Grid({ size = 6, divisions = 12 }: { size?: number; divisions?: number }) {
-  return <gridHelper args={[size, divisions, "#999", "#ccc"]} position={[0, 0.001, 0]} />;
 }
 
 /* -------------------------- */
@@ -59,14 +26,14 @@ function Grid({ size = 6, divisions = 12 }: { size?: number; divisions?: number 
 function Model({
   modelUrl,
   selectedColor,
-  selectedMaterialColor,
+  selectedMaterialTextureUrl,
   selectedSize = 1,
 }: Furniture3DViewerProps) {
   const { scene } = useGLTF(modelUrl);
-
-  // clone the scene to prevent shared material issues
-  const clonedScene = useMemo(() => scene.clone(), [scene]);
   const modelRef = useRef<THREE.Group>(null);
+
+  // clone scene to avoid shared material issues
+  const clonedScene = useMemo(() => scene.clone(), [scene]);
 
   /* ---------- Center model ---------- */
   useEffect(() => {
@@ -78,6 +45,9 @@ function Model({
 
   /* ---------- Apply Materials ---------- */
   useEffect(() => {
+    const textureLoader = new THREE.TextureLoader();
+    const texture = selectedMaterialTextureUrl ? textureLoader.load(selectedMaterialTextureUrl) : null;
+
     clonedScene.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
         const mesh = child as THREE.Mesh;
@@ -85,7 +55,17 @@ function Model({
 
         materials.forEach((mat) => {
           if (mat instanceof THREE.MeshStandardMaterial) {
-            mat.color = new THREE.Color(selectedColor || selectedMaterialColor || "#ffffff");
+            // Apply texture if available
+            if (texture) {
+              mat.map = texture;
+            }
+
+            // Apply color overlay if available
+            if (selectedColor) {
+              mat.color = new THREE.Color(selectedColor);
+            }
+
+            mat.needsUpdate = true;
           }
         });
 
@@ -93,7 +73,7 @@ function Model({
         mesh.receiveShadow = true;
       }
     });
-  }, [clonedScene, selectedColor, selectedMaterialColor]);
+  }, [clonedScene, selectedColor, selectedMaterialTextureUrl]);
 
   /* ---------- Scale Model ---------- */
   useEffect(() => {
@@ -111,7 +91,7 @@ function Model({
 export default function Furniture3DViewer({
   modelUrl,
   selectedColor,
-  selectedMaterialColor,
+  selectedMaterialTextureUrl,
   selectedSize = 1,
 }: Furniture3DViewerProps) {
   return (
@@ -128,12 +108,7 @@ export default function Furniture3DViewer({
         />
 
         {/* Environment */}
-        <Environment preset="apartment" />
-
-        {/* Scene Helpers */}
-        <Floor />
-        <Wall />
-        <Grid />
+        <Environment preset="studio" />
 
         {/* 3D Model */}
         <Suspense
@@ -146,13 +121,10 @@ export default function Furniture3DViewer({
           <Model
             modelUrl={modelUrl}
             selectedColor={selectedColor}
-            selectedMaterialColor={selectedMaterialColor}
+            selectedMaterialTextureUrl={selectedMaterialTextureUrl}
             selectedSize={selectedSize}
           />
         </Suspense>
-
-        {/* Soft Shadows */}
-        <ContactShadows position={[0, 0.01, 0]} opacity={0.4} scale={5} blur={2} far={5} />
 
         {/* Camera Controls */}
         <OrbitControls enablePan enableZoom enableRotate minDistance={1} maxDistance={10} />

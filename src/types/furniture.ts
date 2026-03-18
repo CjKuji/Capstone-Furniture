@@ -18,9 +18,11 @@ export interface FurnitureCategory {
   name: string;
 }
 
+// Add texture_url for dynamic 3D textures
 export interface FurnitureMaterial {
   id: string;
   name: string;
+  texture_url?: string | null;
 }
 
 export interface FurnitureColor {
@@ -28,6 +30,8 @@ export interface FurnitureColor {
   material_id: string;
   name: string;
   hex_code: string;
+  // optional tint for overlay
+  texture_overlay?: string | null;
 }
 
 export interface Profile {
@@ -42,10 +46,10 @@ export interface FurnitureRelation {
   id: string;
   name: string;
   hex_code?: string;
+  texture_url?: string; // allow relation to carry material texture
 }
 
 // ---------------- FURNITURE TYPES ----------------
-// For user-facing pages (lightweight)
 export interface FurnitureItem {
   id: string;
   name: string;
@@ -97,6 +101,30 @@ export interface FurnitureOrder {
   status: OrderStatus;
   notes?: string | null; // for rejection reason or notes
   created_at: string;
+}
+
+// ---------------- CUSTOMER ORDER TYPES ----------------
+export interface FurnitureDetails {
+  id: string;
+  name: string;
+  thumbnail_url?: string | null;
+  material?: { id: string; name: string } | null;
+  color?: { id: string; name: string; hex_code?: string } | null;
+}
+
+export interface ConfigurationDetails {
+  selected_size: FurnitureSize | null;
+  selected_color_id: string | null;
+  selected_material_id: string | null;
+  furniture: FurnitureDetails | null;
+}
+
+export interface OrderWithDetails {
+  id: string;
+  status: OrderStatus;
+  total_price: number;
+  created_at: string;
+  configuration: ConfigurationDetails | null;
 }
 
 // ---------------- SELECT OPTION ----------------

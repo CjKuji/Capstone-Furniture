@@ -81,8 +81,35 @@ body {
   height: 100vh; /* full viewport */
   background-color: black;
 }
-
+/* FurnitureARViewer.css */
 .ar-scene {
   width: 100%;
   height: 100%;
+  background: #000;
+  position: relative;
+}
+
+.ar-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: white;
+  font-weight: bold;
+  z-index: 40;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.ar-hint {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  z-index: 50;
+  background: white;
+  color: black;
+  padding: 0.5rem 1rem;
+  border-radius: 0.25rem;
+  box-shadow: 0 0 5px rgba(0,0,0,0.3);
+  font-size: 0.9rem;
 }

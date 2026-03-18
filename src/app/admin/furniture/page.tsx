@@ -55,33 +55,35 @@ export default function AdminFurniture() {
   const [categoryId, setCategoryId] = useState("");
 
   /* ---------------- DATA STATE ---------------- */
-  const [materials, setMaterials] = useState<{ id: string; name: string }[]>([]);
+  const [materials, setMaterials] = useState<{ id: string; name: string; texture_url?: string | null }[]>([]);
   const [colors, setColors] = useState<{ id: string; name: string; hex_code: string }[]>([]);
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
 
   /* ---------------- FETCH MATERIALS / COLORS / CATEGORIES ---------------- */
   const fetchMaterialsColorsCategories = async () => {
-    try {
-      const { data: materialsData, error: matError } = await supabase
-        .from("furniture_materials")
-        .select("id,name");
-      const { data: colorsData, error: colorError } = await supabase
-        .from("furniture_colors")
-        .select("id,name,hex_code");
-      const { data: categoriesData, error: catError } = await supabase
-        .from("furniture_categories")
-        .select("id,name");
+  try {
+    const { data: materialsData, error: matError } = await supabase
+      .from("furniture_materials")
+      .select("id,name,texture_url"); // <-- include texture_url
 
-      if (matError || colorError || catError) throw matError || colorError || catError;
+    const { data: colorsData, error: colorError } = await supabase
+      .from("furniture_colors")
+      .select("id,name,hex_code");
 
-      setMaterials(materialsData || []);
-      setColors(colorsData || []);
-      setCategories(categoriesData || []);
-    } catch (err) {
-      console.error(err);
-      alert("Failed to fetch materials, colors, or categories");
-    }
-  };
+    const { data: categoriesData, error: catError } = await supabase
+      .from("furniture_categories")
+      .select("id,name");
+
+    if (matError || colorError || catError) throw matError || colorError || catError;
+
+    setMaterials(materialsData || []);
+    setColors(colorsData || []);
+    setCategories(categoriesData || []);
+  } catch (err) {
+    console.error(err);
+    alert("Failed to fetch materials, colors, or categories");
+  }
+};
 
   /* ---------------- FETCH FURNITURE ---------------- */
   const fetchFurniture = async () => {
@@ -134,15 +136,17 @@ const openModal = (item?: FurnitureItem & { size_numeric?: number | null }) => {
 
 /* ---------------- SAVE FURNITURE ---------------- */
 const handleSaveFurniture = async () => {
-  if (!name || (!file && !selectedFurniture)) {
+  if (!name || (!file && !selectedFurniture?.model_url)) {
     alert("Furniture name and GLB file required.");
     return;
   }
 
-  let model_url = selectedFurniture?.model_url || "";
-  let thumbnail_url: string | null = selectedFurniture?.thumbnail_url ?? null;
-
   try {
+    // ---------------- INITIAL VALUES ----------------
+    let model_url = selectedFurniture?.model_url || "";
+    let thumbnail_url: string | null = selectedFurniture?.thumbnail_url ?? null;
+
+    // ---------------- UPLOAD GLB MODEL ----------------
     if (file) {
       const fileExt = file.name.split(".").pop();
       const fileName = `${Date.now()}.${fileExt}`;
@@ -158,32 +162,46 @@ const handleSaveFurniture = async () => {
         .getPublicUrl(filePath);
       model_url = urlData.publicUrl;
 
-      const blob = await generateThumbnail(model_url);
-      const thumbName = `thumb-${Date.now()}.png`;
-      const thumbPath = `thumbnails/${thumbName}`;
-      const { error: thumbError } = await supabase.storage
-        .from("thumbnails")
-        .upload(thumbPath, blob, { contentType: "image/png" });
-      if (!thumbError) {
-        const { data } = supabase.storage.from("thumbnails").getPublicUrl(thumbPath);
-        thumbnail_url = data.publicUrl;
+      // ---------------- GENERATE & UPLOAD THUMBNAIL ----------------
+      try {
+        const blob = await generateThumbnail(model_url);
+        const thumbName = `thumb-${Date.now()}.png`;
+        const thumbPath = thumbName; // upload directly to root of "thumbnails" bucket
+
+        const { error: thumbError } = await supabase.storage
+          .from("thumbnails")
+          .upload(thumbPath, blob, { contentType: "image/png"});
+
+        if (thumbError) {
+          console.error("Thumbnail upload error:", thumbError);
+        } else {
+          const { data } = supabase.storage
+            .from("thumbnails")
+            .getPublicUrl(thumbPath);
+          thumbnail_url = data.publicUrl;
+        }
+      } catch (thumbErr) {
+        console.warn("Thumbnail generation failed:", thumbErr);
       }
     }
 
-    const payload: Partial<FurnitureItem & { size_numeric?: number | null }> = {
+    // ---------------- BUILD PAYLOAD ----------------
+    const payload = {
       name,
-      slug: slug || name.toLowerCase().replace(/\s+/g, "-"),
+      slug: slug || `${name.toLowerCase().replace(/\s+/g, "-")}-${Date.now()}`,
       description,
       category_id: categoryId || null,
       model_url,
       thumbnail_url,
-      size: size || null, // string for UI / TS
-      size_numeric: size ? mapSizeToNumber(size) : null, // numeric for DB
+      size: size || null, // ENUM string
       material_id: materialId || null,
       color_id: colorId || null,
       is_published: true,
-    };
+      created_by: user?.id || null, // optional
+      updated_at: new Date().toISOString(),
+    } as const;
 
+    // ---------------- INSERT OR UPDATE ----------------
     if (selectedFurniture) {
       const { error } = await supabase
         .from("furniture")
@@ -201,7 +219,7 @@ const handleSaveFurniture = async () => {
     fetchFurniture();
   } catch (err: unknown) {
     if (err instanceof Error) alert(err.message);
-    else alert("Unexpected error occurred");
+    else alert("Unexpected error occurred while saving furniture.");
   }
 };
 
@@ -259,40 +277,40 @@ return (
         ))}
       </div>
 
-     {isModalOpen && (
-  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-    <div className="bg-white w-full max-w-md rounded-lg shadow-lg flex flex-col gap-4
-                    max-h-screen overflow-y-auto p-6">
-      
-      <h2 className="text-xl font-bold mb-2 text-black">
-        {selectedFurniture ? "Edit Furniture" : "Add Furniture"}
-      </h2>
+      {/* ---------------- MODAL ---------------- */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white w-full max-w-3xl rounded-lg shadow-lg flex flex-col max-h-[90vh] overflow-y-auto p-6">
+            
+            <h2 className="text-xl font-bold mb-2 text-black">
+              {selectedFurniture ? "Edit Furniture" : "Add Furniture"}
+            </h2>
 
-      {/* FORM FIELDS */}
-      <div className="flex flex-col gap-3">
-        <label className="font-semibold">Name</label>
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Furniture name"
-          className="w-full border border-black p-2 rounded text-black bg-white"
-        />
+            {/* FORM FIELDS */}
+            <div className="flex flex-col gap-3">
+              <label className="font-semibold">Name</label>
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Furniture name"
+                className="w-full border border-black p-2 rounded text-black bg-white"
+              />
 
-        <label className="font-semibold">Slug (optional)</label>
-        <input
-          value={slug}
-          onChange={(e) => setSlug(e.target.value)}
-          placeholder="Slug"
-          className="w-full border border-black p-2 rounded text-black bg-white"
-        />
+              <label className="font-semibold">Slug (optional)</label>
+              <input
+                value={slug}
+                onChange={(e) => setSlug(e.target.value)}
+                placeholder="Slug"
+                className="w-full border border-black p-2 rounded text-black bg-white"
+              />
 
-        <label className="font-semibold">Description</label>
-        <textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="Description"
-          className="w-full border border-black p-2 rounded text-black bg-white resize-none"
-        />
+              <label className="font-semibold">Description</label>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Description"
+                className="w-full border border-black p-2 rounded text-black bg-white resize-none"
+              />
 
               <label className="font-semibold">Category</label>
               <select
@@ -363,25 +381,26 @@ return (
               </button>
             </div>
 
-      {/* ACTIONS */}
-      <div className="flex justify-end gap-3 mt-4">
-        <button
-          onClick={() => setIsModalOpen(false)}
-          className="px-4 py-2 border border-black rounded text-black bg-white hover:bg-gray-100 transition"
-        >
-          Cancel
-        </button>
-        <button
-          onClick={handleSaveFurniture}
-          className="px-4 py-2 bg-black text-white rounded hover:bg-gray-900 transition"
-        >
-          Save
-        </button>
-      </div>
-    </div>
-  </div>
-)}
-      {/* 3D VIEWER */}
+            {/* ACTIONS */}
+            <div className="flex justify-end gap-3 mt-4">
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="px-4 py-2 border border-black rounded text-black bg-white hover:bg-gray-100 transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveFurniture}
+                className="px-4 py-2 bg-black text-white rounded hover:bg-gray-900 transition"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ---------------- 3D VIEWER ---------------- */}
       {isViewerOpen && (
         <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-6 overflow-auto">
           <div className="bg-white rounded-lg w-full max-w-4xl p-6">
@@ -400,6 +419,7 @@ return (
               <Furniture3DViewer
                 modelUrl={viewerModelUrl}
                 selectedColor={colors.find((c) => c.id === colorId)?.hex_code}
+                selectedMaterialTextureUrl={materials.find((m) => m.id === materialId)?.texture_url ?? undefined}
                 selectedSize={mapSizeToNumber(size)}
               />
             </div>
@@ -409,5 +429,4 @@ return (
 
     </main>
   </div>
-);
-}
+);}

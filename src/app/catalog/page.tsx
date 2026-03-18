@@ -18,6 +18,7 @@ export default function CatalogPage() {
   const router = useRouter();
   const [furniture, setFurniture] = useState<Furniture[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
 
   /* ---------------- FETCH FURNITURE ---------------- */
   useEffect(() => {
@@ -47,6 +48,18 @@ export default function CatalogPage() {
     fetchFurniture();
   }, []);
 
+  /* ---------------- SEARCH FILTER ---------------- */
+  const filteredFurniture = furniture.filter((item) => {
+    const term = searchTerm.toLowerCase();
+    const nameMatch = item.name.toLowerCase().includes(term);
+    const descMatch = item.description?.toLowerCase().includes(term) ?? false;
+    const categoryMatch =
+      item.furniture_categories?.some((cat) =>
+        cat.name.toLowerCase().includes(term)
+      ) ?? false;
+    return nameMatch || descMatch || categoryMatch;
+  });
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-screen text-[#4B3F3F] font-semibold text-lg">
@@ -57,8 +70,6 @@ export default function CatalogPage() {
 
   return (
     <div className="min-h-screen bg-[#FFF8F0]">
-
-      {/* NAVBAR handles its own user fetching */}
       <Navbar />
 
       {/* PAGE HEADER */}
@@ -66,26 +77,34 @@ export default function CatalogPage() {
         <h1 className="text-4xl font-bold text-[#4B3F3F] mb-2">
           Furniture Catalog
         </h1>
-        <p className="text-[#6B584B]">
+        <p className="text-[#6B584B] mb-4">
           Explore and customize furniture in 3D before ordering.
         </p>
+
+        {/* SEARCH INPUT */}
+        <input
+          type="text"
+          placeholder="Search furniture..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="w-full max-w-md px-4 py-2 rounded-md border border-[#D1BFA7] focus:outline-none focus:ring-2 focus:ring-[#A16B4C] focus:border-transparent text-[#4B3F3F]"
+        />
       </section>
 
       {/* FURNITURE GRID */}
       <section className="px-8 pb-16">
-        {furniture.length === 0 ? (
+        {filteredFurniture.length === 0 ? (
           <div className="text-center text-[#6B584B] mt-20">
-            No furniture available yet.
+            No furniture found.
           </div>
         ) : (
           <div className="grid gap-8 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {furniture.map((item) => (
+            {filteredFurniture.map((item) => (
               <div
                 key={item.id}
                 className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition cursor-pointer flex flex-col"
                 onClick={() => router.push(`/pages/furniture/${item.id}`)}
               >
-                {/* IMAGE */}
                 <div className="h-56 bg-[#F6F1EB]">
                   {item.thumbnail_url ? (
                     <img
@@ -100,20 +119,16 @@ export default function CatalogPage() {
                   )}
                 </div>
 
-                {/* DETAILS */}
                 <div className="p-4 flex flex-col flex-1">
                   <h2 className="text-lg font-semibold text-[#4B3F3F]">
                     {item.name}
                   </h2>
-
                   <p className="text-sm text-[#6B584B] mt-1">
                     {item.furniture_categories?.[0]?.name ?? "Uncategorized"}
                   </p>
-
                   <p className="mt-3 font-semibold text-[#A16B4C]">
                     ₱{item.base_price.toLocaleString()}
                   </p>
-
                   <button
                     className="mt-auto mt-4 py-2 bg-[#A16B4C] text-white rounded hover:bg-[#8C593F] transition"
                     onClick={(e) => {
