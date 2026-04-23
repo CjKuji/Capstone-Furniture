@@ -111,6 +111,18 @@ export default function AdminFurniture() {
   }, []);
 
   /* =========================================================
+     SAFE CLOSE HANDLERS (IMPORTANT FIX)
+  ========================================================= */
+
+  const handleCloseAddModal = useCallback(() => {
+    setIsAddOpen(false);
+  }, []);
+
+  const handleCloseEditModal = useCallback(() => {
+    setEditingItem(null);
+  }, []);
+
+  /* =========================================================
      CREATE
   ========================================================= */
 
@@ -121,10 +133,10 @@ export default function AdminFurniture() {
       const success = await create(form, userId);
 
       if (success) {
-        setIsAddOpen(false);
+        handleCloseAddModal();
       }
     },
-    [create, userId]
+    [create, userId, handleCloseAddModal]
   );
 
   /* =========================================================
@@ -136,10 +148,10 @@ export default function AdminFurniture() {
       const success = await update(id, form);
 
       if (success) {
-        setEditingItem(null);
+        handleCloseEditModal();
       }
     },
-    [update]
+    [update, handleCloseEditModal]
   );
 
   /* =========================================================
@@ -157,7 +169,7 @@ export default function AdminFurniture() {
   );
 
   /* =========================================================
-     VIEW HANDLER (SAFE VARIANT FALLBACK)
+     VIEW HANDLER
   ========================================================= */
 
   const handleView = useCallback(
@@ -252,7 +264,7 @@ export default function AdminFurniture() {
         {/* ADD MODAL */}
         <AddFurnitureModal
           isOpen={isAddOpen}
-          onClose={() => setIsAddOpen(false)}
+          onClose={handleCloseAddModal}
           onSave={handleCreate}
           categories={categories}
         />
@@ -262,13 +274,13 @@ export default function AdminFurniture() {
           <EditFurnitureModal
             isOpen={!!editingItem}
             item={editingItem}
-            onClose={() => setEditingItem(null)}
+            onClose={handleCloseEditModal}
             onSave={handleUpdate}
             categories={categories}
           />
         )}
 
-        {/* GLOBAL MUTATION INDICATOR (OPTIONAL BUT CLEAN UX) */}
+        {/* MUTATION INDICATOR */}
         {mutating && (
           <div className="fixed bottom-4 right-4 bg-black text-white text-xs px-3 py-2 rounded">
             Saving changes...

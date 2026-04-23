@@ -44,6 +44,7 @@ export default function AddFurnitureModal({
     removeVariant,
     setDefaultVariant,
     buildPayload,
+    resetForm,
   } = useFurnitureForm({
     mode: "create",
   });
@@ -62,10 +63,24 @@ export default function AddFurnitureModal({
   } = state;
 
   /* =========================================================
-     VARIANT PREVIEW
+     LOCAL UI STATE
   ========================================================= */
 
   const [activeVariantId, setActiveVariantId] = useState<string | null>(null);
+
+  /* =========================================================
+     SAFE CLOSE HANDLER (ONLY RESET POINT)
+  ========================================================= */
+
+  const handleClose = useCallback(() => {
+    resetForm();
+    setActiveVariantId(null);
+    onClose();
+  }, [resetForm, onClose]);
+
+  /* =========================================================
+     VARIANT PREVIEW
+  ========================================================= */
 
   const activeVariantTexture = useMemo(() => {
     if (!activeVariantId) return null;
@@ -95,10 +110,12 @@ export default function AddFurnitureModal({
   }, [modelPreviewUrl]);
 
   /* =========================================================
-     CLEANUP
+     CLEANUP (ONLY ON UNMOUNT)
   ========================================================= */
 
   useEffect(() => {
+    if (!isOpen) return;
+
     return () => {
       images.forEach((img) => {
         if (img.url.startsWith("blob:")) {
@@ -112,10 +129,10 @@ export default function AddFurnitureModal({
         }
       });
     };
-  }, [images, variants]);
+  }, [isOpen, images, variants]);
 
   /* =========================================================
-     VARIANT FILE
+     VARIANT FILE HANDLER
   ========================================================= */
 
   const handleVariantFile = useCallback(
@@ -131,7 +148,7 @@ export default function AddFurnitureModal({
   );
 
   /* =========================================================
-     SUBMIT
+     SUBMIT (RESET AFTER SUCCESS)
   ========================================================= */
 
   const handleSubmit = useCallback(() => {
@@ -139,8 +156,18 @@ export default function AddFurnitureModal({
 
     const payload = buildPayload();
     onSave(payload);
+
+    resetForm();
+    setActiveVariantId(null);
     onClose();
-  }, [name, categoryId, buildPayload, onSave, onClose]);
+  }, [
+    name,
+    categoryId,
+    buildPayload,
+    onSave,
+    resetForm,
+    onClose,
+  ]);
 
   if (!isOpen) return null;
 
@@ -160,7 +187,8 @@ export default function AddFurnitureModal({
               Upload model, images, variants, and details
             </p>
           </div>
-          <button onClick={onClose}>✕</button>
+
+          <button onClick={handleClose}>✕</button>
         </div>
 
         <div className="flex flex-1 overflow-hidden">
@@ -182,7 +210,6 @@ export default function AddFurnitureModal({
           {/* FORM */}
           <div className="w-1/2 p-6 overflow-y-auto space-y-5">
 
-            {/* BASIC */}
             <input
               value={name}
               onChange={(e) => setField("name", e.target.value)}
@@ -213,7 +240,9 @@ export default function AddFurnitureModal({
             <input
               type="number"
               value={basePrice}
-              onChange={(e) => setField("basePrice", Number(e.target.value))}
+              onChange={(e) =>
+                setField("basePrice", Number(e.target.value))
+              }
               className="w-full border px-3 py-2 rounded"
             />
 
@@ -301,6 +330,7 @@ export default function AddFurnitureModal({
 
             {/* VARIANTS */}
             <div className="space-y-3">
+
               <div className="flex justify-between">
                 <p className="font-medium">Variants</p>
                 <button onClick={addVariant}>+ Add</button>
@@ -339,12 +369,14 @@ export default function AddFurnitureModal({
                       <input
                         type="file"
                         onChange={(e) =>
-                          handleVariantFile(key, e.target.files?.[0] ?? null)
+                          handleVariantFile(
+                            key,
+                            e.target.files?.[0] ?? null
+                          )
                         }
                       />
 
                       <div className="flex justify-between">
-
                         <button onClick={() => setActiveVariantId(key)}>
                           Apply
                         </button>
@@ -369,7 +401,7 @@ export default function AddFurnitureModal({
 
         {/* FOOTER */}
         <div className="border-t px-6 py-4 flex justify-end gap-3">
-          <button onClick={onClose}>Cancel</button>
+          <button onClick={handleClose}>Cancel</button>
           <button
             onClick={handleSubmit}
             className="bg-black text-white px-4 py-2 rounded"

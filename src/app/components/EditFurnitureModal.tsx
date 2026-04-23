@@ -51,6 +51,7 @@ export default function EditFurnitureModal({
     removeVariant,
     setDefaultVariant,
     buildPayload,
+    resetForm, // ✅ IMPORTANT (same pattern as Add modal)
   } = useFurnitureForm({
     mode: "edit",
     item,
@@ -67,6 +68,24 @@ export default function EditFurnitureModal({
   } = state;
 
   const [submitting, setSubmitting] = useState(false);
+  const [activeVariantId, setActiveVariantId] = useState<string | null>(null);
+
+  /* =========================================================
+     RESET ON CLOSE (SAFE PATTERN)
+  ========================================================= */
+
+  const handleClose = useCallback(() => {
+    resetForm();
+    setActiveVariantId(null);
+    onClose();
+  }, [resetForm, onClose]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      resetForm();
+      setActiveVariantId(null);
+    }
+  }, [isOpen, resetForm]);
 
   /* =========================================================
      MODEL PREVIEW
@@ -90,6 +109,8 @@ export default function EditFurnitureModal({
   ========================================================= */
 
   useEffect(() => {
+    if (!isOpen) return;
+
     return () => {
       images.forEach((img) => {
         if (img.url.startsWith("blob:")) {
@@ -103,7 +124,7 @@ export default function EditFurnitureModal({
         }
       });
     };
-  }, [images, variants]);
+  }, [isOpen, images, variants]);
 
   /* =========================================================
      VARIANT FILE
@@ -135,13 +156,22 @@ export default function EditFurnitureModal({
 
       await onSave(item.id, payload);
 
+      resetForm();
+      setActiveVariantId(null);
       onClose();
     } catch (err) {
       console.error("❌ UPDATE FAILED:", err);
     } finally {
       setSubmitting(false);
     }
-  }, [isOpen, item, buildPayload, onSave, onClose]);
+  }, [
+    isOpen,
+    item,
+    buildPayload,
+    onSave,
+    onClose,
+    resetForm,
+  ]);
 
   /* ========================================================= */
 
@@ -167,7 +197,7 @@ export default function EditFurnitureModal({
         {/* HEADER */}
         <div className="px-6 py-4 border-b flex justify-between">
           <h2 className="text-lg font-semibold">Edit Furniture</h2>
-          <button onClick={onClose}>✕</button>
+          <button onClick={handleClose}>✕</button>
         </div>
 
         <div className="flex flex-1 overflow-hidden">
@@ -187,7 +217,6 @@ export default function EditFurnitureModal({
           {/* FORM */}
           <div className="w-1/2 p-6 overflow-y-auto space-y-4">
 
-            {/* BASIC */}
             <input
               value={name}
               onChange={(e) => setField("name", e.target.value)}
@@ -204,14 +233,18 @@ export default function EditFurnitureModal({
             >
               <option value="">Category</option>
               {categories.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
               ))}
             </select>
 
             <input
               type="number"
               value={basePrice}
-              onChange={(e) => setField("basePrice", Number(e.target.value))}
+              onChange={(e) =>
+                setField("basePrice", Number(e.target.value))
+              }
             />
 
             <input
@@ -229,84 +262,91 @@ export default function EditFurnitureModal({
             />
 
             <div className="grid grid-cols-3 gap-2">
-              {images.filter(i => !i.isDeleted).map((img) => {
-                const key = getKey(img);
+              {images
+                .filter((i) => !i.isDeleted)
+                .map((img) => {
+                  const key = getKey(img);
 
-                return (
-                  <div key={key} className="relative">
-                    <img src={img.url} className="h-20 w-full object-cover" />
+                  return (
+                    <div key={key} className="relative">
+                      <img src={img.url} className="h-20 w-full object-cover" />
 
-                    <button onClick={() => removeImage(key)}>✕</button>
+                      <button onClick={() => removeImage(key)}>✕</button>
 
-                    <button onClick={() => setPrimaryImage(key)}>
-                      {img.isPrimary ? "Main" : "Set"}
-                    </button>
-                  </div>
-                );
-              })}
+                      <button onClick={() => setPrimaryImage(key)}>
+                        {img.isPrimary ? "Main" : "Set"}
+                      </button>
+                    </div>
+                  );
+                })}
             </div>
 
             {/* VARIANTS */}
             <button onClick={addVariant}>+ Variant</button>
 
-            {variants.filter(v => !v.isDeleted).map((v) => {
-              const key = getKey(v);
+            {variants
+              .filter((v) => !v.isDeleted)
+              .map((v) => {
+                const key = getKey(v);
 
-              return (
-                <div key={key} className="space-y-2 border p-2 rounded">
+                return (
+                  <div key={key} className="space-y-2 border p-2 rounded">
 
-                  <input
-                    value={v.name}
-                    onChange={(e) =>
-                      updateVariant(key, "name", e.target.value)
-                    }
-                  />
+                    <input
+                      value={v.name}
+                      onChange={(e) =>
+                        updateVariant(key, "name", e.target.value)
+                      }
+                    />
 
-                  <input
-                    type="number"
-                    value={v.priceAdjustment}
-                    onChange={(e) =>
-                      updateVariant(
-                        key,
-                        "priceAdjustment",
-                        Number(e.target.value)
-                      )
-                    }
-                  />
+                    <input
+                      type="number"
+                      value={v.priceAdjustment}
+                      onChange={(e) =>
+                        updateVariant(
+                          key,
+                          "priceAdjustment",
+                          Number(e.target.value)
+                        )
+                      }
+                    />
 
-                  <input
-                    type="file"
-                    onChange={(e) =>
-                      handleVariantFile(key, e.target.files?.[0] ?? null)
-                    }
-                  />
+                    <input
+                      type="file"
+                      onChange={(e) =>
+                        handleVariantFile(
+                          key,
+                          e.target.files?.[0] ?? null
+                        )
+                      }
+                    />
 
-                  <div className="flex gap-2">
+                    <div className="flex gap-2">
 
-                    <label>
-                      <input
-                        type="radio"
-                        checked={v.isDefault}
-                        onChange={() => setDefaultVariant(key)}
-                      />
-                      Default
-                    </label>
+                      <label>
+                        <input
+                          type="radio"
+                          checked={v.isDefault}
+                          onChange={() => setDefaultVariant(key)}
+                        />
+                        Default
+                      </label>
 
-                    <button onClick={() => removeVariant(key)}>
-                      Remove
-                    </button>
+                      <button onClick={() => removeVariant(key)}>
+                        Remove
+                      </button>
 
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
 
           </div>
         </div>
 
         {/* FOOTER */}
         <div className="border-t px-6 py-4 flex justify-end gap-3">
-          <button onClick={onClose}>Cancel</button>
+          <button onClick={handleClose}>Cancel</button>
 
           <button onClick={handleSubmit} disabled={submitting}>
             {submitting ? "Updating..." : "Update"}

@@ -16,6 +16,8 @@ type Params = {
   item?: FurnitureItemAdmin | null;
 };
 
+/* ========================================================= */
+
 type FormState = {
   name: string;
   description: string;
@@ -94,6 +96,14 @@ export function useFurnitureForm({ mode, item }: Params) {
   );
 
   /* =========================================================
+     RESET (✅ NEW SAFE ADDITION)
+  ========================================================= */
+
+  const resetForm = useCallback(() => {
+    setForm(buildInitial("create", null));
+  }, []);
+
+  /* =========================================================
      HELPERS
   ========================================================= */
 
@@ -104,12 +114,12 @@ export function useFurnitureForm({ mode, item }: Params) {
      GENERIC FIELD
   ========================================================= */
 
-  const setField = useCallback(<K extends keyof FormState>(
-    key: K,
-    value: FormState[K]
-  ) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
-  }, []);
+  const setField = useCallback(
+    <K extends keyof FormState>(key: K, value: FormState[K]) => {
+      setForm((prev) => ({ ...prev, [key]: value }));
+    },
+    []
+  );
 
   /* =========================================================
      IMAGE ACTIONS
@@ -173,7 +183,11 @@ export function useFurnitureForm({ mode, item }: Params) {
   }, []);
 
   const updateVariant = useCallback(
-    (key: string, field: keyof VariantUI, value: any) => {
+    <K extends keyof VariantUI>(
+      key: string,
+      field: K,
+      value: VariantUI[K]
+    ) => {
       setForm((prev) => ({
         ...prev,
         variants: prev.variants.map((v) =>
@@ -204,10 +218,10 @@ export function useFurnitureForm({ mode, item }: Params) {
   }, []);
 
   /* =========================================================
-     SAFETY NORMALIZATION (UI SIDE)
+     SAFETY NORMALIZATION
   ========================================================= */
 
-  const ensurePrimary = (images: ImageUI[]) => {
+  const ensurePrimary = useCallback((images: ImageUI[]) => {
     const active = images.filter((i) => !i.isDeleted);
     if (!active.length) return images;
 
@@ -221,9 +235,9 @@ export function useFurnitureForm({ mode, item }: Params) {
     }
 
     return images;
-  };
+  }, []);
 
-  const ensureDefault = (variants: VariantUI[]) => {
+  const ensureDefault = useCallback((variants: VariantUI[]) => {
     const active = variants.filter((v) => !v.isDeleted);
     if (!active.length) return variants;
 
@@ -237,10 +251,10 @@ export function useFurnitureForm({ mode, item }: Params) {
     }
 
     return variants;
-  };
+  }, []);
 
   /* =========================================================
-     PAYLOAD (CRITICAL FIX HERE)
+     PAYLOAD
   ========================================================= */
 
   const buildPayload = useCallback((): FurnitureFormPayload => {
@@ -254,7 +268,6 @@ export function useFurnitureForm({ mode, item }: Params) {
       basePrice: form.basePrice,
       modelFile: form.modelFile,
 
-      // ✅ DO NOT FILTER — send FULL STATE
       images: safeImages.map((i) => ({
         id: i.id,
         image_url: i.url,
@@ -279,7 +292,7 @@ export function useFurnitureForm({ mode, item }: Params) {
         heightCm: form.heightCm ?? undefined,
       },
     };
-  }, [form]);
+  }, [form, ensurePrimary, ensureDefault]);
 
   /* ========================================================= */
 
@@ -298,5 +311,7 @@ export function useFurnitureForm({ mode, item }: Params) {
     setDefaultVariant,
 
     buildPayload,
+
+    resetForm, // ✅ IMPORTANT
   };
 }
