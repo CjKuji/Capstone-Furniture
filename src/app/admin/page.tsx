@@ -3,7 +3,13 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import AdminSidebar from "@/app/components/AdminSidebar";
+
+import { getAdminStats } from "@/services/dashboardService";
 import type { User } from "@supabase/supabase-js";
+
+/* =========================================================
+   TYPES
+   ========================================================= */
 
 interface Stats {
   totalFurniture: number;
@@ -12,9 +18,13 @@ interface Stats {
   savedConfigs: number;
 }
 
+/* =========================================================
+   PAGE
+   ========================================================= */
+
 export default function AdminDashboard() {
   const [user, setUser] = useState<User | null>(null);
-  const [activePage, setActivePage] = useState<"dashboard" | string>("dashboard");
+
   const [stats, setStats] = useState<Stats>({
     totalFurniture: 0,
     publishedFurniture: 0,
@@ -22,120 +32,160 @@ export default function AdminDashboard() {
     savedConfigs: 0,
   });
 
+  const [loading, setLoading] = useState(true);
+
+  /* =========================================================
+     INIT
+     ========================================================= */
+
   useEffect(() => {
+    let mounted = true;
+
     const init = async () => {
+      setLoading(true);
+
       try {
-        // Get current session
-        const { data, error } = await supabase.auth.getSession();
-        if (error || !data?.session) {
-          window.location.replace("/auth/login");
-          return;
-        }
-        setUser(data.session.user);
+        const { data } = await supabase.auth.getUser();
 
-        // Fetch stats
-        const { count: totalFurniture } = await supabase
-          .from("furniture")
-          .select("*", { count: "exact" });
+        if (!mounted) return;
+        setUser(data.user ?? null);
 
-        const { count: publishedFurniture } = await supabase
-          .from("furniture")
-          .select("*", { count: "exact" })
-          .eq("is_published", true);
+        const dashboardStats = await getAdminStats();
 
-        const { count: totalUsers } = await supabase
-          .from("profiles")
-          .select("*", { count: "exact" });
-
-        const { count: savedConfigs } = await supabase
-          .from("furniture_configurations")
-          .select("*", { count: "exact" });
-
-        setStats({
-          totalFurniture: totalFurniture || 0,
-          publishedFurniture: publishedFurniture || 0,
-          totalUsers: totalUsers || 0,
-          savedConfigs: savedConfigs || 0,
-        });
-      } catch (err) {
-        console.error("Failed to fetch admin data:", err);
+        if (!mounted) return;
+        setStats(dashboardStats);
+      } finally {
+        if (mounted) setLoading(false);
       }
     };
 
     init();
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  if (!user)
-    return (
-      <div className="text-center mt-20 text-lg text-black">
-        Loading...
-      </div>
-    );
+  /* =========================================================
+     UI
+     ========================================================= */
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
-      <AdminSidebar activePage={activePage} setActivePage={setActivePage} />
+    <div className="flex min-h-screen bg-neutral-50 text-neutral-900">
 
-      <main className="flex-1 p-8">
-        <h1 className="text-3xl font-bold mb-6 capitalize text-black">{activePage}</h1>
-        <p className="mb-8 text-black">
-          Welcome, {user.email}. {activePage === "dashboard" && "Here’s your admin overview."}
-        </p>
+      <AdminSidebar />
 
-        {activePage === "dashboard" && (
-          <>
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-              {[
-                { label: "Total Furniture", value: stats.totalFurniture },
-                { label: "Published Furniture", value: stats.publishedFurniture },
-                { label: "Total Users", value: stats.totalUsers },
-                { label: "Saved Configurations", value: stats.savedConfigs },
-              ].map((card) => (
-                <div key={card.label} className="bg-white p-6 shadow-md rounded-lg">
-                  <h2 className="text-gray-500 text-sm">{card.label}</h2>
-                  <p className="text-2xl font-bold text-black">{card.value}</p>
-                </div>
-              ))}
-            </div>
+      <main className="flex-1 p-10 space-y-8">
 
-            {/* Recent Activity */}
-            <div className="bg-white p-6 shadow-md rounded-lg mb-8">
-              <h2 className="text-xl font-semibold mb-4 text-black">Recent Activity</h2>
-              <ul className="text-black">
-                <li>Admin uploaded 'Modern Chair' 2h ago</li>
-                <li>User John Doe saved 'Wooden Table'</li>
-                <li>Admin published 'Luxury Sofa'</li>
-              </ul>
-            </div>
+        {/* ================= HEADER ================= */}
+        <div className="flex items-end justify-between">
+          <div>
+            <h1 className="text-xl font-semibold tracking-tight">
+              Admin Overview
+            </h1>
 
-            {/* Quick Actions */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <p className="text-sm text-neutral-500 mt-1">
+              {user?.email
+                ? `Signed in as ${user.email}`
+                : "System control center"}
+            </p>
+          </div>
+
+          <div className="text-xs text-neutral-500">
+            Live system status:{" "}
+            <span className="text-emerald-600">Operational</span>
+          </div>
+        </div>
+
+        {/* ================= KPI ================= */}
+        {loading ? (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {Array.from({ length: 4 }).map((_, i) => (
               <div
-                className="bg-white p-6 shadow-md rounded-lg cursor-pointer hover:shadow-xl transition text-black"
-                onClick={() => window.location.href = "/dashboard/admin/furniture/upload"}
-              >
-                <h3 className="text-lg font-semibold mb-2">Upload Furniture</h3>
-                <p>Add new 3D furniture models to your catalog.</p>
-              </div>
-              <div
-                className="bg-white p-6 shadow-md rounded-lg cursor-pointer hover:shadow-xl transition text-black"
-                onClick={() => window.location.href = "/dashboard/admin/furniture"}
-              >
-                <h3 className="text-lg font-semibold mb-2">View Catalog</h3>
-                <p>Browse all furniture items and check published status.</p>
-              </div>
-              <div
-                className="bg-white p-6 shadow-md rounded-lg cursor-pointer hover:shadow-xl transition text-black"
-                onClick={() => window.location.href = "/dashboard/admin/analytics"}
-              >
-                <h3 className="text-lg font-semibold mb-2">Analytics</h3>
-                <p>View reports and statistics (coming soon).</p>
-              </div>
-            </div>
-          </>
+                key={i}
+                className="h-24 rounded-xl bg-neutral-200 animate-pulse"
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+
+            <KpiCard label="Furniture Items" value={stats.totalFurniture} />
+
+            <KpiCard
+              label="Published"
+              value={stats.publishedFurniture}
+              tone="success"
+            />
+
+            <KpiCard label="Users" value={stats.totalUsers} />
+
+            <KpiCard
+              label="Saved Configs"
+              value={stats.savedConfigs}
+              tone="muted"
+            />
+          </div>
         )}
+
+        {/* ================= PANEL ================= */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+          <div className="lg:col-span-2 border rounded-xl bg-white p-5">
+            <h2 className="text-sm font-semibold">System Activity</h2>
+            <div className="mt-4 text-sm text-neutral-500">
+              Activity feed placeholder (orders, edits, uploads, etc.)
+            </div>
+          </div>
+
+          <div className="border rounded-xl bg-white p-5">
+            <h2 className="text-sm font-semibold">Quick Actions</h2>
+
+            <div className="mt-4 space-y-2 text-sm">
+              <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-neutral-100">
+                + Add Furniture
+              </button>
+              <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-neutral-100">
+                View Orders
+              </button>
+              <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-neutral-100">
+                Manage Users
+              </button>
+            </div>
+          </div>
+
+        </div>
+
       </main>
+    </div>
+  );
+}
+
+/* =========================================================
+   KPI CARD
+   ========================================================= */
+
+function KpiCard({
+  label,
+  value,
+  tone = "default",
+}: {
+  label: string;
+  value: number;
+  tone?: "default" | "success" | "muted";
+}) {
+  const toneStyles = {
+    default: "text-neutral-900",
+    success: "text-emerald-600",
+    muted: "text-neutral-500",
+  };
+
+  return (
+    <div className="rounded-xl border bg-white p-5 hover:shadow-sm transition">
+      <p className="text-xs text-neutral-500">{label}</p>
+      <p className={`text-2xl font-semibold mt-2 ${toneStyles[tone]}`}>
+        {value}
+      </p>
     </div>
   );
 }

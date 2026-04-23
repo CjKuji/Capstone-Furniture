@@ -1,134 +1,151 @@
-// types/Furniture.ts
+import type { PublishStatus } from "./enums";
 
-// ---------------- ENUMS ----------------
-export type FurnitureSize = "small" | "medium" | "large";
+/* =========================================================
+   DATABASE TYPES
+========================================================= */
 
-export type OrderStatus =
-  | "pending"
-  | "rejected"
-  | "in_production"
-  | "ready_to_claim"
-  | "claimed";
-
-export type UserRole = "admin" | "customer";
-
-// ---------------- BASE RELATION TYPES ----------------
-export interface FurnitureCategory {
+export type FurnitureDB = {
   id: string;
   name: string;
-}
+  slug: string;
+  description: string | null;
 
-// Add texture_url for dynamic 3D textures
-export interface FurnitureMaterial {
+  category_id: string | null;
+  model_url: string | null;
+
+  base_price: number;
+  publish_status: PublishStatus;
+
+  created_by: string | null;
+
+  width_cm: number | null;
+  depth_cm: number | null;
+  height_cm: number | null;
+
+  created_at: string;
+  updated_at: string;
+};
+
+/* =========================================================
+   CATEGORY
+========================================================= */
+
+export type FurnitureCategory = {
   id: string;
   name: string;
-  texture_url?: string | null;
-}
+};
 
-export interface FurnitureColor {
+/* =========================================================
+   IMAGE (DB)
+========================================================= */
+
+export type FurnitureImage = {
   id: string;
-  material_id: string;
-  name: string;
-  hex_code: string;
-  // optional tint for overlay
-  texture_overlay?: string | null;
-}
-
-export interface Profile {
-  id: string;
-  full_name?: string | null;
-  role: UserRole;
-  created_at?: string;
-}
-
-// Optional helper for joined info in furniture
-export interface FurnitureRelation {
-  id: string;
-  name: string;
-  hex_code?: string;
-  texture_url?: string; // allow relation to carry material texture
-}
-
-// ---------------- FURNITURE TYPES ----------------
-export interface FurnitureItem {
-  id: string;
-  name: string;
-  slug?: string | null;
-  description?: string | null;
-  model_url: string;
-  thumbnail_url?: string | null;
-  base_price?: number | null;
-  size?: FurnitureSize | null;
-  material_id?: string | null;
-  color_id?: string | null;
-  category_id?: string | null;
-  is_published: boolean;
-  created_at?: string;
-  updated_at?: string;
-}
-
-// For admin / detailed view (joined relations)
-export interface FurnitureItemAdmin extends FurnitureItem {
-  material?: FurnitureRelation;
-  color?: FurnitureRelation;
-  category?: FurnitureRelation;
-  size_numeric?: number | null; // optional helper to convert size to numeric
-  created_by?: Profile;          // who created the furniture
-}
-
-// ---------------- FURNITURE CONFIGURATIONS ----------------
-export interface FurnitureConfiguration {
-  id: string;
-  user_id: string;
   furniture_id: string;
-  selected_material_id?: string | null;
-  selected_color_id?: string | null;
-  selected_size?: FurnitureSize | null;
-  design_name?: string | null;
-  created_at: string;
-}
+  image_url: string;
+  sort_order: number;
+  is_primary: boolean;
+};
 
-// ---------------- FURNITURE ORDERS ----------------
-export interface FurnitureOrder {
+/* =========================================================
+   VARIANT (DB)
+========================================================= */
+
+export type FurnitureVariant = {
   id: string;
-  user_id: string;
-  configuration_id?: string | null; // can be null if deleted
   furniture_id: string;
-  selected_material_id?: string | null;
-  selected_color_id?: string | null;
-  selected_size?: FurnitureSize | null;
-  total_price: number;
-  status: OrderStatus;
-  notes?: string | null; // for rejection reason or notes
-  created_at: string;
-}
 
-// ---------------- CUSTOMER ORDER TYPES ----------------
-export interface FurnitureDetails {
-  id: string;
   name: string;
-  thumbnail_url?: string | null;
-  material?: { id: string; name: string } | null;
-  color?: { id: string; name: string; hex_code?: string } | null;
-}
 
-export interface ConfigurationDetails {
-  selected_size: FurnitureSize | null;
-  selected_color_id: string | null;
-  selected_material_id: string | null;
-  furniture: FurnitureDetails | null;
-}
+  texture_url: string;
+  preview_image_url: string | null;
 
-export interface OrderWithDetails {
-  id: string;
-  status: OrderStatus;
-  total_price: number;
+  price_adjustment: number;
+
+  is_active: boolean;
+  is_default: boolean;
+
+  sort_order: number;
+
   created_at: string;
-  configuration: ConfigurationDetails | null;
-}
+};
 
-// ---------------- SELECT OPTION ----------------
-export interface SelectOption {
-  id: string;
+/* =========================================================
+   ADMIN VIEW MODEL (JOINED)
+========================================================= */
+
+export type FurnitureItemAdmin = FurnitureDB & {
+  furniture_categories?: FurnitureCategory | null;
+  furniture_images?: FurnitureImage[];
+  furniture_variants?: FurnitureVariant[];
+};
+
+/* =========================================================
+   IMAGE PAYLOAD (MERGE ENGINE)
+========================================================= */
+
+export type FurnitureImagePayload = {
+  id?: string;                 // existing image id
+  file?: File;                 // new upload
+  image_url?: string;          // optional existing url reference
+
+  isPrimary?: boolean;
+  isDeleted?: boolean;         // soft delete instruction
+};
+
+/* =========================================================
+   VARIANT PAYLOAD (MERGE ENGINE)
+========================================================= */
+
+export type FurnitureVariantPayload = {
+  id?: string;                 // existing variant id
+
   name: string;
-}
+
+  materialFile?: File;         // optional update upload
+
+  priceAdjustment?: number;
+  isActive?: boolean;
+  isDefault?: boolean;
+
+  sortOrder?: number;
+
+  isDeleted?: boolean;         // selective delete
+};
+
+/* =========================================================
+   FORM PAYLOAD (API LAYER)
+========================================================= */
+
+export type FurnitureFormPayload = {
+  name: string;
+  description?: string;
+
+  categoryId?: string;
+
+  basePrice: number;
+
+  modelFile?: File | null;
+
+  images: FurnitureImagePayload[];     // MERGE CAPABLE
+  variants?: FurnitureVariantPayload[]; // MERGE CAPABLE
+
+  dimensions?: {
+    widthCm?: number;
+    depthCm?: number;
+    heightCm?: number;
+  };
+};
+
+/* =========================================================
+   UI IMAGE TYPE (FRONTEND STATE ONLY)
+========================================================= */
+
+export type ImageItem = {
+  id?: string;
+  file?: File;
+  url: string;
+
+  isPrimary: boolean;
+  isDeleted?: boolean;
+};

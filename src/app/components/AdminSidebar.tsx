@@ -1,61 +1,143 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { Home, Box, BarChart2, User, LogOut, ShoppingCart } from "lucide-react";
+import { useRouter, usePathname } from "next/navigation";
+import {
+  Home,
+  Box,
+  ShoppingCart,
+  LogOut,
+  Settings,
+  Globe,
+  LucideIcon,
+} from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
-interface SidebarProps {
-  activePage: string;
-  setActivePage: (page: string) => void;
-}
+/* =========================================================
+   TYPES
+   ========================================================= */
 
-export default function AdminSidebar({ activePage, setActivePage }: SidebarProps) {
+type NavItem = {
+  label: string;
+  path: string;
+  icon: LucideIcon;
+  exact?: boolean;
+};
+
+type NavGroup = {
+  title: string;
+  items: NavItem[];
+};
+
+/* =========================================================
+   MENU CONFIG (SCALES CLEANLY)
+   ========================================================= */
+
+const NAVIGATION: NavGroup[] = [
+  {
+    title: "Core",
+    items: [
+      { label: "Dashboard", path: "/admin", icon: Home, exact: true },
+      { label: "Furniture", path: "/admin/furniture", icon: Box },
+      { label: "Orders", path: "/admin/orders", icon: ShoppingCart },
+    ],
+  },
+  {
+    title: "System",
+    items: [
+      { label: "Settings", path: "/admin/settings", icon: Settings },
+      { label: "Main Site", path: "/", icon: Globe },
+    ],
+  },
+];
+
+/* =========================================================
+   COMPONENT
+   ========================================================= */
+
+export default function AdminSidebar() {
   const router = useRouter();
+  const pathname = usePathname();
 
-  const menuItems = [
-    { name: "Dashboard", key: "dashboard", path: "/admin", icon: <Home size={20} /> },
-    { name: "Furniture", key: "furniture", path: "/admin/furniture", icon: <Box size={20} /> },
-    { name: "Orders", key: "orders", path: "/admin/orders", icon: <ShoppingCart size={20} /> },
-    { name: "HomePage", key: "home", path: "/", icon: <Home size={20} /> },
-  
-  ];
+  const isActive = (item: NavItem) => {
+    if (item.exact) return pathname === item.path;
+    return pathname.startsWith(item.path);
+  };
 
   const handleLogout = async () => {
-    const { supabase } = await import("@/lib/supabase");
     await supabase.auth.signOut();
     router.push("/auth/login");
   };
 
   return (
-    <aside className="w-64 bg-white shadow-md border-r border-gray-200 flex flex-col sticky top-0 h-screen">
-      <div className="p-6 text-2xl font-bold text-black border-b">
-        Furniture Admin
+    <aside className="w-64 h-screen sticky top-0 bg-white border-r border-neutral-200 flex flex-col">
+
+      {/* ================= BRAND ================= */}
+      <div className="px-6 py-5 border-b border-neutral-200">
+        <h1 className="text-sm font-semibold text-neutral-900">
+          Furniture Admin
+        </h1>
+        <p className="text-[11px] text-neutral-500 mt-0.5">
+          Inventory Control System
+        </p>
       </div>
 
-      <nav className="flex-1 px-4 py-4 flex flex-col gap-2">
-        {menuItems.map((item) => (
-          <button
-            key={item.key}
-            onClick={() => {
-              setActivePage(item.key);
-              router.push(item.path);
-            }}
-            className={`flex items-center gap-3 px-4 py-3 rounded transition hover:bg-gray-100 ${
-              activePage === item.key ? "bg-gray-200 font-semibold" : "text-black"
-            }`}
-          >
-            {item.icon}
-            {item.name}
-          </button>
+      {/* ================= NAV ================= */}
+      <nav className="flex-1 px-3 py-4 space-y-6">
+
+        {NAVIGATION.map((group) => (
+          <div key={group.title}>
+            <p className="text-[11px] text-neutral-400 px-3 mb-2 uppercase tracking-wider">
+              {group.title}
+            </p>
+
+            <div className="space-y-1">
+              {group.items.map((item) => {
+                const Icon = item.icon;
+                const active = isActive(item);
+
+                return (
+                  <button
+                    key={item.path}
+                    onClick={() => router.push(item.path)}
+                    className={`
+                      w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition relative
+                      ${
+                        active
+                          ? "bg-neutral-100 text-neutral-900 font-medium"
+                          : "text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900"
+                      }
+                    `}
+                  >
+                    {/* ACTIVE INDICATOR */}
+                    <span
+                      className={`
+                        absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 rounded-r-full transition
+                        ${active ? "bg-neutral-900" : "bg-transparent"}
+                      `}
+                    />
+
+                    <Icon size={18} />
+                    <span>{item.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         ))}
+      </nav>
+
+      {/* ================= FOOTER ================= */}
+      <div className="p-3 border-t border-neutral-200">
 
         <button
           onClick={handleLogout}
-          className="flex items-center gap-3 px-4 py-3 mt-4 rounded hover:bg-red-100 text-red-600"
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-red-600 hover:bg-red-50 transition"
         >
-          <LogOut size={20} />
+          <LogOut size={18} />
           Logout
         </button>
-      </nav>
+
+      </div>
     </aside>
   );
 }

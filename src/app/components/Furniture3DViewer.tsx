@@ -1,6 +1,12 @@
 "use client";
 
-import React, { Suspense, useEffect, useRef, useMemo } from "react";
+import React, {
+  Suspense,
+  useMemo,
+  useRef,
+  useEffect,
+} from "react";
+
 import * as THREE from "three";
 import { Canvas } from "@react-three/fiber";
 import {
@@ -10,128 +16,198 @@ import {
   Environment,
 } from "@react-three/drei";
 
-/* -------------------------- */
-/* Props */
-/* -------------------------- */
-interface Furniture3DViewerProps {
-  modelUrl: string;
-  selectedColor?: string; // hex string for color overlay
-  selectedMaterialTextureUrl?: string; // texture map URL
-  selectedSize?: number; // scale multiplier
-}
+/* =========================================================
+   MODEL (STABLE MATERIAL + TEXTURE ENGINE)
+========================================================= */
 
-/* -------------------------- */
-/* Model Loader */
-/* -------------------------- */
 function Model({
-  modelUrl,
-  selectedColor,
-  selectedMaterialTextureUrl,
-  selectedSize = 1,
-}: Furniture3DViewerProps) {
-  const { scene } = useGLTF(modelUrl);
-  const modelRef = useRef<THREE.Group>(null);
+  url,
+  textureUrl,
+}: {
+  url: string;
+  textureUrl?: string | null;
+}) {
+  const { scene } = useGLTF(url);
+  const groupRef = useRef<THREE.Group>(null);
 
-  // clone scene to avoid shared material issues
-  const clonedScene = useMemo(() => scene.clone(), [scene]);
+  /* Clone model safely per instance */
+  const clonedScene = useMemo(() => {
+    return scene.clone(true);
+  }, [scene]);
 
-  /* ---------- Center model ---------- */
+  /* Texture loader (stable lifecycle) */
+  const texture = useMemo(() => {
+    if (!textureUrl) return null;
+
+    const loader = new THREE.TextureLoader();
+    const tex = loader.load(textureUrl);
+
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.flipY = false;
+    tex.anisotropy = 8;
+
+    return tex;
+  }, [textureUrl]);
+
+  /* Apply texture safely (NO material array overwrite) */
   useEffect(() => {
-    const box = new THREE.Box3().setFromObject(clonedScene);
-    const center = new THREE.Vector3();
-    box.getCenter(center);
-    clonedScene.position.set(-center.x, -center.y, -center.z);
-  }, [clonedScene]);
+    if (!texture) return;
 
-  /* ---------- Apply Materials ---------- */
-  useEffect(() => {
-    const textureLoader = new THREE.TextureLoader();
-    const texture = selectedMaterialTextureUrl ? textureLoader.load(selectedMaterialTextureUrl) : null;
+    const materialsToDispose: THREE.Material[] = [];
 
-    clonedScene.traverse((child) => {
-      if ((child as THREE.Mesh).isMesh) {
-        const mesh = child as THREE.Mesh;
-        const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    clonedScene.traverse((obj) => {
+      if (!(obj instanceof THREE.Mesh)) return;
 
-        materials.forEach((mat) => {
-          if (mat instanceof THREE.MeshStandardMaterial) {
-            // Apply texture if available
-            if (texture) {
-              mat.map = texture;
-            }
+      const mesh = obj;
 
-            // Apply color overlay if available
-            if (selectedColor) {
-              mat.color = new THREE.Color(selectedColor);
-            }
+      const originalMaterial = mesh.material;
 
-            mat.needsUpdate = true;
+      if (Array.isArray(originalMaterial)) {
+        mesh.material = originalMaterial.map((mat) => {
+          const cloned = (mat as THREE.MeshStandardMaterial).clone();
+
+          if (cloned instanceof THREE.MeshStandardMaterial) {
+            cloned.map = texture;
+            cloned.roughness = 0.9;
+            cloned.metalness = 0.05;
+            cloned.envMapIntensity = 0.6;
+            cloned.needsUpdate = true;
           }
-        });
 
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
+          materialsToDispose.push(cloned);
+          return cloned;
+        });
+      } else {
+        const cloned = (originalMaterial as THREE.MeshStandardMaterial).clone();
+
+        if (cloned instanceof THREE.MeshStandardMaterial) {
+          cloned.map = texture;
+          cloned.roughness = 0.9;
+          cloned.metalness = 0.05;
+          cloned.envMapIntensity = 0.6;
+          cloned.needsUpdate = true;
+        }
+
+        mesh.material = cloned;
+        materialsToDispose.push(cloned);
       }
     });
-  }, [clonedScene, selectedColor, selectedMaterialTextureUrl]);
 
-  /* ---------- Scale Model ---------- */
+    return () => {
+      texture.dispose();
+      materialsToDispose.forEach((m) => m.dispose());
+    };
+  }, [clonedScene, texture]);
+
+  /* Center model properly */
+  const offset = useMemo(() => {
+    const box = new THREE.Box3().setFromObject(clonedScene);
+
+    const center = new THREE.Vector3();
+    box.getCenter(center);
+
+    return {
+      x: -center.x,
+      y: -box.min.y,
+      z: -center.z,
+    };
+  }, [clonedScene]);
+
   useEffect(() => {
-    if (modelRef.current) {
-      modelRef.current.scale.set(selectedSize, selectedSize, selectedSize);
-    }
-  }, [selectedSize]);
+    if (!groupRef.current) return;
 
-  return <primitive ref={modelRef} object={clonedScene} />;
-}
+    groupRef.current.position.set(offset.x, offset.y, offset.z);
+  }, [offset]);
 
-/* -------------------------- */
-/* Main Viewer Component */
-/* -------------------------- */
-export default function Furniture3DViewer({
-  modelUrl,
-  selectedColor,
-  selectedMaterialTextureUrl,
-  selectedSize = 1,
-}: Furniture3DViewerProps) {
   return (
-    <div className="w-full h-[500px] bg-gray-50 rounded-lg shadow-md">
-      <Canvas shadows camera={{ position: [3, 2, 4], fov: 50 }}>
-        {/* Lights */}
-        <ambientLight intensity={0.6} />
-        <directionalLight
-          position={[5, 8, 5]}
-          intensity={1}
-          castShadow
-          shadow-mapSize-width={2048}
-          shadow-mapSize-height={2048}
-        />
-
-        {/* Environment */}
-        <Environment preset="studio" />
-
-        {/* 3D Model */}
-        <Suspense
-          fallback={
-            <Html center>
-              <div className="text-black font-semibold">Loading model...</div>
-            </Html>
-          }
-        >
-          <Model
-            modelUrl={modelUrl}
-            selectedColor={selectedColor}
-            selectedMaterialTextureUrl={selectedMaterialTextureUrl}
-            selectedSize={selectedSize}
-          />
-        </Suspense>
-
-        {/* Camera Controls */}
-        <OrbitControls enablePan enableZoom enableRotate minDistance={1} maxDistance={10} />
-      </Canvas>
-    </div>
+    <group ref={groupRef}>
+      <primitive object={clonedScene} />
+    </group>
   );
 }
 
-/* Preload models for faster viewing */
-useGLTF.preload("");
+/* =========================================================
+   VIEWER
+========================================================= */
+
+export default function Furniture3DViewer({
+  modelUrl,
+  selectedVariantTextureUrl,
+}: {
+  modelUrl: string;
+  selectedVariantTextureUrl?: string | null;
+}) {
+  const isValidModel = useMemo(() => {
+    return (
+      typeof modelUrl === "string" &&
+      modelUrl.length > 0 &&
+      !modelUrl.endsWith(".html")
+    );
+  }, [modelUrl]);
+
+  return (
+    <div className="relative w-full h-[600px] bg-neutral-100 rounded-xl overflow-hidden">
+
+      {isValidModel ? (
+        <Canvas
+          shadows
+          camera={{ position: [3, 2, 4], fov: 50 }}
+          gl={{ antialias: true, toneMappingExposure: 0.9 }}
+        >
+          {/* LIGHTING */}
+          <ambientLight intensity={0.4} />
+          <directionalLight position={[5, 8, 5]} intensity={1} castShadow />
+
+          {/* ENVIRONMENT */}
+          <Environment preset="city" />
+
+          {/* FLOOR */}
+          <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+            <planeGeometry args={[20, 20]} />
+            <meshStandardMaterial color="#d6d6d6" roughness={1} />
+          </mesh>
+
+          {/* WALL */}
+          <mesh position={[0, 3, -6]} receiveShadow>
+            <planeGeometry args={[20, 10]} />
+            <meshStandardMaterial color="#eaeaea" />
+          </mesh>
+
+          {/* MODEL */}
+          <Suspense
+            fallback={
+              <Html center>
+                <div className="text-sm text-black">
+                  Loading model...
+                </div>
+              </Html>
+            }
+          >
+            <Model
+              url={modelUrl}
+              textureUrl={selectedVariantTextureUrl}
+            />
+          </Suspense>
+
+          {/* CONTROLS */}
+          <OrbitControls
+            enablePan
+            enableZoom
+            enableRotate
+            minDistance={1}
+            maxDistance={10}
+          />
+        </Canvas>
+      ) : (
+        <div className="flex items-center justify-center h-full text-neutral-500 text-sm">
+          No model available
+        </div>
+      )}
+
+      {/* OVERLAY */}
+      <div className="absolute bottom-3 left-3 bg-black/60 text-white text-xs px-3 py-2 rounded-lg backdrop-blur">
+        Select a variant to preview materials in real time
+      </div>
+    </div>
+  );
+}

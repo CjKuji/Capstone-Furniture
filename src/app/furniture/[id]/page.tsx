@@ -6,7 +6,6 @@ import { supabase } from "@/lib/supabase";
 import type { FurnitureItemAdmin, FurnitureSize } from "@/types/furniture";
 import Furniture3DViewer from "@/app/components/Furniture3DViewer";
 
-// ---------------- SIZE MAPPING ----------------
 const sizeMap: Record<FurnitureSize, number> = {
   small: 0.5,
   medium: 1,
@@ -24,35 +23,24 @@ export default function FurnitureDetailPage() {
   const furnitureId = params?.id as string;
 
   const [furniture, setFurniture] = useState<FurnitureItemAdmin | null>(null);
-  const [materials, setMaterials] = useState<{ id: string; texture_url?: string | null; name: string }[]>([]);
-  const [colors, setColors] = useState<{ id: string; hex_code: string; name: string }[]>([]);
-  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+  const [materials, setMaterials] = useState<any[]>([]);
+  const [colors, setColors] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [ordering, setOrdering] = useState(false);
 
-  // ---------------- CONFIGURATION STATE ----------------
   const [size, setSize] = useState<FurnitureSize>("medium");
-  const [selectedMaterialId, setSelectedMaterialId] = useState<string>("");
-  const [selectedColorId, setSelectedColorId] = useState<string>("");
+  const [selectedMaterialId, setSelectedMaterialId] = useState("");
+  const [selectedColorId, setSelectedColorId] = useState("");
 
-  // ---------------- MODAL STATE ----------------
-  const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
-  const [configSize, setConfigSize] = useState<FurnitureSize>("medium");
-  const [configMaterialId, setConfigMaterialId] = useState("");
-  const [configColorId, setConfigColorId] = useState("");
-
-  // ---------------- FETCH OPTIONS ----------------
   const fetchOptions = useCallback(async () => {
-    const { data: mats } = await supabase.from("furniture_materials").select("id,name,texture_url");
-    const { data: cols } = await supabase.from("furniture_colors").select("id,name,hex_code");
-    const { data: cats } = await supabase.from("furniture_categories").select("id,name");
+    const { data: mats } = await supabase.from("furniture_materials").select("*");
+    const { data: cols } = await supabase.from("furniture_colors").select("*");
 
     setMaterials(mats || []);
     setColors(cols || []);
-    setCategories(cats || []);
   }, []);
 
-  // ---------------- FETCH FURNITURE ----------------
   const fetchFurniture = useCallback(async () => {
     try {
       const { data, error } = await supabase
@@ -60,6 +48,7 @@ export default function FurnitureDetailPage() {
         .select("*")
         .eq("id", furnitureId)
         .single();
+
       if (error) throw error;
       if (!data) return setFurniture(null);
 
@@ -81,23 +70,50 @@ export default function FurnitureDetailPage() {
     fetchFurniture();
   }, [furnitureId, fetchOptions, fetchFurniture]);
 
-  // ---------------- OPEN CONFIG MODAL ----------------
-  const openConfigModal = () => {
+  const selectedMaterial = materials.find((m) => m.id === selectedMaterialId);
+  const selectedColor = colors.find((c) => c.id === selectedColorId);
+
+  const handleSaveDesign = async () => {
     if (!furniture) return;
-    setConfigSize(furniture.size ?? "medium");
-    setConfigMaterialId(furniture.material_id ?? "");
-    setConfigColorId(furniture.color_id ?? "");
-    setIsConfigModalOpen(true);
+
+    setSaving(true);
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      alert("Login required.");
+      setSaving(false);
+      return;
+    }
+
+    try {
+      const { error } = await supabase.from("furniture_configurations").insert({
+        user_id: user.id,
+        furniture_id: furniture.id,
+        selected_size: size,
+        selected_material_id: selectedMaterialId || null,
+        selected_color_id: selectedColorId || null,
+        design_name: `${furniture.name} Design`,
+      });
+
+      if (error) throw error;
+
+      alert("Design saved!");
+    } catch (err) {
+      console.error(err);
+      alert("Failed to save design.");
+    } finally {
+      setSaving(false);
+    }
   };
 
-  // ---------------- PLACE ORDER ----------------
-  const handleOrder = async (useChanges = false) => {
+  const handleOrder = async () => {
     if (!furniture) return;
+
     setOrdering(true);
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      alert("You must be logged in to place an order.");
+      alert("Login required.");
       setOrdering(false);
       return;
     }
@@ -108,9 +124,10 @@ export default function FurnitureDetailPage() {
         .insert({
           user_id: user.id,
           furniture_id: furniture.id,
-          selected_size: useChanges ? configSize : size,
-          selected_color_id: useChanges ? configColorId : selectedColorId || undefined,
-          selected_material_id: useChanges ? configMaterialId : selectedMaterialId || undefined,
+          selected_size: size,
+          selected_material_id: selectedMaterialId || null,
+          selected_color_id: selectedColorId || null,
+          design_name: `${furniture.name} Order`,
         })
         .select()
         .single();
@@ -128,136 +145,111 @@ export default function FurnitureDetailPage() {
 
       if (orderError) throw orderError;
 
-      alert("Order placed successfully!");
+      alert("Order placed!");
       router.push("/orders");
     } catch (err) {
       console.error(err);
       alert("Failed to place order.");
     } finally {
       setOrdering(false);
-      setIsConfigModalOpen(false);
     }
   };
 
-  if (loading) return <div className="text-center py-20 text-black font-semibold">Loading furniture...</div>;
-  if (!furniture) return <div className="text-center py-20 text-black font-semibold">Furniture not found.</div>;
-
-  const selectedMaterial = materials.find((m) => m.id === selectedMaterialId);
-  const selectedColor = colors.find((c) => c.id === selectedColorId);
+  if (loading) return <div className="text-center py-20 font-semibold">Loading...</div>;
+  if (!furniture) return <div className="text-center py-20 font-semibold">Not found.</div>;
 
   return (
-    <div className="min-h-screen bg-[#FFF8F0] p-4 md:p-8 lg:p-12">
-      <button className="mb-4 text-[#A16B4C] font-semibold hover:underline" onClick={() => router.back()}>
+    <div className="min-h-screen bg-[#FFF8F0] p-3 md:p-6 lg:p-8">
+      <button className="mb-3 text-[#A16B4C] text-sm font-medium hover:underline" onClick={() => router.back()}>
         ← Back
       </button>
 
-      <div className="flex flex-col md:flex-row gap-6 max-w-7xl mx-auto">
-        {/* LEFT SIDE: 3D Viewer */}
-        <div className="flex-1 flex flex-col gap-4 relative">
-          <div className="bg-white shadow-lg rounded-xl overflow-hidden flex justify-center items-center min-h-[28rem] md:min-h-[32rem] relative">
-            <Furniture3DViewer
-              modelUrl={furniture.model_url}
-              selectedColor={selectedColor?.hex_code ?? undefined}
-              selectedMaterialTextureUrl={selectedMaterial?.texture_url ?? undefined}
-              selectedSize={mapSizeToNumber(size)}
-            />
-
-            <button
-              className="absolute top-2 left-2 bg-[#A16B4C] text-white px-3 py-1 rounded hover:bg-[#8C593F]"
-              onClick={openConfigModal}
-            >
-              Configure
-            </button>
-          </div>
+      <div className="flex flex-col md:flex-row gap-4 max-w-6xl mx-auto">
+        
+        {/* LEFT: 3D VIEW */}
+        <div className="flex-1 bg-white shadow rounded-lg flex items-center justify-center min-h-[22rem] md:min-h-[26rem]">
+          <Furniture3DViewer
+            modelUrl={furniture.model_url}
+            selectedColor={selectedColor?.hex_code}
+            selectedMaterialTextureUrl={selectedMaterial?.texture_url}
+            selectedSize={mapSizeToNumber(size)}
+          />
         </div>
 
-        {/* RIGHT SIDE: Info & Actions */}
-        <div className="w-full md:w-96 flex flex-col gap-4">
-          <div className="bg-white p-6 rounded-xl shadow-lg flex flex-col gap-2 sticky top-20">
-            <h1 className="text-2xl md:text-3xl font-bold text-black">{furniture.name}</h1>
-            <p className="text-black whitespace-pre-line">{furniture.description ?? "No description available"}</p>
-            <div className="flex flex-col gap-1 text-black mt-2">
-              <span><strong>Size:</strong> {size}</span>
-              <span><strong>Material:</strong> {selectedMaterial?.name ?? "Unknown"}</span>
-              <span className="flex items-center gap-2">
-                <strong>Color:</strong>
-                <span className="w-5 h-5 rounded border" style={{ backgroundColor: selectedColor?.hex_code ?? "#ffffff" }} />
-                {selectedColor?.name ?? "Unknown"}
-              </span>
+        {/* RIGHT: CONTROLS */}
+        <div className="w-full md:w-80 flex flex-col gap-3">
+
+          <div className="bg-white p-4 rounded-lg shadow flex flex-col gap-2">
+            <h2 className="text-lg font-semibold text-black">{furniture.name}</h2>
+
+            <label className="text-sm font-medium">Size</label>
+            <select
+              value={size}
+              onChange={(e) => setSize(e.target.value as FurnitureSize)}
+              className="border p-1.5 rounded text-sm"
+            >
+              {Object.keys(sizeMap).map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+
+            <label className="text-sm font-medium">Material</label>
+            <select
+              value={selectedMaterialId}
+              onChange={(e) => setSelectedMaterialId(e.target.value)}
+              className="border p-1.5 rounded text-sm"
+            >
+              <option value="">Select</option>
+              {materials.map((m) => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
+
+            <label className="text-sm font-medium">Color</label>
+            <select
+              value={selectedColorId}
+              onChange={(e) => setSelectedColorId(e.target.value)}
+              className="border p-1.5 rounded text-sm"
+            >
+              <option value="">Select</option>
+              {colors.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+
+            {/* BUTTONS */}
+            <div className="flex gap-2 mt-2">
+              <button
+                onClick={handleSaveDesign}
+                disabled={saving}
+                className="flex-1 text-sm border border-black py-1.5 rounded hover:bg-gray-100"
+              >
+                {saving ? "Saving..." : "Save"}
+              </button>
+
+              <button
+                onClick={handleOrder}
+                disabled={ordering}
+                className="flex-1 text-sm bg-[#8C593F] text-white py-1.5 rounded hover:bg-[#A16B4C]"
+              >
+                {ordering ? "..." : "Order"}
+              </button>
             </div>
           </div>
+
+          {/* DESCRIPTION */}
+          <div className="bg-white p-4 rounded-lg shadow">
+            <p className="text-sm text-black whitespace-pre-line">
+              {furniture.description ?? "No description"}
+            </p>
+
+            <div className="mt-2 text-xs text-black">
+              <div><strong>Price:</strong> ₱{furniture.base_price}</div>
+            </div>
+          </div>
+
         </div>
       </div>
-
-      {/* ---------------- CONFIGURATION MODAL ---------------- */}
-      {isConfigModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white w-full max-w-3xl rounded-lg shadow-lg flex flex-col max-h-[90vh] overflow-y-auto p-6">
-            <h2 className="text-xl font-bold mb-2 text-black">Edit Configuration</h2>
-
-            {/* 3D Viewer Preview */}
-            <div className="h-[400px] w-full mb-4 border rounded">
-              <Furniture3DViewer
-                modelUrl={furniture.model_url}
-                selectedColor={colors.find((c) => c.id === configColorId)?.hex_code}
-                selectedMaterialTextureUrl={materials.find((m) => m.id === configMaterialId)?.texture_url ?? undefined}
-                selectedSize={mapSizeToNumber(configSize)}
-              />
-            </div>
-
-            {/* CONFIG FORM */}
-            <div className="flex flex-col gap-3">
-              <label className="font-semibold">Size</label>
-              <select
-                value={configSize}
-                onChange={(e) => setConfigSize(e.target.value as FurnitureSize)}
-                className="w-full border border-black p-2 rounded text-black bg-white"
-              >
-                {Object.keys(sizeMap).map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
-
-              <label className="font-semibold">Material</label>
-              <select
-                value={configMaterialId}
-                onChange={(e) => setConfigMaterialId(e.target.value)}
-                className="w-full border border-black p-2 rounded text-black bg-white"
-              >
-                <option value="">Select Material</option>
-                {materials.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-              </select>
-
-              <label className="font-semibold">Color</label>
-              <select
-                value={configColorId}
-                onChange={(e) => setConfigColorId(e.target.value)}
-                className="w-full border border-black p-2 rounded text-black bg-white"
-              >
-                <option value="">Select Color</option>
-                {colors.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-            </div>
-
-            {/* ACTIONS */}
-            <div className="flex justify-end gap-3 mt-4">
-              <button
-                onClick={() => setIsConfigModalOpen(false)}
-                className="px-4 py-2 border border-black rounded text-black bg-white hover:bg-gray-100 transition"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => handleOrder(true)}
-                className="px-4 py-2 bg-[#8C593F] text-white rounded hover:bg-[#A16B4C] transition"
-                disabled={ordering}
-              >
-                {ordering ? "Ordering..." : "Order with Changes"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
