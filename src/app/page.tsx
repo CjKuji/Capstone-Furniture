@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 import Navbar from "@/app/components/Navbar";
@@ -17,13 +16,6 @@ export default function HomePage() {
     error,
     refetch,
   } = useFurniture();
-
-  /* =========================================================
-     OPTIONAL: REFRESH ON MOUNT (ALREADY AUTO-FETCHES)
-  ========================================================= */
-  useEffect(() => {
-    refetch();
-  }, [refetch]);
 
   /* =========================================================
      LOADING STATE
@@ -55,6 +47,8 @@ export default function HomePage() {
       </div>
     );
   }
+
+  const items = furniture ?? [];
 
   /* =========================================================
      UI
@@ -119,7 +113,7 @@ export default function HomePage() {
           </div>
 
           <div className="grid gap-8 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-            {furniture.map((item) => (
+            {items.map((item) => (
               <CustomerFurnitureCard key={item.id} item={item} />
             ))}
           </div>

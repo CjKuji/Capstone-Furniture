@@ -9,7 +9,7 @@ import type { UserRole } from "@/types/enums";
 export async function getUsers(): Promise<Profile[]> {
   const { data, error } = await supabase
     .from("profiles")
-    .select("*");
+    .select("id, full_name, role, created_at");
 
   if (error) throw error;
   return data ?? [];
@@ -18,7 +18,7 @@ export async function getUsers(): Promise<Profile[]> {
 export async function getUserById(id: string): Promise<Profile> {
   const { data, error } = await supabase
     .from("profiles")
-    .select("*")
+    .select("id, full_name, role, created_at")
     .eq("id", id)
     .single();
 
@@ -29,12 +29,12 @@ export async function getUserById(id: string): Promise<Profile> {
 export async function updateUser(
   id: string,
   payload: Partial<Profile>
-) {
+): Promise<Profile> {
   const { data, error } = await supabase
     .from("profiles")
     .update(payload)
     .eq("id", id)
-    .select()
+    .select("id, full_name, role, created_at")
     .single();
 
   if (error) throw error;
@@ -58,5 +58,5 @@ export async function getUserRole(userId: string): Promise<UserRole> {
 
   if (error) throw error;
 
-  return data.role;
+  return data.role as UserRole;
 }

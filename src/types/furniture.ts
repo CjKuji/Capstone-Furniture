@@ -85,12 +85,12 @@ export type FurnitureItemAdmin = FurnitureDB & {
 ========================================================= */
 
 export type FurnitureImagePayload = {
-  id?: string;                 // existing image id
-  file?: File;                 // new upload
-  image_url?: string;          // optional existing url reference
+  id?: string;
+  file?: File;
+  image_url?: string;
 
   isPrimary?: boolean;
-  isDeleted?: boolean;         // soft delete instruction
+  isDeleted?: boolean;
 };
 
 /* =========================================================
@@ -98,11 +98,11 @@ export type FurnitureImagePayload = {
 ========================================================= */
 
 export type FurnitureVariantPayload = {
-  id?: string;                 // existing variant id
+  id?: string;
 
   name: string;
 
-  materialFile?: File;         // optional update upload
+  materialFile?: File;
 
   priceAdjustment?: number;
   isActive?: boolean;
@@ -110,7 +110,7 @@ export type FurnitureVariantPayload = {
 
   sortOrder?: number;
 
-  isDeleted?: boolean;         // selective delete
+  isDeleted?: boolean;
 };
 
 export type FurnitureVariantInsert = {
@@ -125,6 +125,7 @@ export type FurnitureVariantInsert = {
 
 /* =========================================================
    FORM PAYLOAD (API LAYER)
+   🔥 FIX: dimensions is NOW REQUIRED
 ========================================================= */
 
 export type FurnitureFormPayload = {
@@ -137,13 +138,13 @@ export type FurnitureFormPayload = {
 
   modelFile?: File | null;
 
-  images: FurnitureImagePayload[];     // MERGE CAPABLE
-  variants?: FurnitureVariantPayload[]; // MERGE CAPABLE
+  images: FurnitureImagePayload[];
+  variants?: FurnitureVariantPayload[];
 
-  dimensions?: {
-    widthCm?: number;
-    depthCm?: number;
-    heightCm?: number;
+  dimensions: {
+    widthCm: number;
+    depthCm: number;
+    heightCm: number;
   };
 };
 

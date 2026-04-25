@@ -1,14 +1,11 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { Plus } from "lucide-react";
 
-import AdminSidebar from "@/app/components/AdminSidebar";
 import FurnitureCard from "@/app/components/FurnitureCardAdmin";
 import Furniture3DViewer from "@/app/components/Furniture3DViewer";
-import AddFurnitureModal from "@/app/components/AddFurnitureModal";
-import EditFurnitureModal from "@/app/components/EditFurnitureModal";
+import FurnitureAdminModal from "@/app/components/FurnitureAdminModal";
 
 import type {
   FurnitureItemAdmin,
@@ -18,45 +15,30 @@ import type {
 
 import { useFurniture } from "@/hooks/useFurniture";
 import { useFurnitureViewer } from "@/hooks/useFurnitureViewer";
-import { useUser } from "@/hooks/useUser";
-
 import { getCategories } from "@/services/furnitureService";
+import { useUser } from "@/hooks/useUser";
 
 /* ========================================================= */
 
 export default function AdminFurniture() {
-  const router = useRouter();
-
-  /* ================= AUTH (CENTRALIZED) ================= */
-
-  const { user, loading: authLoading, isAdmin } = useUser();
-
-  /* ================= UI STATE ================= */
+  const { user } = useUser();
+  const userId = user?.id ?? null;
 
   const [categories, setCategories] = useState<FurnitureCategory[]>([]);
-  const [isAddOpen, setIsAddOpen] = useState(false);
-  const [editingItem, setEditingItem] =
-    useState<FurnitureItemAdmin | null>(null);
 
-  /* ================= VIEWER ================= */
+  const [modalState, setModalState] = useState<{
+    isOpen: boolean;
+    mode: "create" | "edit";
+    item: FurnitureItemAdmin | null;
+  }>({
+    isOpen: false,
+    mode: "create",
+    item: null,
+  });
+
+  const [search, setSearch] = useState("");
 
   const { viewer, openViewer } = useFurnitureViewer();
-
-  /* =========================================================
-     ROLE GUARD (CLIENT-SIDE SAFETY)
-  ========================================================= */
-
-  useEffect(() => {
-    if (!authLoading && (!user || !isAdmin)) {
-      router.replace("/auth/login");
-    }
-  }, [authLoading, user, isAdmin, router]);
-
-  const userId = user?.id;
-
-  /* =========================================================
-     FURNITURE HOOK
-  ========================================================= */
 
   const {
     data: furniture,
@@ -74,16 +56,15 @@ export default function AdminFurniture() {
   useEffect(() => {
     let active = true;
 
-    const loadCategories = async () => {
+    (async () => {
       try {
-        const data = await getCategories();
-        if (active) setCategories(data);
+        const result = await getCategories();
+        if (!active) return;
+        setCategories(result ?? []);
       } catch (err) {
-        console.error("Failed to load categories:", err);
+        console.error("[AdminFurniture] categories error:", err);
       }
-    };
-
-    loadCategories();
+    })();
 
     return () => {
       active = false;
@@ -91,181 +72,196 @@ export default function AdminFurniture() {
   }, []);
 
   /* =========================================================
-     HANDLERS
+     LIST
   ========================================================= */
 
-  const handleCloseAddModal = useCallback(() => {
-    setIsAddOpen(false);
-  }, []);
+  const list = useMemo(() => furniture ?? [], [furniture]);
 
-  const handleCloseEditModal = useCallback(() => {
-    setEditingItem(null);
-  }, []);
+  const filteredFurniture = useMemo(() => {
+    const keyword = search.trim().toLowerCase();
+    if (!keyword) return list;
 
-  /* ---------------- CREATE ---------------- */
+    return list.filter((item) => {
+      const name = item.name?.toLowerCase() ?? "";
+      const description = item.description?.toLowerCase() ?? "";
+      const category =
+        item.furniture_categories?.name?.toLowerCase() ?? "";
 
-  const handleCreate = useCallback(
-    async (form: FurnitureFormPayload) => {
-      if (!userId) return;
+      return (
+        name.includes(keyword) ||
+        description.includes(keyword) ||
+        category.includes(keyword)
+      );
+    });
+  }, [list, search]);
 
-      const success = await create(form, userId);
-
-      if (success) handleCloseAddModal();
-    },
-    [create, userId, handleCloseAddModal]
-  );
-
-  /* ---------------- UPDATE ---------------- */
-
-  const handleUpdate = useCallback(
-    async (id: string, form: FurnitureFormPayload) => {
-      const success = await update(id, form);
-
-      if (success) handleCloseEditModal();
-    },
-    [update, handleCloseEditModal]
-  );
-
-  /* ---------------- DELETE ---------------- */
+  /* =========================================================
+     DELETE
+  ========================================================= */
 
   const handleDelete = useCallback(
     async (id: string) => {
-      const confirmed = window.confirm("Delete this furniture?");
-      if (!confirmed) return;
-
+      if (!confirm("Delete this furniture item?")) return;
       await remove(id);
     },
     [remove]
   );
 
-  /* ---------------- VIEW ---------------- */
+  /* =========================================================
+     VIEW
+  ========================================================= */
 
   const handleView = useCallback(
     (item: FurnitureItemAdmin) => {
       if (!item.model_url) return;
 
-      const defaultVariant =
+      const variant =
         item.furniture_variants?.find((v) => v.is_default) ??
         item.furniture_variants?.[0];
 
       openViewer({
         modelUrl: item.model_url,
-        activeTexture: defaultVariant?.texture_url ?? null,
+        activeTexture: variant?.texture_url ?? null,
       });
     },
     [openViewer]
   );
 
   /* =========================================================
-     LOADING GUARD
+     🔥 FIXED: UNIFIED SAVE HANDLER (NO UNION TYPES)
   ========================================================= */
 
-  if (authLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen text-sm text-neutral-500">
-        Loading admin panel...
-      </div>
-    );
-  }
+  const handleSave = useCallback(
+    async (id: string | null, form: FurnitureFormPayload) => {
+      if (modalState.mode === "create") {
+        if (!userId) return false;
 
-  if (!user || !isAdmin) return null;
+        const success = await create(form, userId);
 
-  /* =========================================================
-     MAIN UI
-  ========================================================= */
+        if (success) {
+          setModalState({
+            isOpen: false,
+            mode: "create",
+            item: null,
+          });
+        }
+
+        return success;
+      }
+
+      if (!id) return false;
+
+      const success = await update(id, form);
+
+      if (success) {
+        setModalState({
+          isOpen: false,
+          mode: "create",
+          item: null,
+        });
+      }
+
+      return success;
+    },
+    [create, update, modalState.mode, userId]
+  );
+
+  /* ========================================================= */
 
   return (
-    <div className="flex min-h-screen bg-neutral-50 text-neutral-900">
-      <AdminSidebar />
+    <main className="flex-1 p-8 space-y-6">
 
-      <main className="flex-1 p-8 space-y-6">
-
-        {/* HEADER */}
-        <div className="flex items-end justify-between">
-          <div>
-            <h1 className="text-xl font-semibold">
-              Furniture Inventory
-            </h1>
-            <p className="text-sm text-neutral-500 mt-1">
-              Manage AR-ready furniture assets
-            </p>
-          </div>
-
-          <button
-            onClick={() => setIsAddOpen(true)}
-            className="flex items-center gap-2 bg-neutral-900 text-white px-4 py-2 rounded-lg text-sm"
-          >
-            <Plus size={16} />
-            Add Furniture
-          </button>
+      {/* HEADER */}
+      <div className="flex items-end justify-between">
+        <div>
+          <h1 className="text-xl font-semibold">
+            Furniture Inventory
+          </h1>
+          <p className="text-sm text-neutral-500 mt-1">
+            Manage AR-ready furniture assets
+          </p>
         </div>
 
-        {/* CONTROL BAR */}
-        <div className="flex items-center justify-between gap-4 border bg-white rounded-xl p-3">
-          <input
-            placeholder="Search furniture..."
-            className="flex-1 text-sm outline-none px-2"
-          />
+        <button
+          onClick={() =>
+            setModalState({
+              isOpen: true,
+              mode: "create",
+              item: null,
+            })
+          }
+          className="flex items-center gap-2 bg-neutral-900 text-white px-4 py-2 rounded-lg text-sm hover:bg-black transition"
+        >
+          <Plus size={16} />
+          Add Furniture
+        </button>
+      </div>
 
-          <div className="text-xs text-neutral-500">
-            {(furniture ?? []).length} items
-          </div>
-        </div>
-
-        {/* GRID */}
-        {loading ? (
-          <div className="text-sm text-neutral-500">
-            Loading furniture...
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
-            {(furniture ?? []).map((item) => (
-              <FurnitureCard
-                key={item.id}
-                item={item}
-                onEdit={() => setEditingItem(item)}
-                onDelete={() => handleDelete(item.id)}
-                onView={() => handleView(item)}
-              />
-            ))}
-          </div>
-        )}
-
-        {/* ADD MODAL */}
-        <AddFurnitureModal
-          isOpen={isAddOpen}
-          onClose={handleCloseAddModal}
-          onSave={handleCreate}
-          categories={categories}
+      {/* SEARCH */}
+      <div className="flex items-center justify-between gap-4 border border-neutral-200 bg-white rounded-xl p-3">
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search furniture..."
+          className="flex-1 text-sm outline-none px-2 bg-transparent"
         />
 
-        {/* EDIT MODAL */}
-        {editingItem && (
-          <EditFurnitureModal
-            isOpen={!!editingItem}
-            item={editingItem}
-            onClose={handleCloseEditModal}
-            onSave={handleUpdate}
-            categories={categories}
+        <div className="text-xs text-neutral-500">
+          {filteredFurniture.length} items
+        </div>
+      </div>
+
+      {/* GRID */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
+        {filteredFurniture.map((item) => (
+          <FurnitureCard
+            key={item.id}
+            item={item}
+            onEdit={() =>
+              setModalState({
+                isOpen: true,
+                mode: "edit",
+                item,
+              })
+            }
+            onDelete={() => handleDelete(item.id)}
+            onView={() => handleView(item)}
           />
-        )}
+        ))}
+      </div>
 
-        {/* MUTATION INDICATOR */}
-        {mutating && (
-          <div className="fixed bottom-4 right-4 bg-black text-white text-xs px-3 py-2 rounded">
-            Saving changes...
-          </div>
-        )}
+      {/* UNIFIED MODAL */}
+      {modalState.isOpen && (
+        <FurnitureAdminModal
+          isOpen={modalState.isOpen}
+          mode={modalState.mode}
+          item={modalState.item}
+          onClose={() =>
+            setModalState({
+              isOpen: false,
+              mode: "create",
+              item: null,
+            })
+          }
+          onSave={handleSave}
+          categories={categories}
+        />
+      )}
 
-        {/* 3D VIEWER */}
-        {viewer && (
-          <Furniture3DViewer
-            modelUrl={viewer.modelUrl}
-            selectedVariantTextureUrl={viewer.activeTexture ?? null}
-          />
-        )}
+      {/* LOADING */}
+      {mutating && (
+        <div className="fixed bottom-4 right-4 bg-black text-white text-xs px-4 py-2 rounded-lg">
+          Saving changes...
+        </div>
+      )}
 
-      </main>
-    </div>
+      {/* 3D VIEWER */}
+      {viewer && (
+        <Furniture3DViewer
+          modelUrl={viewer.modelUrl}
+          selectedVariantTextureUrl={viewer.activeTexture ?? null}
+        />
+      )}
+    </main>
   );
 }

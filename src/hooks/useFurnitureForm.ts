@@ -36,6 +36,17 @@ type FormState = {
 
 /* ========================================================= */
 
+type FormErrors = {
+  name?: string;
+  categoryId?: string;
+  images?: string;
+  basePrice?: string;
+  dimensions?: string;
+  general?: string;
+};
+
+/* ========================================================= */
+
 function buildInitial(
   mode: "create" | "edit",
   item?: FurnitureItemAdmin | null
@@ -63,9 +74,7 @@ function buildInitial(
         name: v.name ?? "",
         priceAdjustment: v.price_adjustment ?? null,
 
-        // default logic completely removed
         isDefault: false,
-
         isActive: !!v.is_active,
         previewUrl: v.preview_image_url ?? undefined,
         materialFile: undefined,
@@ -102,23 +111,26 @@ export function useFurnitureForm({ mode, item }: Params) {
     buildInitial(mode, item)
   );
 
+  const [errors, setErrors] = useState<FormErrors>({});
+
   /* =========================================================
      RESET
   ========================================================= */
 
   const resetForm = useCallback(() => {
     setForm(buildInitial(mode, item));
+    setErrors({});
   }, [mode, item]);
 
   /* =========================================================
-     HELPERS
+     KEY
   ========================================================= */
 
   const getKey = (obj: { id?: string; clientId: string }) =>
     obj.id ?? obj.clientId;
 
   /* =========================================================
-     GENERIC FIELD
+     FIELD UPDATE
   ========================================================= */
 
   const setField = useCallback(
@@ -127,6 +139,8 @@ export function useFurnitureForm({ mode, item }: Params) {
         ...prev,
         [key]: value,
       }));
+
+      setErrors((prev) => ({ ...prev, [key]: undefined }));
     },
     []
   );
@@ -150,18 +164,15 @@ export function useFurnitureForm({ mode, item }: Params) {
       ...prev,
       images: [...prev.images, ...newImages],
     }));
+
+    setErrors((prev) => ({ ...prev, images: undefined }));
   }, []);
 
   const removeImage = useCallback((key: string) => {
     setForm((prev) => ({
       ...prev,
       images: prev.images.map((img) =>
-        getKey(img) === key
-          ? {
-              ...img,
-              isDeleted: true,
-            }
-          : img
+        getKey(img) === key ? { ...img, isDeleted: true } : img
       ),
     }));
   }, []);
@@ -177,8 +188,7 @@ export function useFurnitureForm({ mode, item }: Params) {
   }, []);
 
   /* =========================================================
-     VARIANT ACTIONS
-     (NO DEFAULT VARIANT LOGIC)
+     VARIANTS
   ========================================================= */
 
   const addVariant = useCallback(() => {
@@ -187,9 +197,7 @@ export function useFurnitureForm({ mode, item }: Params) {
       name: "",
       priceAdjustment: null,
 
-      // default logic removed
       isDefault: false,
-
       isActive: true,
       materialFile: undefined,
       previewUrl: undefined,
@@ -210,13 +218,8 @@ export function useFurnitureForm({ mode, item }: Params) {
     ) => {
       setForm((prev) => ({
         ...prev,
-        variants: prev.variants.map((variant) =>
-          getKey(variant) === key
-            ? {
-                ...variant,
-                [field]: value,
-              }
-            : variant
+        variants: prev.variants.map((v) =>
+          getKey(v) === key ? { ...v, [field]: value } : v
         ),
       }));
     },
@@ -226,20 +229,48 @@ export function useFurnitureForm({ mode, item }: Params) {
   const removeVariant = useCallback((key: string) => {
     setForm((prev) => ({
       ...prev,
-      variants: prev.variants.map((variant) =>
-        getKey(variant) === key
-          ? {
-              ...variant,
-              isDeleted: true,
-            }
-          : variant
+      variants: prev.variants.map((v) =>
+        getKey(v) === key ? { ...v, isDeleted: true } : v
       ),
     }));
   }, []);
 
   /* =========================================================
-     IMAGE SAFETY ONLY
-     (Variant default safety removed)
+     VALIDATION
+  ========================================================= */
+
+  const validate = useCallback((): boolean => {
+    const newErrors: FormErrors = {};
+
+    if (!form.name.trim()) {
+      newErrors.name = "Furniture name is required";
+    }
+
+    if (!form.categoryId) {
+      newErrors.categoryId = "Category is required";
+    }
+
+    const activeImages = form.images.filter((i) => !i.isDeleted);
+
+    if (activeImages.length === 0) {
+      newErrors.images = "At least one image is required";
+    }
+
+    if (
+      form.widthCm == null ||
+      form.depthCm == null ||
+      form.heightCm == null
+    ) {
+      newErrors.dimensions = "Dimensions are required";
+    }
+
+    setErrors(newErrors);
+
+    return Object.keys(newErrors).length === 0;
+  }, [form]);
+
+  /* =========================================================
+     PRIMARY IMAGE SAFETY
   ========================================================= */
 
   const ensurePrimary = useCallback((images: ImageUI[]) => {
@@ -247,9 +278,8 @@ export function useFurnitureForm({ mode, item }: Params) {
 
     if (!active.length) return images;
 
-    const alreadyHasPrimary = active.some((img) => img.isPrimary);
-
-    if (alreadyHasPrimary) return images;
+    const hasPrimary = active.some((img) => img.isPrimary);
+    if (hasPrimary) return images;
 
     const firstKey = getKey(active[0]);
 
@@ -260,54 +290,64 @@ export function useFurnitureForm({ mode, item }: Params) {
   }, []);
 
   /* =========================================================
-     BUILD PAYLOAD
+     PAYLOAD (FIXED TYPES)
   ========================================================= */
 
-  const buildPayload = useCallback((): FurnitureFormPayload => {
-    const safeImages = ensurePrimary(form.images);
+ const buildPayload = useCallback((): FurnitureFormPayload | null => {
+  if (!validate()) return null;
 
-    return {
-      name: form.name,
-      description: form.description || undefined,
-      categoryId: form.categoryId || undefined,
+  const safeImages = ensurePrimary(form.images);
 
-      basePrice: form.basePrice ?? 0,
+  if (
+    form.widthCm == null ||
+    form.depthCm == null ||
+    form.heightCm == null ||
+    form.basePrice == null
+  ) {
+    return null;
+  }
 
-      modelFile: form.modelFile,
+  return {
+    name: form.name.trim(),
+    description: form.description || undefined,
+    categoryId: form.categoryId || undefined,
 
-      images: safeImages.map((img) => ({
-        id: img.id,
-        image_url: img.url,
-        isPrimary: img.isPrimary,
-        file: img.file,
-        isDeleted: img.isDeleted,
-      })),
+    // ✅ FIX: guaranteed number (no null)
+    basePrice: form.basePrice,
 
-      variants: form.variants.map((variant) => ({
-        id: variant.id,
-        name: variant.name,
-        priceAdjustment: variant.priceAdjustment ?? 0,
+    modelFile: form.modelFile ?? undefined,
 
-        // always false now since default system removed
-        isDefault: false,
+    images: safeImages.map((img) => ({
+      id: img.id,
+      image_url: img.url,
+      isPrimary: img.isPrimary,
+      file: img.file,
+      isDeleted: img.isDeleted,
+    })),
 
-        isActive: variant.isActive,
-        materialFile: variant.materialFile,
-        isDeleted: variant.isDeleted,
-      })),
+    variants: form.variants.map((v) => ({
+      id: v.id,
+      name: v.name,
+      priceAdjustment: v.priceAdjustment ?? undefined,
+      isDefault: false,
+      isActive: v.isActive,
+      materialFile: v.materialFile,
+      isDeleted: v.isDeleted,
+    })),
 
-      dimensions: {
-        widthCm: form.widthCm ?? undefined,
-        depthCm: form.depthCm ?? undefined,
-        heightCm: form.heightCm ?? undefined,
-      },
-    };
-  }, [form, ensurePrimary]);
+    dimensions: {
+      widthCm: form.widthCm,
+      depthCm: form.depthCm,
+      heightCm: form.heightCm,
+    },
+  };
+}, [form, ensurePrimary, validate]);
 
   /* ========================================================= */
 
   return {
     state: form,
+    errors,
 
     setField,
 
@@ -319,6 +359,7 @@ export function useFurnitureForm({ mode, item }: Params) {
     updateVariant,
     removeVariant,
 
+    validate,
     buildPayload,
     resetForm,
   };

@@ -12,20 +12,25 @@ export function useFurnitureById(id?: string) {
   const requestIdRef = useRef(0);
   const mountedRef = useRef(true);
 
+  // optional cache (very useful for admin edit reopening)
+  const cacheRef = useRef<Record<string, FurnitureItemAdmin>>({});
+
   useEffect(() => {
     return () => {
       mountedRef.current = false;
     };
   }, []);
 
-  /* =========================================================
-     FETCH (RACE SAFE)
-  ========================================================= */
-
   const fetchFurniture = useCallback(async (targetId: string) => {
     const requestId = ++requestIdRef.current;
 
     if (!mountedRef.current) return;
+
+    // ✅ instant cache hit (NO loading flicker)
+    if (cacheRef.current[targetId]) {
+      setData(cacheRef.current[targetId]);
+      return;
+    }
 
     setLoading(true);
     setError(null);
@@ -36,6 +41,8 @@ export function useFurnitureById(id?: string) {
       if (!mountedRef.current || requestId !== requestIdRef.current) return;
 
       setData(res);
+
+      cacheRef.current[targetId] = res;
     } catch (err) {
       if (!mountedRef.current || requestId !== requestIdRef.current) return;
 
@@ -50,10 +57,6 @@ export function useFurnitureById(id?: string) {
     }
   }, []);
 
-  /* =========================================================
-     EFFECT
-  ========================================================= */
-
   useEffect(() => {
     if (!id) {
       setData(null);
@@ -64,10 +67,6 @@ export function useFurnitureById(id?: string) {
 
     fetchFurniture(id);
   }, [id, fetchFurniture]);
-
-  /* =========================================================
-     API
-  ========================================================= */
 
   return {
     data,

@@ -26,8 +26,21 @@ import {
 } from "@/services/handlers/variantHandlers";
 
 /* =========================================================
-   SAFE QUERY TYPE
+   DEBUGGER (ENHANCED)
 ========================================================= */
+
+const DEBUG = true;
+
+function debug(step: string, data?: unknown) {
+  if (!DEBUG) return;
+  console.log(`[FURNITURE:${step}]`, data);
+}
+
+function debugError(step: string, error: unknown, extra?: unknown) {
+  console.error(`[FURNITURE:ERROR:${step}]`, error, extra ?? "");
+}
+
+/* ========================================================= */
 
 type FurnitureQueryResult = FurnitureDB & {
   furniture_categories: FurnitureCategory | null;
@@ -35,9 +48,7 @@ type FurnitureQueryResult = FurnitureDB & {
   furniture_variants: FurnitureVariant[] | null;
 };
 
-/* =========================================================
-   NORMALIZER
-========================================================= */
+/* ========================================================= */
 
 function normalizeFurniture(
   data: FurnitureQueryResult
@@ -55,6 +66,8 @@ function normalizeFurniture(
 ========================================================= */
 
 export async function getFurniture(): Promise<FurnitureItemAdmin[]> {
+  debug("GET_ALL_START");
+
   const { data, error } = await supabase
     .from("furniture")
     .select(`
@@ -65,18 +78,27 @@ export async function getFurniture(): Promise<FurnitureItemAdmin[]> {
     `)
     .order("created_at", { ascending: false });
 
-  if (error) throw error;
+  if (error) {
+    debugError("GET_ALL", error);
+    throw error;
+  }
 
-  return (data ?? []).map((item) =>
+  const result = (data ?? []).map((item) =>
     normalizeFurniture(item as FurnitureQueryResult)
   );
+
+  debug("GET_ALL_SUCCESS", { count: result.length });
+
+  return result;
 }
 
 /* =========================================================
-   READ BY ID
+   GET BY ID
 ========================================================= */
 
 export async function getFurnitureById(id: string) {
+  debug("GET_BY_ID_START", id);
+
   const { data, error } = await supabase
     .from("furniture")
     .select(`
@@ -88,127 +110,225 @@ export async function getFurnitureById(id: string) {
     .eq("id", id)
     .maybeSingle();
 
-  if (error) throw error;
+  if (error) {
+    debugError("GET_BY_ID", error, id);
+    throw error;
+  }
+
   if (!data) throw new Error("Furniture not found");
 
-  return normalizeFurniture(data as FurnitureQueryResult);
+  const result = normalizeFurniture(data as FurnitureQueryResult);
+
+  debug("GET_BY_ID_SUCCESS", id);
+
+  return result;
 }
 
 /* =========================================================
-   CREATE
+   CREATE (FULL DEBUG)
 ========================================================= */
 
 export async function createFurniture(
   payload: FurnitureFormPayload,
-  userId?: string
+  userId: string
 ) {
-  validateImages(payload.images ?? []);
-  validateVariants(payload.variants ?? []);
+  debug("CREATE_START_PAYLOAD", payload);
+  debug("CREATE_START_USER", userId);
 
-  const slug =
-    payload.name
-      .toLowerCase()
-      .trim()
-      .replace(/\s+/g, "-") +
-    "-" +
-    Date.now();
+  try {
+    if (!userId) throw new Error("userId is required");
 
-  const { data, error } = await supabase
-    .from("furniture")
-    .insert({
-      name: payload.name,
-      slug,
-      description: payload.description ?? null,
-      category_id: payload.categoryId ?? null,
-      base_price: payload.basePrice,
-      created_by: userId ?? null,
-    })
-    .select()
-    .single();
+    validateImages(payload.images ?? []);
+    validateVariants(payload.variants ?? []);
 
-  if (error) throw error;
+    const dims = payload.dimensions;
 
-  const id = data.id;
+    const safeName = payload.name.trim();
 
-  /* ---------- MODEL ---------- */
-  if (payload.modelFile) {
-    const url = await upload(
-      payload.modelFile,
-      buildPaths.model(id, payload.modelFile)
-    );
+    const slug =
+      safeName
+        .toLowerCase()
+        .replace(/\s+/g, "-")
+        .replace(/[^a-z0-9-]/g, "") +
+      "-" +
+      Date.now();
 
-    const { error: modelError } = await supabase
+    debug("CREATE_SLUG", slug);
+
+    /* =========================================================
+       INSERT MAIN ROW
+    ========================================================= */
+
+    const { data, error } = await supabase
       .from("furniture")
-      .update({ model_url: url })
-      .eq("id", id);
+      .insert({
+        name: safeName,
+        slug,
+        description: payload.description ?? null,
+        category_id: payload.categoryId ?? null,
+        base_price: payload.basePrice ?? 0,
+        created_by: userId,
 
-    if (modelError) throw modelError;
+        width_cm: dims?.widthCm ?? null,
+        depth_cm: dims?.depthCm ?? null,
+        height_cm: dims?.heightCm ?? null,
+
+        model_url: null,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      debugError("CREATE_INSERT", error, payload);
+      throw error;
+    }
+
+    const id = data.id;
+
+    debug("CREATE_INSERT_SUCCESS", { id, data });
+
+    /* =========================================================
+       MODEL UPLOAD
+    ========================================================= */
+
+    if (payload.modelFile instanceof File) {
+      debug("MODEL_UPLOAD_START");
+
+      const url = await upload(
+        payload.modelFile,
+        buildPaths.model(id, payload.modelFile)
+      );
+
+      debug("MODEL_UPLOAD_URL", url);
+
+      const { error: modelError } = await supabase
+        .from("furniture")
+        .update({ model_url: url })
+        .eq("id", id);
+
+      if (modelError) {
+        debugError("MODEL_UPDATE", modelError);
+        throw modelError;
+      }
+
+      debug("MODEL_UPLOAD_DONE");
+    }
+
+    /* =========================================================
+       CHILDREN
+    ========================================================= */
+
+    debug("IMAGES_CREATE_START", payload.images);
+    await createImages(id, payload.images ?? [], false);
+
+    debug("VARIANTS_CREATE_START", payload.variants);
+    await createVariants(id, payload.variants ?? []);
+
+    /* =========================================================
+       FINAL FETCH
+    ========================================================= */
+
+    const final = await getFurnitureById(id);
+
+    debug("CREATE_SUCCESS_FINAL", final);
+
+    return final;
+  } catch (err) {
+    debugError("CREATE_FATAL", err, payload);
+    throw err;
   }
-
-  /* ---------- CHILD ENTITIES ---------- */
-  await createImages(id, payload.images ?? []);
-  await createVariants(id, payload.variants ?? []);
-
-  return getFurnitureById(id);
 }
 
 /* =========================================================
-   UPDATE
+   UPDATE (DEBUG)
 ========================================================= */
 
 export async function updateFurniture(
   id: string,
   payload: FurnitureFormPayload
 ) {
-  validateImages(payload.images ?? []);
-  validateVariants(payload.variants ?? []);
+  debug("UPDATE_START", { id, payload });
 
-  const { error } = await supabase
-    .from("furniture")
-    .update({
-      name: payload.name,
-      description: payload.description ?? null,
-      base_price: payload.basePrice,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", id);
+  try {
+    validateImages(payload.images ?? []);
+    validateVariants(payload.variants ?? []);
 
-  if (error) throw error;
+    const dims = payload.dimensions;
 
-  /* ---------- MODEL REPLACEMENT ---------- */
-  if (payload.modelFile) {
-    const url = await upload(
-      payload.modelFile,
-      buildPaths.model(id, payload.modelFile)
-    );
-
-    const { error: modelError } = await supabase
+    const { error } = await supabase
       .from("furniture")
-      .update({ model_url: url })
+      .update({
+        name: payload.name,
+        description: payload.description ?? null,
+        base_price: payload.basePrice ?? 0,
+
+        width_cm: dims?.widthCm ?? null,
+        depth_cm: dims?.depthCm ?? null,
+        height_cm: dims?.heightCm ?? null,
+
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", id);
 
-    if (modelError) throw modelError;
+    if (error) {
+      debugError("UPDATE_MAIN", error);
+      throw error;
+    }
+
+    debug("UPDATE_MAIN_SUCCESS");
+
+    /* MODEL */
+    if (payload.modelFile instanceof File) {
+      debug("MODEL_UPDATE_START");
+
+      const url = await upload(
+        payload.modelFile,
+        buildPaths.model(id, payload.modelFile)
+      );
+
+      const { error: modelError } = await supabase
+        .from("furniture")
+        .update({ model_url: url })
+        .eq("id", id);
+
+      if (modelError) {
+        debugError("MODEL_UPDATE", modelError);
+        throw modelError;
+      }
+
+      debug("MODEL_UPDATE_DONE");
+    }
+
+    await updateImages(id, payload.images ?? []);
+    await updateVariants(id, payload.variants ?? []);
+
+    const result = await getFurnitureById(id);
+
+    debug("UPDATE_SUCCESS", result);
+
+    return result;
+  } catch (err) {
+    debugError("UPDATE_FATAL", err, payload);
+    throw err;
   }
-
-  /* ---------- SYNC CHILD ENTITIES ---------- */
-  await updateImages(id, payload.images ?? []);
-  await updateVariants(id, payload.variants ?? []);
-
-  return getFurnitureById(id);
 }
 
 /* =========================================================
-   DELETE (SAFE + FULL CLEANUP)
+   DELETE
 ========================================================= */
 
 export async function deleteFurniture(id: string) {
+  debug("DELETE_START", id);
+
   const item = await getFurnitureById(id);
 
-  const imageUrls =
-    item.furniture_images?.map((i) => i.image_url) ?? [];
+  const imageUrls = (item.furniture_images ?? []).map(
+    (i) => i.image_url
+  );
 
-  const variantUrls =
-    item.furniture_variants?.map((v) => v.texture_url) ?? [];
+  const variantUrls = (item.furniture_variants ?? []).map(
+    (v) => v.texture_url
+  );
 
   const urls = [
     item.model_url,
@@ -216,7 +336,9 @@ export async function deleteFurniture(id: string) {
     ...variantUrls,
   ].filter(Boolean) as string[];
 
-  if (urls.length) {
+  debug("DELETE_FILES", urls);
+
+  if (urls.length > 0) {
     await removeFiles(urls);
   }
 
@@ -225,7 +347,12 @@ export async function deleteFurniture(id: string) {
     .delete()
     .eq("id", id);
 
-  if (error) throw error;
+  if (error) {
+    debugError("DELETE", error);
+    throw error;
+  }
+
+  debug("DELETE_SUCCESS", id);
 }
 
 /* =========================================================
@@ -233,12 +360,19 @@ export async function deleteFurniture(id: string) {
 ========================================================= */
 
 export async function getCategories(): Promise<FurnitureCategory[]> {
+  debug("CATEGORIES_START");
+
   const { data, error } = await supabase
     .from("furniture_categories")
     .select("id, name")
     .order("name", { ascending: true });
 
-  if (error) throw error;
+  if (error) {
+    debugError("CATEGORIES", error);
+    throw error;
+  }
+
+  debug("CATEGORIES_SUCCESS", data?.length);
 
   return data ?? [];
 }

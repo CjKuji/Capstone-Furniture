@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+
 import { supabase } from "@/lib/supabase";
+import AdminSidebar from "@/app/components/AdminSidebar";
 
 import type { Profile } from "@/types/user";
 
@@ -21,29 +23,43 @@ export default function AdminLayout({
 
     const init = async () => {
       try {
-        const { data: auth, error: authError } =
-          await supabase.auth.getUser();
+        /**
+         * STEP 1:
+         * Get authenticated user
+         */
+        const {
+          data: { user },
+          error: authError,
+        } = await supabase.auth.getUser();
 
-        if (authError || !auth?.user) {
+        if (authError || !user) {
           router.replace("/auth/login");
           return;
         }
 
-        const { data: profileData, error } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", auth.user.id)
-          .single();
+        /**
+         * STEP 2:
+         * Get profile + role
+         */
+        const { data: profileData, error: profileError } =
+          await supabase
+            .from("profiles")
+            .select("*")
+            .eq("id", user.id)
+            .single();
 
-        if (error || !profileData) {
+        if (profileError || !profileData) {
           router.replace("/auth/login");
           return;
         }
 
-        const role = profileData.role;
-
+        /**
+         * STEP 3:
+         * Role guard
+         */
         const isAdmin =
-          role === "admin" || role === "super_admin";
+          profileData.role === "admin" ||
+          profileData.role === "super_admin";
 
         if (!isAdmin) {
           router.replace("/");
@@ -53,10 +69,13 @@ export default function AdminLayout({
         if (!mounted) return;
 
         setProfile(profileData);
-      } catch {
+      } catch (error) {
+        console.error(error);
         router.replace("/auth/login");
       } finally {
-        if (mounted) setLoading(false);
+        if (mounted) {
+          setLoading(false);
+        }
       }
     };
 
@@ -67,15 +86,29 @@ export default function AdminLayout({
     };
   }, [router]);
 
+  /**
+   * FIRST LOAD ONLY
+   */
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen text-sm text-neutral-500">
-        Checking permissions...
+        Loading admin workspace...
       </div>
     );
   }
 
   if (!profile) return null;
 
-  return <>{children}</>;
+  /**
+   * PERSISTENT DASHBOARD SHELL
+   */
+  return (
+    <div className="flex min-h-screen bg-neutral-50 text-neutral-900">
+      <AdminSidebar />
+
+      <main className="flex-1 min-w-0">
+        {children}
+      </main>
+    </div>
+  );
 }

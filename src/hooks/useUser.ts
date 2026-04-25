@@ -5,108 +5,145 @@ import { supabase } from "@/lib/supabase";
 
 import type { Profile } from "@/types/user";
 import type { UserRole } from "@/types/enums";
-
-import {
-  getCurrentProfile,
-} from "@/services/userService";
+import { getCurrentProfile } from "@/services/userService";
 
 /* =========================================================
-   GLOBAL USER HOOK
+   CACHE
 ========================================================= */
 
+let cachedUser: Profile | null = null;
+let cachedRole: UserRole | null = null;
+let cacheTimestamp = 0;
+
+const CACHE_TTL = 1000 * 60 * 5;
+
+/* ========================================================= */
+
 export function useUser() {
-  const [user, setUser] = useState<Profile | null>(null);
-  const [role, setRole] = useState<UserRole | null>(null);
+  const [user, setUser] = useState<Profile | null>(cachedUser);
+  const [loading, setLoading] = useState(!cachedUser);
+  const [initialized, setInitialized] = useState(!!cachedUser);
 
-  const [loading, setLoading] = useState(true);
-  const [initialized, setInitialized] = useState(false);
+  const role = user?.role ?? cachedRole ?? null;
 
-  const requestId = useRef(0);
+  const mountedRef = useRef(true);
+  const requestIdRef = useRef(0);
 
-  /* =========================================================
-     FETCH USER (RACE SAFE)
-  ========================================================= */
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
-  const fetchUser = useCallback(async () => {
-    const id = ++requestId.current;
+  const safeSet = useCallback((fn: () => void) => {
+    if (mountedRef.current) fn();
+  }, []);
 
-    setLoading(true);
+  const fetchUser = useCallback(async (force = false) => {
+    const requestId = ++requestIdRef.current;
+    const now = Date.now();
+
+    // ✅ valid cache
+    if (!force && cachedUser && now - cacheTimestamp < CACHE_TTL) {
+      safeSet(() => {
+        setUser(cachedUser);
+        setLoading(false);
+        setInitialized(true);
+      });
+      return;
+    }
+
+    safeSet(() => setLoading(true));
 
     try {
-      // 1. Auth session ONLY (no DB logic here)
-      const { data: auth, error: authError } =
-        await supabase.auth.getUser();
+      const {
+        data: { user: authUser },
+        error,
+      } = await supabase.auth.getUser();
 
-      if (authError || !auth?.user) {
-        setUser(null);
-        setRole(null);
+      // ❗ IMPORTANT FIX:
+      // only clear cache if request is still valid
+      if (error || !authUser || requestId !== requestIdRef.current) {
+        if (requestId === requestIdRef.current) {
+          cachedUser = null;
+          cachedRole = null;
+          cacheTimestamp = Date.now();
+        }
+
+        safeSet(() => setUser(null));
         return;
       }
 
-      // 2. Profile fetch goes through SERVICE (clean separation)
-      const profile = await getCurrentProfile(auth.user.id);
+      const profile = await getCurrentProfile(authUser.id);
 
-      if (requestId.current !== id) return;
+      if (!mountedRef.current || requestId !== requestIdRef.current) return;
 
-      setUser(profile);
-      setRole(profile.role);
-    } catch (err) {
-      setUser(null);
-      setRole(null);
+      cachedUser = profile;
+      cachedRole = profile.role;
+      cacheTimestamp = Date.now();
+
+      safeSet(() => setUser(profile));
+    } catch (e) {
+      console.error("useUser fetch failed:", e);
+
+      if (requestId === requestIdRef.current) {
+        cachedUser = null;
+        cachedRole = null;
+        cacheTimestamp = Date.now();
+      }
+
+      safeSet(() => setUser(null));
     } finally {
-      if (requestId.current === id) {
-        setLoading(false);
-        setInitialized(true);
+      if (mountedRef.current && requestId === requestIdRef.current) {
+        safeSet(() => {
+          setLoading(false);
+          setInitialized(true);
+        });
       }
     }
-  }, []);
-
-  /* =========================================================
-     INIT
-  ========================================================= */
+  }, [safeSet]);
 
   useEffect(() => {
     fetchUser();
   }, [fetchUser]);
 
-  /* =========================================================
-     ROLE HELPERS
-  ========================================================= */
+  const clearCache = useCallback(() => {
+    cachedUser = null;
+    cachedRole = null;
+    cacheTimestamp = 0;
 
-  const hasRole = useCallback(
-    (required: UserRole) => {
-      if (!role) return false;
+    safeSet(() => {
+      setUser(null);
+      setLoading(false);
+      setInitialized(true);
+    });
+  }, [safeSet]);
 
-      const hierarchy: Record<UserRole, number> = {
-        customer: 1,
-        admin: 2,
-        super_admin: 3,
-      };
+  const hasRole = useCallback((required: UserRole) => {
+    if (!role) return false;
 
-      return hierarchy[role] >= hierarchy[required];
-    },
-    [role]
-  );
+    const hierarchy: Record<UserRole, number> = {
+      customer: 1,
+      admin: 2,
+      super_admin: 3,
+    };
 
-  const isAdmin = role === "admin" || role === "super_admin";
-  const isSuperAdmin = role === "super_admin";
-  const isCustomer = role === "customer";
-
-  /* ========================================================= */
+    return hierarchy[role] >= hierarchy[required];
+  }, [role]);
 
   return {
     user,
     role,
-
     loading,
     initialized,
 
-    isAdmin,
-    isSuperAdmin,
-    isCustomer,
+    isAdmin: role === "admin" || role === "super_admin",
+    isSuperAdmin: role === "super_admin",
+    isCustomer: role === "customer",
 
     hasRole,
 
-    refetch: fetchUser,
+    refetch: () => fetchUser(true),
+    clearCache,
   };
 }

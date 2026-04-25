@@ -19,33 +19,40 @@ function log(step: string, data?: unknown) {
 }
 
 /* =========================================================
-   VALIDATION (NO DEFAULT RULES)
+   VALIDATION (VARIANT IS OPTIONAL NOW)
 ========================================================= */
 
-export function validateVariants(
-  variants: FurnitureVariantPayload[]
-) {
-  const active = variants.filter(v => !v.isDeleted);
+export function validateVariants(variants: FurnitureVariantPayload[]) {
+  const active = variants.filter((v) => !v.isDeleted);
 
-  log("VALIDATE_INPUT", active);
+  log("VALIDATE_INPUT", {
+    total: variants.length,
+    active: active.length,
+    activeData: active,
+  });
 
-  if (active.length === 0) {
-    throw new Error("At least one variant is required.");
+  // 🔥 UPDATED: variants are optional
+  // only validate if user actually provided something meaningful
+  if (variants.length === 0) {
+    log("VALIDATE_SKIP_EMPTY");
+    return;
   }
 
-  // ❌ REMOVED:
-  // - no isDefault validation
-  // - no single default enforcement
+  // if everything is deleted → allow it
+  if (active.length === 0) {
+    log("VALIDATE_ALL_DELETED_ALLOWED");
+    return;
+  }
 }
 
 /* =========================================================
-   NORMALIZATION (NO DEFAULT LOGIC)
+   NORMALIZATION (NO DEFAULT RULES)
 ========================================================= */
 
-function normalizeVariants(
-  variants: FurnitureVariantPayload[]
-) {
-  // ❌ No default resolution logic anymore
+function normalizeVariants(variants: FurnitureVariantPayload[]) {
+  log("NORMALIZE_INPUT", variants);
+
+  // no mutation logic
   return variants;
 }
 
@@ -53,13 +60,14 @@ function normalizeVariants(
    UPLOAD
 ========================================================= */
 
-async function uploadVariantFile(
-  furnitureId: string,
-  file: File
-) {
+async function uploadVariantFile(furnitureId: string, file: File) {
   const path = buildPaths.variant(furnitureId, file);
 
-  log("UPLOAD_FILE", { furnitureId, file: file.name });
+  log("UPLOAD_FILE", {
+    furnitureId,
+    fileName: file.name,
+    path,
+  });
 
   return upload(file, path);
 }
@@ -72,12 +80,16 @@ export async function createVariants(
   furnitureId: string,
   variants: FurnitureVariantPayload[]
 ) {
-  log("CREATE_INPUT", variants);
+  log("CREATE_INPUT", {
+    furnitureId,
+    variantsCount: variants.length,
+    variants,
+  });
 
-  const targets = variants.filter(v => !v.isDeleted);
+  const targets = variants.filter((v) => !v.isDeleted);
 
   if (!targets.length) {
-    log("CREATE_ABORT_EMPTY");
+    log("CREATE_ABORT_NO_TARGETS");
     return;
   }
 
@@ -89,6 +101,8 @@ export async function createVariants(
     let textureUrl: string | null = null;
 
     if (v.materialFile) {
+      log("UPLOAD_START", { index: i, name: v.name });
+
       textureUrl = await uploadVariantFile(
         furnitureId,
         v.materialFile
@@ -116,6 +130,8 @@ export async function createVariants(
     console.error("❌ VARIANT INSERT ERROR:", error);
     throw error;
   }
+
+  log("CREATE_SUCCESS", { furnitureId });
 }
 
 /* =========================================================
@@ -126,21 +142,21 @@ export async function updateVariants(
   furnitureId: string,
   variants: FurnitureVariantPayload[]
 ) {
-  log("RAW_INPUT", variants);
+  log("RAW_INPUT", { furnitureId, variants });
 
   /* ---------------- SPLIT ---------------- */
 
-  const toDelete = variants.filter(v => v.id && v.isDeleted);
+  const toDelete = variants.filter((v) => v.id && v.isDeleted);
 
-  const toKeep = variants.filter(v =>
-    v.id && !v.isDeleted
-  );
+  const toKeep = variants.filter((v) => v.id && !v.isDeleted);
 
-  const toInsert = variants.filter(v =>
-    !v.id && !v.isDeleted
-  );
+  const toInsert = variants.filter((v) => !v.id && !v.isDeleted);
 
-  log("SPLIT", { toDelete, toKeep, toInsert });
+  log("SPLIT", {
+    toDelete: toDelete.length,
+    toKeep: toKeep.length,
+    toInsert: toInsert.length,
+  });
 
   /* ---------------- NORMALIZE ---------------- */
 
@@ -153,9 +169,11 @@ export async function updateVariants(
 
   /* ---------------- DELETE ---------------- */
 
-  const deleteIds = toDelete.map(v => v.id!);
+  const deleteIds = toDelete.map((v) => v.id!);
 
   if (deleteIds.length) {
+    log("DELETE_IDS", deleteIds);
+
     const { data, error } = await supabase
       .from("furniture_variants")
       .select("texture_url")
@@ -164,7 +182,7 @@ export async function updateVariants(
     if (error) throw error;
 
     if (data?.length) {
-      await removeFiles(data.map(d => d.texture_url));
+      await removeFiles(data.map((d) => d.texture_url));
     }
 
     const { error: delError } = await supabase
@@ -177,7 +195,7 @@ export async function updateVariants(
 
   /* ---------------- UPDATE ---------------- */
 
-  const normalizedKeep = fullNormalized.filter(v => v.id);
+  const normalizedKeep = fullNormalized.filter((v) => v.id);
 
   for (let i = 0; i < normalizedKeep.length; i++) {
     const v = normalizedKeep[i];
@@ -190,6 +208,8 @@ export async function updateVariants(
     };
 
     if (v.materialFile) {
+      log("REPLACE_TEXTURE", { id: v.id });
+
       const { data: old } = await supabase
         .from("furniture_variants")
         .select("texture_url")
@@ -225,11 +245,12 @@ export async function updateVariants(
   /* ---------------- INSERT NEW ---------------- */
 
   const normalizedInsert = fullNormalized.filter(
-    v => !v.id && !v.isDeleted
+    (v) => !v.id && !v.isDeleted
   );
 
   if (normalizedInsert.length) {
     log("INSERT_NEW", normalizedInsert);
+
     await createVariants(furnitureId, normalizedInsert);
   }
 
