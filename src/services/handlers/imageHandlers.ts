@@ -5,7 +5,7 @@ import type { FurnitureImagePayload } from "@/types/furniture";
 import { upload, buildPaths, removeFiles } from "@/services/storageService";
 
 /* =========================================================
-   VALIDATION (DB STATE ONLY)
+   VALIDATION
 ========================================================= */
 
 export function validateImages(images: FurnitureImagePayload[]) {
@@ -27,14 +27,14 @@ export function validateImages(images: FurnitureImagePayload[]) {
 }
 
 /* =========================================================
-   STABLE KEY (IMPORTANT FIX)
+   KEY
 ========================================================= */
 
 const getKey = (img: FurnitureImagePayload) =>
   img.id ?? img.image_url ?? "new";
 
 /* =========================================================
-   NORMALIZATION (SAFE + DETERMINISTIC)
+   NORMALIZATION (NO DB SIDE EFFECTS)
 ========================================================= */
 
 function normalizeImages(images: FurnitureImagePayload[]) {
@@ -42,17 +42,26 @@ function normalizeImages(images: FurnitureImagePayload[]) {
 
   if (active.length === 0) return images;
 
-  const primary =
-    active.find(i => i.isPrimary) ?? active[0];
+  const existingPrimary = active.find(i => i.id && i.isPrimary);
 
-  const primaryKey = getKey(primary);
+  const fallback =
+    existingPrimary ??
+    active.find(i => i.isPrimary) ??
+    active[0];
 
   return images.map(img => {
     if (img.isDeleted) return img;
 
+    if (existingPrimary) {
+      return {
+        ...img,
+        isPrimary: img.id === existingPrimary.id,
+      };
+    }
+
     return {
       ...img,
-      isPrimary: getKey(img) === primaryKey,
+      isPrimary: getKey(img) === getKey(fallback),
     };
   });
 }
@@ -67,17 +76,30 @@ async function uploadImageFile(furnitureId: string, file: File) {
 }
 
 /* =========================================================
-   CREATE
+   PRIMARY RESET (SAFE)
+========================================================= */
+
+async function resetPrimary(furnitureId: string) {
+  const { error } = await supabase
+    .from("furniture_images")
+    .update({ is_primary: false })
+    .eq("furniture_id", furnitureId);
+
+  if (error) throw error;
+}
+
+/* =========================================================
+   CREATE (NO BUSINESS LOGIC INSIDE)
 ========================================================= */
 
 export async function createImages(
   furnitureId: string,
-  images: FurnitureImagePayload[]
+  images: FurnitureImagePayload[],
+  hasExistingPrimary: boolean
 ) {
-  const normalized = normalizeImages(images);
-  validateImages(normalized);
+  const targets = images.filter(i => i.file && !i.isDeleted);
 
-  const targets = normalized.filter(i => i.file && !i.isDeleted);
+  if (!targets.length) return;
 
   const rows = await Promise.all(
     targets.map(async (img, index) => {
@@ -87,57 +109,46 @@ export async function createImages(
         furniture_id: furnitureId,
         image_url: url,
         sort_order: index,
-        is_primary: !!img.isPrimary,
+
+        // 🔥 CRITICAL FIX
+        is_primary: hasExistingPrimary ? false : !!img.isPrimary,
       };
     })
   );
-
-  if (!rows.length) return;
 
   const { error } = await supabase
     .from("furniture_images")
     .insert(rows);
 
-  if (error) throw error;
+  if (error) {
+    console.error("❌ IMAGE INSERT ERROR:", error);
+    throw error;
+  }
 }
 
 /* =========================================================
-   UPDATE (FIXED + SAFE ORDERING)
+   UPDATE (ATOMIC PRIMARY RESOLUTION)
 ========================================================= */
 
 export async function updateImages(
   furnitureId: string,
   images: FurnitureImagePayload[]
 ) {
-  /* -------------------------
-     SPLIT STATE
-  ------------------------- */
-
   const toDelete = images.filter(i => i.id && i.isDeleted);
   const toKeepRaw = images.filter(i => !i.isDeleted);
 
-  /* -------------------------
-     NORMALIZE FIRST (IMPORTANT FIX)
-  ------------------------- */
+  const fullNormalized = normalizeImages(toKeepRaw);
 
-  const normalizedKeep = normalizeImages(toKeepRaw);
+  validateImages(fullNormalized);
 
-  /* -------------------------
-     VALIDATE FINAL STATE
-  ------------------------- */
-
-  validateImages(normalizedKeep);
-
-  /* -------------------------
-     DELETE (DB + STORAGE)
-  ------------------------- */
+  /* ---------------- DELETE ---------------- */
 
   const deleteIds = toDelete.map(i => i.id!).filter(Boolean);
 
   if (deleteIds.length) {
     const { data, error } = await supabase
       .from("furniture_images")
-      .select("id, image_url")
+      .select("image_url")
       .in("id", deleteIds);
 
     if (error) throw error;
@@ -154,31 +165,61 @@ export async function updateImages(
     if (delError) throw delError;
   }
 
-  /* -------------------------
-     UPDATE EXISTING ROWS
-  ------------------------- */
+  /* =========================================================
+     🔥 STEP 1: REMOVE PRIMARY FROM ALL (TEMP STATE SAFE)
+  ========================================================= */
 
-  const existing = normalizedKeep.filter(i => i.id);
+  await resetPrimary(furnitureId);
+
+  /* =========================================================
+     🔥 STEP 2: UPDATE EVERYTHING EXCEPT PRIMARY FLAG
+  ========================================================= */
+
+  const existing = fullNormalized.filter(i => i.id);
 
   await Promise.all(
     existing.map((img, index) =>
       supabase
         .from("furniture_images")
         .update({
-          is_primary: !!img.isPrimary,
           sort_order: index,
+          // ❌ DO NOT set is_primary here
         })
         .eq("id", img.id!)
     )
   );
 
-  /* -------------------------
-     INSERT NEW ROWS
-  ------------------------- */
+  /* =========================================================
+     🔥 STEP 3: INSERT NEW (ALWAYS NON-PRIMARY)
+  ========================================================= */
 
-  const newImages = normalizedKeep.filter(i => !i.id && i.file);
+  const newImages = fullNormalized.filter(
+    i => i.file && !i.id && !i.isDeleted
+  );
 
   if (newImages.length) {
-    await createImages(furnitureId, newImages);
+    await createImages(
+      furnitureId,
+      newImages,
+      true // 🔥 existing primary always exists at this point
+    );
+  }
+
+  /* =========================================================
+     🔥 STEP 4: SET FINAL PRIMARY ONCE (SOURCE OF TRUTH)
+  ========================================================= */
+
+  const finalPrimary =
+    fullNormalized.find(i => i.isPrimary && i.id)?.id ||
+    existing[0]?.id ||
+    null;
+
+  if (finalPrimary) {
+    const { error } = await supabase
+      .from("furniture_images")
+      .update({ is_primary: true })
+      .eq("id", finalPrimary);
+
+    if (error) throw error;
   }
 }

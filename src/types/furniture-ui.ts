@@ -22,7 +22,7 @@ export type VariantUI = {
   clientId: string;
 
   name: string;
-  priceAdjustment: number;
+  priceAdjustment: number | null;
   isDefault: boolean;
   isActive: boolean;
 

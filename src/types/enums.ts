@@ -22,6 +22,6 @@ export type FulfillmentStatus =
 
 export type DeliveryMethod = "pickup" | "delivery";
 
-export type UserRole = "customer" | "admin";
+export type UserRole = "customer" | "admin" | "super_admin";
 
 export type SenderType = "user" | "admin";

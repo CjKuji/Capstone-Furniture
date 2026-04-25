@@ -2,13 +2,11 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { User } from "@supabase/supabase-js";
 import { Plus } from "lucide-react";
 
 import AdminSidebar from "@/app/components/AdminSidebar";
 import FurnitureCard from "@/app/components/FurnitureCardAdmin";
 import Furniture3DViewer from "@/app/components/Furniture3DViewer";
-
 import AddFurnitureModal from "@/app/components/AddFurnitureModal";
 import EditFurnitureModal from "@/app/components/EditFurnitureModal";
 
@@ -20,18 +18,18 @@ import type {
 
 import { useFurniture } from "@/hooks/useFurniture";
 import { useFurnitureViewer } from "@/hooks/useFurnitureViewer";
+import { useUser } from "@/hooks/useUser";
+
 import { getCategories } from "@/services/furnitureService";
-import { supabase } from "@/lib/supabase";
 
 /* ========================================================= */
 
 export default function AdminFurniture() {
   const router = useRouter();
 
-  /* ================= AUTH ================= */
+  /* ================= AUTH (CENTRALIZED) ================= */
 
-  const [user, setUser] = useState<User | null>(null);
-  const [authLoading, setAuthLoading] = useState(true);
+  const { user, loading: authLoading, isAdmin } = useUser();
 
   /* ================= UI STATE ================= */
 
@@ -45,32 +43,14 @@ export default function AdminFurniture() {
   const { viewer, openViewer } = useFurnitureViewer();
 
   /* =========================================================
-     AUTH INIT
+     ROLE GUARD (CLIENT-SIDE SAFETY)
   ========================================================= */
 
   useEffect(() => {
-    let mounted = true;
-
-    const initAuth = async () => {
-      const { data, error } = await supabase.auth.getUser();
-
-      if (!mounted) return;
-
-      if (error || !data?.user) {
-        router.push("/auth/login");
-        return;
-      }
-
-      setUser(data.user);
-      setAuthLoading(false);
-    };
-
-    initAuth();
-
-    return () => {
-      mounted = false;
-    };
-  }, [router]);
+    if (!authLoading && (!user || !isAdmin)) {
+      router.replace("/auth/login");
+    }
+  }, [authLoading, user, isAdmin, router]);
 
   const userId = user?.id;
 
@@ -111,7 +91,7 @@ export default function AdminFurniture() {
   }, []);
 
   /* =========================================================
-     SAFE CLOSE HANDLERS (IMPORTANT FIX)
+     HANDLERS
   ========================================================= */
 
   const handleCloseAddModal = useCallback(() => {
@@ -122,9 +102,7 @@ export default function AdminFurniture() {
     setEditingItem(null);
   }, []);
 
-  /* =========================================================
-     CREATE
-  ========================================================= */
+  /* ---------------- CREATE ---------------- */
 
   const handleCreate = useCallback(
     async (form: FurnitureFormPayload) => {
@@ -132,31 +110,23 @@ export default function AdminFurniture() {
 
       const success = await create(form, userId);
 
-      if (success) {
-        handleCloseAddModal();
-      }
+      if (success) handleCloseAddModal();
     },
     [create, userId, handleCloseAddModal]
   );
 
-  /* =========================================================
-     UPDATE
-  ========================================================= */
+  /* ---------------- UPDATE ---------------- */
 
   const handleUpdate = useCallback(
     async (id: string, form: FurnitureFormPayload) => {
       const success = await update(id, form);
 
-      if (success) {
-        handleCloseEditModal();
-      }
+      if (success) handleCloseEditModal();
     },
     [update, handleCloseEditModal]
   );
 
-  /* =========================================================
-     DELETE
-  ========================================================= */
+  /* ---------------- DELETE ---------------- */
 
   const handleDelete = useCallback(
     async (id: string) => {
@@ -168,9 +138,7 @@ export default function AdminFurniture() {
     [remove]
   );
 
-  /* =========================================================
-     VIEW HANDLER
-  ========================================================= */
+  /* ---------------- VIEW ---------------- */
 
   const handleView = useCallback(
     (item: FurnitureItemAdmin) => {
@@ -189,7 +157,7 @@ export default function AdminFurniture() {
   );
 
   /* =========================================================
-     AUTH LOADING
+     LOADING GUARD
   ========================================================= */
 
   if (authLoading) {
@@ -199,6 +167,8 @@ export default function AdminFurniture() {
       </div>
     );
   }
+
+  if (!user || !isAdmin) return null;
 
   /* =========================================================
      MAIN UI

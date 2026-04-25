@@ -113,6 +113,16 @@ export type FurnitureVariantPayload = {
   isDeleted?: boolean;         // selective delete
 };
 
+export type FurnitureVariantInsert = {
+  furniture_id: string;
+  name: string;
+  texture_url: string | null;
+  preview_image_url: string | null;
+  price_adjustment: number;
+  is_active: boolean;
+  sort_order: number;
+};
+
 /* =========================================================
    FORM PAYLOAD (API LAYER)
 ========================================================= */
@@ -148,4 +158,19 @@ export type ImageItem = {
 
   isPrimary: boolean;
   isDeleted?: boolean;
+};
+
+export type FurnitureListItem = {
+  id: string;
+  name: string;
+  slug: string;
+
+  base_price: number;
+  publish_status: PublishStatus;
+
+  category_id: string | null;
+
+  thumbnail_url?: string | null;
+
+  created_at: string;
 };

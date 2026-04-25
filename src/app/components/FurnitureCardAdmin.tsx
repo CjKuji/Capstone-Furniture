@@ -1,6 +1,14 @@
 "use client";
 
-import { Trash2, Image as ImageIcon, Box } from "lucide-react";
+import {
+  Trash2,
+  Image as ImageIcon,
+  Box,
+  Package,
+  Pencil,
+  Ruler,
+} from "lucide-react";
+
 import type { FurnitureItemAdmin } from "@/types/furniture";
 
 export interface FurnitureCardProps {
@@ -14,7 +22,6 @@ export default function FurnitureCard({
   item,
   onEdit,
   onDelete,
-  onView,
 }: FurnitureCardProps) {
   const images = item.furniture_images ?? [];
   const variants = item.furniture_variants ?? [];
@@ -24,128 +31,142 @@ export default function FurnitureCard({
     images[0]?.image_url ||
     "/placeholder.png";
 
-  const categoryName = item.furniture_categories?.name ?? "Uncategorized";
+  const categoryName =
+    item.furniture_categories?.name ?? "Uncategorized";
 
   const price = item.base_price ?? 0;
   const imageCount = images.length;
+  const variantCount = variants.length;
   const hasModel = Boolean(item.model_url);
 
-  const defaultVariant =
-    variants.find((v) => v.is_default) || variants[0];
+  const width = item.width_cm ?? null;
+  const depth = item.depth_cm ?? null;
+  const height = item.height_cm ?? null;
+
+  const dimensionText =
+    width !== null || depth !== null || height !== null
+      ? `${width ?? "-"} × ${depth ?? "-"} × ${height ?? "-"} cm`
+      : "No dimensions";
 
   const status = item.publish_status ?? "draft";
 
   const statusStyle: Record<string, string> = {
-    published: "bg-emerald-500/10 text-emerald-600 border-emerald-200",
-    draft: "bg-amber-500/10 text-amber-600 border-amber-200",
-    archived: "bg-neutral-200 text-neutral-600 border-neutral-300",
+    published:
+      "bg-emerald-50 text-emerald-700 border border-emerald-200",
+    draft:
+      "bg-amber-50 text-amber-700 border border-amber-200",
+    archived:
+      "bg-gray-100 text-gray-600 border border-gray-200",
   };
 
   return (
-    <div className="group bg-white border border-neutral-200 rounded-xl overflow-hidden hover:shadow-md hover:border-neutral-300 transition-all">
+    <div className="group bg-white border border-gray-200 rounded-xl overflow-hidden hover:shadow-md hover:border-gray-300 transition-all duration-300">
 
-      {/* ================= IMAGE ================= */}
-      <div className="relative h-44 w-full bg-neutral-100">
-
+      {/* =====================================================
+          IMAGE
+      ====================================================== */}
+      <div className="relative h-40 bg-gray-100 overflow-hidden">
         <img
           src={primaryImage}
           alt={item.name}
-          className="w-full h-full object-cover group-hover:scale-[1.02] transition"
+          className="w-full h-full object-cover group-hover:scale-[1.02] transition duration-500"
         />
 
         {/* STATUS */}
         <div
-          className={`absolute top-3 left-3 text-[11px] px-2 py-1 rounded-md border font-medium backdrop-blur ${statusStyle[status]}`}
+          className={`absolute top-3 left-3 text-[10px] px-2.5 py-1 rounded-md font-medium capitalize ${statusStyle[status]}`}
         >
           {status}
         </div>
 
-        {/* IMAGE COUNT */}
-        <div className="absolute bottom-3 left-3 flex items-center gap-1 text-[11px] bg-black/60 text-white px-2 py-1 rounded-md">
-          <ImageIcon size={12} />
-          {imageCount}
-        </div>
-
-        {/* MODEL BADGE */}
-        {hasModel && (
-          <div className="absolute bottom-3 right-3 flex items-center gap-1 text-[11px] bg-white/90 px-2 py-1 rounded-md border text-neutral-700">
-            <Box size={12} />
-            3D
+        {/* BADGES */}
+        <div className="absolute bottom-3 left-3 flex flex-wrap gap-2">
+          <div className="flex items-center gap-1 text-[10px] bg-black/75 text-white px-2 py-1 rounded-md">
+            <ImageIcon size={12} />
+            {imageCount}
           </div>
-        )}
+
+          <div className="flex items-center gap-1 text-[10px] bg-white text-gray-700 px-2 py-1 rounded-md border">
+            <Package size={12} />
+            {variantCount}
+          </div>
+
+          {hasModel && (
+            <div className="flex items-center gap-1 text-[10px] bg-white text-gray-700 px-2 py-1 rounded-md border">
+              <Box size={12} />
+              3D
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* ================= CONTENT ================= */}
+      {/* =====================================================
+          CONTENT
+      ====================================================== */}
       <div className="p-4 space-y-4">
 
         {/* TITLE + PRICE */}
-        <div className="flex items-start justify-between gap-3">
-
+        <div className="flex justify-between items-start gap-3">
           <div className="min-w-0">
-            <h3 className="text-sm font-semibold text-neutral-900 truncate">
+            <h3 className="text-sm font-semibold text-gray-900 truncate">
               {item.name}
             </h3>
 
-            <p className="text-xs text-neutral-500 truncate">
+            <p className="text-xs text-gray-500 mt-0.5">
               {categoryName}
             </p>
           </div>
 
-          <div className="text-right">
-            <p className="text-sm font-semibold text-neutral-900">
+          <div className="text-right shrink-0">
+            <p className="text-sm font-semibold text-gray-900">
               ₱{price.toLocaleString()}
             </p>
-            <p className="text-[11px] text-neutral-400">
-              base
+
+            <p className="text-[10px] text-gray-400">
+              base price
             </p>
           </div>
         </div>
 
-        {/* VARIANT PREVIEW */}
-        {defaultVariant && (
-          <div className="flex items-center justify-between text-xs border border-neutral-100 rounded-lg px-3 py-2 bg-neutral-50">
-            <div className="flex items-center gap-2 min-w-0">
-              {defaultVariant.preview_image_url && (
-                <img
-                  src={defaultVariant.preview_image_url}
-                  className="w-5 h-5 rounded object-cover border"
-                />
-              )}
-              <span className="text-neutral-700 truncate">
-                {defaultVariant.name}
-              </span>
-            </div>
-
-            <span className="text-neutral-500">
-              +₱{defaultVariant.price_adjustment ?? 0}
-            </span>
-          </div>
+        {/* DESCRIPTION */}
+        {item.description ? (
+          <p className="text-xs text-gray-600 line-clamp-2 leading-relaxed">
+            {item.description}
+          </p>
+        ) : (
+          <p className="text-xs text-gray-400 italic">
+            No description
+          </p>
         )}
 
-        {/* META */}
-        <div className="flex justify-between text-xs text-neutral-500">
-          <span>{imageCount} images</span>
-          <span>{variants.length} variants</span>
+        {/* DIMENSIONS */}
+        <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+          <div className="flex items-center gap-2">
+            <Ruler size={13} className="text-gray-500" />
+
+            <span className="text-[11px] text-gray-600">
+              {dimensionText}
+            </span>
+          </div>
         </div>
 
         {/* ACTIONS */}
-        <div className="flex gap-2 pt-2 border-t border-neutral-100">
-
+        <div className="pt-3 border-t border-gray-100 flex gap-2">
           <button
             onClick={() => onEdit(item)}
-            className="flex-1 py-2 text-sm font-medium rounded-lg bg-neutral-900 text-white hover:bg-black transition"
+            className="flex-1 h-9 rounded-lg bg-gray-900 text-white text-sm font-medium hover:bg-black transition flex items-center justify-center gap-2"
           >
+            <Pencil size={14} />
             Manage
           </button>
 
           <button
             onClick={() => onDelete(item.id)}
-            className="p-2 rounded-lg border border-neutral-200 text-neutral-600 hover:text-red-600 hover:border-red-200 hover:bg-red-50 transition"
             title="Delete"
+            className="w-9 h-9 rounded-lg border border-gray-200 text-gray-600 hover:text-red-600 hover:border-red-200 hover:bg-red-50 transition flex items-center justify-center"
           >
-            <Trash2 size={16} />
+            <Trash2 size={15} />
           </button>
-
         </div>
       </div>
     </div>

@@ -1,55 +1,67 @@
 "use client";
 
 import { supabase } from "@/lib/supabase";
-import type { FurnitureVariantPayload } from "@/types/furniture";
+import type {
+  FurnitureVariantPayload,
+  FurnitureVariantInsert,
+} from "@/types/furniture";
 import { upload, buildPaths, removeFiles } from "@/services/storageService";
 
 /* =========================================================
-   VALIDATION (DB-READY STATE ONLY)
+   DEBUG LOGGER
 ========================================================= */
 
-export function validateVariants(variants: FurnitureVariantPayload[]) {
+const DEBUG = true;
+
+function log(step: string, data?: unknown) {
+  if (!DEBUG) return;
+  console.log(`[VARIANT:${step}]`, data);
+}
+
+/* =========================================================
+   VALIDATION (NO DEFAULT RULES)
+========================================================= */
+
+export function validateVariants(
+  variants: FurnitureVariantPayload[]
+) {
   const active = variants.filter(v => !v.isDeleted);
+
+  log("VALIDATE_INPUT", active);
 
   if (active.length === 0) {
     throw new Error("At least one variant is required.");
   }
 
-  const defaultCount = active.filter(v => v.isDefault).length;
-
-  if (defaultCount === 0) {
-    throw new Error("At least one default variant is required.");
-  }
-
-  if (defaultCount > 1) {
-    throw new Error("Only one default variant is allowed.");
-  }
+  // ❌ REMOVED:
+  // - no isDefault validation
+  // - no single default enforcement
 }
 
 /* =========================================================
-   NORMALIZATION (FIXED + STABLE)
+   NORMALIZATION (NO DEFAULT LOGIC)
 ========================================================= */
 
-function normalizeVariants(variants: FurnitureVariantPayload[]) {
-  const active = variants.filter(v => !v.isDeleted);
+function normalizeVariants(
+  variants: FurnitureVariantPayload[]
+) {
+  // ❌ No default resolution logic anymore
+  return variants;
+}
 
-  if (active.length === 0) return variants;
+/* =========================================================
+   UPLOAD
+========================================================= */
 
-  const defaultItem =
-    active.find(v => v.isDefault) ?? active[0];
+async function uploadVariantFile(
+  furnitureId: string,
+  file: File
+) {
+  const path = buildPaths.variant(furnitureId, file);
 
-  const defaultId = defaultItem.id ?? defaultItem.name;
+  log("UPLOAD_FILE", { furnitureId, file: file.name });
 
-  return variants.map(v => {
-    if (v.isDeleted) return v;
-
-    const key = v.id ?? v.name;
-
-    return {
-      ...v,
-      isDefault: key === defaultId,
-    };
-  });
+  return upload(file, path);
 }
 
 /* =========================================================
@@ -60,78 +72,90 @@ export async function createVariants(
   furnitureId: string,
   variants: FurnitureVariantPayload[]
 ) {
-  const normalized = normalizeVariants(variants);
-  validateVariants(normalized);
+  log("CREATE_INPUT", variants);
 
-  const uploadTargets = normalized.filter(
-    v => v.materialFile && !v.isDeleted
-  );
+  const targets = variants.filter(v => !v.isDeleted);
 
-  const rows = await Promise.all(
-    uploadTargets.map(async (v, i) => {
-      const file = v.materialFile!;
+  if (!targets.length) {
+    log("CREATE_ABORT_EMPTY");
+    return;
+  }
 
-      const textureUrl = await upload(
-        file,
-        buildPaths.variant(furnitureId, file)
+  const rows: FurnitureVariantInsert[] = [];
+
+  for (let i = 0; i < targets.length; i++) {
+    const v = targets[i];
+
+    let textureUrl: string | null = null;
+
+    if (v.materialFile) {
+      textureUrl = await uploadVariantFile(
+        furnitureId,
+        v.materialFile
       );
+    }
 
-      return {
-        furniture_id: furnitureId,
-        name: v.name,
-        texture_url: textureUrl,
-        preview_image_url: textureUrl,
-        price_adjustment: v.priceAdjustment ?? 0,
-        is_default: !!v.isDefault,
-        is_active: v.isActive ?? true,
-        sort_order: i,
-      };
-    })
-  );
+    rows.push({
+      furniture_id: furnitureId,
+      name: v.name,
+      texture_url: textureUrl,
+      preview_image_url: textureUrl,
+      price_adjustment: v.priceAdjustment ?? 0,
+      is_active: v.isActive ?? true,
+      sort_order: i,
+    });
+  }
 
-  if (!rows.length) return;
+  log("INSERT_ROWS", rows);
 
   const { error } = await supabase
     .from("furniture_variants")
     .insert(rows);
 
-  if (error) throw error;
+  if (error) {
+    console.error("❌ VARIANT INSERT ERROR:", error);
+    throw error;
+  }
 }
 
 /* =========================================================
-   UPDATE (FIXED + CONCURRENCY SAFE FLOW)
+   UPDATE
 ========================================================= */
 
 export async function updateVariants(
   furnitureId: string,
   variants: FurnitureVariantPayload[]
 ) {
-  /* -------------------------
-     STEP 1: SPLIT INPUT
-  ------------------------- */
+  log("RAW_INPUT", variants);
+
+  /* ---------------- SPLIT ---------------- */
 
   const toDelete = variants.filter(v => v.id && v.isDeleted);
-  const toKeepRaw = variants.filter(v => !v.isDeleted);
 
-  /* -------------------------
-     STEP 2: NORMALIZE FIRST (IMPORTANT FIX)
-  ------------------------- */
+  const toKeep = variants.filter(v =>
+    v.id && !v.isDeleted
+  );
 
-  const normalizedKeep = normalizeVariants(toKeepRaw);
+  const toInsert = variants.filter(v =>
+    !v.id && !v.isDeleted
+  );
 
-  /* -------------------------
-     STEP 3: VALIDATE AFTER NORMALIZATION
-  ------------------------- */
+  log("SPLIT", { toDelete, toKeep, toInsert });
 
-  validateVariants(normalizedKeep);
+  /* ---------------- NORMALIZE ---------------- */
 
-  /* -------------------------
-     STEP 4: DELETE FIRST (STORAGE + DB)
-  ------------------------- */
+  const fullNormalized = normalizeVariants([
+    ...toKeep,
+    ...toInsert,
+  ]);
+
+  validateVariants(fullNormalized);
+
+  /* ---------------- DELETE ---------------- */
 
   const deleteIds = toDelete.map(v => v.id!);
 
-  if (deleteIds.length > 0) {
+  if (deleteIds.length) {
     const { data, error } = await supabase
       .from("furniture_variants")
       .select("texture_url")
@@ -143,73 +167,71 @@ export async function updateVariants(
       await removeFiles(data.map(d => d.texture_url));
     }
 
-    const { error: deleteError } = await supabase
+    const { error: delError } = await supabase
       .from("furniture_variants")
       .delete()
       .in("id", deleteIds);
 
-    if (deleteError) throw deleteError;
+    if (delError) throw delError;
   }
 
-  /* -------------------------
-     STEP 5: UPDATE EXISTING (PARALLEL SAFE)
-  ------------------------- */
+  /* ---------------- UPDATE ---------------- */
 
-  const existing = normalizedKeep.filter(v => v.id);
+  const normalizedKeep = fullNormalized.filter(v => v.id);
 
-  await Promise.all(
-    existing.map(async (v, i) => {
-      const updateData: Record<string, unknown> = {
-        name: v.name,
-        price_adjustment: v.priceAdjustment ?? 0,
-        is_default: !!v.isDefault,
-        is_active: v.isActive ?? true,
-        sort_order: i,
-      };
+  for (let i = 0; i < normalizedKeep.length; i++) {
+    const v = normalizedKeep[i];
 
-      /* ---------- REPLACE TEXTURE IF NEEDED ---------- */
-      if (v.materialFile) {
-        const { data: old, error } = await supabase
-          .from("furniture_variants")
-          .select("texture_url")
-          .eq("id", v.id!)
-          .single();
+    const updateData: Partial<FurnitureVariantInsert> = {
+      name: v.name,
+      price_adjustment: v.priceAdjustment ?? 0,
+      is_active: v.isActive ?? true,
+      sort_order: i,
+    };
 
-        if (error) throw error;
+    if (v.materialFile) {
+      const { data: old } = await supabase
+        .from("furniture_variants")
+        .select("texture_url")
+        .eq("id", v.id!)
+        .single();
 
-        if (old?.texture_url) {
-          await removeFiles([old.texture_url]);
-        }
-
-        const file = v.materialFile;
-
-        const textureUrl = await upload(
-          file,
-          buildPaths.variant(furnitureId, file)
-        );
-
-        updateData.texture_url = textureUrl;
-        updateData.preview_image_url = textureUrl;
+      if (old?.texture_url) {
+        await removeFiles([old.texture_url]);
       }
 
-      const { error } = await supabase
-        .from("furniture_variants")
-        .update(updateData)
-        .eq("id", v.id!);
+      const textureUrl = await uploadVariantFile(
+        furnitureId,
+        v.materialFile
+      );
 
-      if (error) throw error;
-    })
-  );
+      updateData.texture_url = textureUrl;
+      updateData.preview_image_url = textureUrl;
+    }
 
-  /* -------------------------
-     STEP 6: INSERT NEW VARIANTS
-  ------------------------- */
+    log("UPDATE_ITEM", { id: v.id, updateData });
 
-  const newVariants = normalizedKeep.filter(
-    v => v.materialFile && !v.id
-  );
+    const { error } = await supabase
+      .from("furniture_variants")
+      .update(updateData)
+      .eq("id", v.id!);
 
-  if (newVariants.length > 0) {
-    await createVariants(furnitureId, newVariants);
+    if (error) {
+      console.error("❌ UPDATE ERROR:", error);
+      throw error;
+    }
   }
+
+  /* ---------------- INSERT NEW ---------------- */
+
+  const normalizedInsert = fullNormalized.filter(
+    v => !v.id && !v.isDeleted
+  );
+
+  if (normalizedInsert.length) {
+    log("INSERT_NEW", normalizedInsert);
+    await createVariants(furnitureId, normalizedInsert);
+  }
+
+  log("DONE", { furnitureId });
 }
