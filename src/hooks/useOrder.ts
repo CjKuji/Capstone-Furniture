@@ -1,42 +1,33 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import { getOrders, updateOrder } from "@/services/orderService";
-import type { Order } from "@/types/order";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/lib/supabase";
+import { paymentAggregateService } from "@/services/orders/paymentAggregateService";
 
-export function useOrders() {
-  const [data, setData] = useState<Order[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+export function useOrder(orderId: string) {
+  return useQuery({
+    queryKey: ["order", orderId],
+    queryFn: async () => {
+      const { data: order, error } = await supabase
+        .from("orders")
+        .select(`
+          *,
+          order_items (*),
+          order_quote_items (*)
+        `)
+        .eq("id", orderId)
+        .single();
 
-  const fetch = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+      if (error) throw error;
 
-    try {
-      const res = await getOrders();
-      setData(res);
-    } catch {
-      setError("Failed to load orders");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+      const payment =
+        await paymentAggregateService.getPaymentSummary(orderId);
 
-  const update = useCallback(async (id: string, payload: Partial<Order>) => {
-    await updateOrder(id, payload);
-    await fetch();
-  }, [fetch]);
-
-  useEffect(() => {
-    fetch();
-  }, [fetch]);
-
-  return {
-    data,
-    loading,
-    error,
-    update,
-    refetch: fetch,
-  };
+      return {
+        order,
+        payment,
+      };
+    },
+    enabled: !!orderId,
+  });
 }

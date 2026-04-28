@@ -17,7 +17,7 @@ import {
 } from "@react-three/drei";
 
 /* =========================================================
-   MODEL (STABLE MATERIAL + TEXTURE ENGINE)
+   MODEL (FIXED: APPLY / SWITCH / REMOVE VARIANTS SAFELY)
 ========================================================= */
 
 function Model({
@@ -30,12 +30,30 @@ function Model({
   const { scene } = useGLTF(url);
   const groupRef = useRef<THREE.Group>(null);
 
-  /* Clone model safely per instance */
-  const clonedScene = useMemo(() => {
-    return scene.clone(true);
-  }, [scene]);
+  // Clone once per instance
+  const clonedScene = useMemo(() => scene.clone(true), [scene]);
 
-  /* Texture loader (stable lifecycle) */
+  /**
+   * STORE ORIGINAL MATERIALS ON FIRST LOAD
+   * so we can RESTORE them when variant is removed
+   */
+  const originalMaterials = useRef(
+    new Map<THREE.Mesh, THREE.Material | THREE.Material[]>()
+  );
+
+  useEffect(() => {
+    clonedScene.traverse((obj) => {
+      if (obj instanceof THREE.Mesh) {
+        if (!originalMaterials.current.has(obj)) {
+          originalMaterials.current.set(obj, obj.material);
+        }
+      }
+    });
+  }, [clonedScene]);
+
+  /**
+   * TEXTURE LOADER
+   */
   const texture = useMemo(() => {
     if (!textureUrl) return null;
 
@@ -49,36 +67,37 @@ function Model({
     return tex;
   }, [textureUrl]);
 
-  /* Apply texture safely (NO material array overwrite) */
+  /**
+   * APPLY / RESTORE LOGIC
+   */
   useEffect(() => {
-    if (!texture) return;
-
-    const materialsToDispose: THREE.Material[] = [];
-
     clonedScene.traverse((obj) => {
       if (!(obj instanceof THREE.Mesh)) return;
 
-      const mesh = obj;
+      const original = originalMaterials.current.get(obj);
+      if (!original) return;
 
-      const originalMaterial = mesh.material;
+      /**
+       * RESET STATE (IMPORTANT)
+       * ensures no leftover textures remain
+       */
+      const restoreMaterial = () => {
+        obj.material = original as any;
+      };
 
-      if (Array.isArray(originalMaterial)) {
-        mesh.material = originalMaterial.map((mat) => {
-          const cloned = (mat as THREE.MeshStandardMaterial).clone();
+      /**
+       * IF NO VARIANT → RESTORE ORIGINAL MATERIAL
+       */
+      if (!texture) {
+        restoreMaterial();
+        return;
+      }
 
-          if (cloned instanceof THREE.MeshStandardMaterial) {
-            cloned.map = texture;
-            cloned.roughness = 0.9;
-            cloned.metalness = 0.05;
-            cloned.envMapIntensity = 0.6;
-            cloned.needsUpdate = true;
-          }
-
-          materialsToDispose.push(cloned);
-          return cloned;
-        });
-      } else {
-        const cloned = (originalMaterial as THREE.MeshStandardMaterial).clone();
+      /**
+       * APPLY TEXTURE TO MATERIAL
+       */
+      const apply = (mat: THREE.Material) => {
+        const cloned = (mat as THREE.MeshStandardMaterial).clone();
 
         if (cloned instanceof THREE.MeshStandardMaterial) {
           cloned.map = texture;
@@ -88,18 +107,23 @@ function Model({
           cloned.needsUpdate = true;
         }
 
-        mesh.material = cloned;
-        materialsToDispose.push(cloned);
+        return cloned;
+      };
+
+      /**
+       * HANDLE SINGLE OR MULTI MATERIALS
+       */
+      if (Array.isArray(original)) {
+        obj.material = original.map(apply);
+      } else {
+        obj.material = apply(original);
       }
     });
+  }, [texture, clonedScene]);
 
-    return () => {
-      texture.dispose();
-      materialsToDispose.forEach((m) => m.dispose());
-    };
-  }, [clonedScene, texture]);
-
-  /* Center model properly */
+  /**
+   * CENTER MODEL
+   */
   const offset = useMemo(() => {
     const box = new THREE.Box3().setFromObject(clonedScene);
 
@@ -115,7 +139,6 @@ function Model({
 
   useEffect(() => {
     if (!groupRef.current) return;
-
     groupRef.current.position.set(offset.x, offset.y, offset.z);
   }, [offset]);
 
@@ -206,7 +229,7 @@ export default function Furniture3DViewer({
 
       {/* OVERLAY */}
       <div className="absolute bottom-3 left-3 bg-black/60 text-white text-xs px-3 py-2 rounded-lg backdrop-blur">
-        Select a variant to preview materials in real time
+        Select a variant to preview materials • Click X to remove
       </div>
     </div>
   );

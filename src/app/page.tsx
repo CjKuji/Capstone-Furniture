@@ -5,23 +5,24 @@ import { useRouter } from "next/navigation";
 import Navbar from "@/app/components/Navbar";
 import CustomerFurnitureCard from "@/app/components/CustomerCard";
 
-import { useFurniture } from "@/hooks/useFurniture";
+import { useFurniturePublicList } from "@/hooks/useFurniture";
 
 export default function HomePage() {
   const router = useRouter();
 
   const {
     data: furniture,
-    loading,
+    isLoading,
+    isError,
     error,
     refetch,
-  } = useFurniture();
+  } = useFurniturePublicList();
 
   /* =========================================================
      LOADING STATE
   ========================================================= */
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex justify-center items-center h-screen text-[#4B3F3F] font-semibold text-lg">
         Loading furniture...
@@ -33,13 +34,17 @@ export default function HomePage() {
      ERROR STATE
   ========================================================= */
 
-  if (error) {
+  if (isError) {
     return (
       <div className="flex flex-col items-center justify-center h-screen gap-4 text-red-600">
         <p>Failed to load furniture</p>
 
+        <p className="text-sm opacity-70">
+          {error instanceof Error ? error.message : "Unknown error"}
+        </p>
+
         <button
-          onClick={refetch}
+          onClick={() => refetch()}
           className="px-4 py-2 rounded-lg bg-black text-white text-sm"
         >
           Retry

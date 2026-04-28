@@ -13,7 +13,7 @@ import type {
   FurnitureFormPayload,
 } from "@/types/furniture";
 
-import { useFurniture } from "@/hooks/useFurniture";
+import { useFurniture } from "@/hooks/useFurnitureAdmin";
 import { useFurnitureViewer } from "@/hooks/useFurnitureViewer";
 import { getCategories } from "@/services/furnitureService";
 import { useUser } from "@/hooks/useUser";

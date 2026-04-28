@@ -24,7 +24,7 @@ type Props = {
 
   removeVariant: (key: string) => void;
 
-  setActiveVariantId: (id: string) => void;
+  setActiveVariantId: (id: string | null) => void;
   activeVariantId: string | null;
 
   handleVariantFile: (key: string, file: File | null) => void;
@@ -81,10 +81,16 @@ export default function VariantsSection({
               v.texture_url ||
               v.textureUrl;
 
+            const isActive = activeVariantId === key;
+
             return (
               <div
                 key={key}
-                className="rounded-2xl border border-gray-200 bg-gray-50 p-4 flex gap-4"
+                className={`rounded-2xl border p-4 flex gap-4 transition ${
+                  isActive
+                    ? "border-green-300 bg-green-50"
+                    : "border-gray-200 bg-gray-50"
+                }`}
               >
 
                 {/* PREVIEW */}
@@ -150,17 +156,36 @@ export default function VariantsSection({
                 {/* ACTIONS */}
                 <div className="flex flex-col gap-2">
 
-                  <button
-                    type="button"
-                    onClick={() => setActiveVariantId(key)}
-                    className={`px-3 py-2 rounded-lg text-xs font-medium transition ${
-                      activeVariantId === key
-                        ? "bg-green-100 text-green-700"
-                        : "bg-white border border-gray-200 text-gray-700 hover:bg-gray-100"
-                    }`}
-                  >
-                    Apply
-                  </button>
+                  {isActive ? (
+                    <div className="flex items-center gap-2">
+
+                      <button
+                        type="button"
+                        onClick={() => setActiveVariantId(null)}
+                        className="px-3 py-2 rounded-lg text-xs font-medium bg-green-100 text-green-700 hover:bg-green-200 transition"
+                      >
+                        Applied
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setActiveVariantId(null)}
+                        className="w-8 h-8 flex items-center justify-center rounded-lg text-red-600 hover:bg-red-50 border border-gray-200"
+                        title="Clear active variant"
+                      >
+                        ✕
+                      </button>
+
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setActiveVariantId(key)}
+                      className="px-3 py-2 rounded-lg text-xs font-medium bg-white border border-gray-200 text-gray-700 hover:bg-gray-100 transition"
+                    >
+                      Apply
+                    </button>
+                  )}
 
                   <button
                     onClick={() => removeVariant(key)}

@@ -10,40 +10,36 @@ import {
   Eye,
 } from "lucide-react";
 
-import type { FurnitureItemAdmin } from "@/types/furniture";
+import type { FurniturePublicListItem } from "@/types/furniture-public";
 
 interface Props {
-  item: FurnitureItemAdmin;
+  item: FurniturePublicListItem;
 }
 
 export default function CustomerFurnitureCard({ item }: Props) {
   const router = useRouter();
 
-  const images = item.furniture_images ?? [];
-  const variants = item.furniture_variants ?? [];
+  /* =========================================================
+     DATA (FROM UPDATED PUBLIC LIST API)
+  ========================================================= */
 
   const primaryImage =
-    images.find((img) => img.is_primary)?.image_url ||
-    images[0]?.image_url ||
-    "/placeholder.png";
+    item.thumbnail_url ?? "/placeholder.png"; // 🔥 FIXED
 
-  const categoryName =
-    item.furniture_categories?.name ?? "Uncategorized";
+  const categoryName = item.category?.name ?? "Uncategorized";
 
   const price = item.base_price ?? 0;
 
-  const imageCount = images.length;
-  const variantCount = variants.length;
-  const hasModel = Boolean(item.model_url);
-
-  const width = item.width_cm ?? null;
-  const depth = item.depth_cm ?? null;
-  const height = item.height_cm ?? null;
-
   const dimensionText =
-    width !== null || depth !== null || height !== null
-      ? `${width ?? "-"} × ${depth ?? "-"} × ${height ?? "-"} cm`
+    item.width_cm || item.depth_cm || item.height_cm
+      ? `${item.width_cm ?? "-"} × ${item.depth_cm ?? "-"} × ${
+          item.height_cm ?? "-"
+        } cm`
       : "No dimensions";
+
+  /* =========================================================
+     UI
+  ========================================================= */
 
   return (
     <div
@@ -51,7 +47,7 @@ export default function CustomerFurnitureCard({ item }: Props) {
       className="group bg-white border border-gray-200 rounded-xl overflow-hidden hover:shadow-md hover:border-gray-300 transition-all duration-300 cursor-pointer"
     >
       {/* =====================================================
-          IMAGE (same as admin pattern)
+          IMAGE
       ====================================================== */}
       <div className="relative h-40 bg-gray-100 overflow-hidden">
         <img
@@ -62,30 +58,30 @@ export default function CustomerFurnitureCard({ item }: Props) {
 
         {/* BADGES */}
         <div className="absolute bottom-3 left-3 flex flex-wrap gap-2">
+          {/* IMAGE COUNT */}
           <div className="flex items-center gap-1 text-[10px] bg-black/75 text-white px-2 py-1 rounded-md">
             <ImageIcon size={12} />
-            {imageCount}
+            {item.imageCount}
           </div>
 
+          {/* VARIANT COUNT */}
           <div className="flex items-center gap-1 text-[10px] bg-white text-gray-700 px-2 py-1 rounded-md border">
             <Package size={12} />
-            {variantCount}
+            {item.variantCount}
           </div>
 
-          {hasModel && (
-            <div className="flex items-center gap-1 text-[10px] bg-white text-gray-700 px-2 py-1 rounded-md border">
-              <Box size={12} />
-              3D
-            </div>
-          )}
+          {/* MODEL STATUS */}
+          <div className="flex items-center gap-1 text-[10px] bg-white text-gray-700 px-2 py-1 rounded-md border">
+            <Box size={12} />
+            {item.hasModel ? "3D" : "No 3D"}
+          </div>
         </div>
       </div>
 
       {/* =====================================================
-          CONTENT (aligned with admin structure)
+          CONTENT
       ====================================================== */}
       <div className="p-4 space-y-4">
-
         {/* TITLE + PRICE */}
         <div className="flex justify-between items-start gap-3">
           <div className="min-w-0">
@@ -93,6 +89,7 @@ export default function CustomerFurnitureCard({ item }: Props) {
               {item.name}
             </h3>
 
+            {/* CATEGORY NAME */}
             <p className="text-xs text-gray-500 mt-0.5">
               {categoryName}
             </p>
@@ -103,9 +100,7 @@ export default function CustomerFurnitureCard({ item }: Props) {
               ₱{price.toLocaleString()}
             </p>
 
-            <p className="text-[10px] text-gray-400">
-              base price
-            </p>
+            <p className="text-[10px] text-gray-400">base price</p>
           </div>
         </div>
 

@@ -10,9 +10,9 @@ import type {
 import { useFurnitureForm } from "@/hooks/useFurnitureForm";
 import { useFurnitureModalController } from "@/hooks/useFurnitureModalController";
 
-import BasicInfoSection from "@/app/components/sections/BasicInfoSection";
-import AssetsSection from "@/app/components/sections/AssetsSection";
-import VariantsSection from "@/app/components/sections/VariantsSection";
+import BasicInfoSection from "@/app/components/sections/admin/BasicInfoSection";
+import AssetsSection from "@/app/components/sections/admin/AssetsSection";
+import VariantsSection from "@/app/components/sections/admin/VariantsSection";
 
 /* ========================================================= */
 

@@ -16,6 +16,7 @@
     "@supabase/auth-helpers-nextjs": "^0.15.0",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.103.3",
+    "@tanstack/react-query": "^5.100.5",
     "aframe": "^1.7.1",
     "lucide-react": "^0.577.0",
     "next": "^16.1.6",
