@@ -1,10 +1,3 @@
-// types/enums.ts
-
-/**
- * =========================================================
- * PUBLISH STATUS
- * =========================================================
- */
 export type PublishStatus =
   | "draft"
   | "published"
@@ -12,7 +5,7 @@ export type PublishStatus =
 
 /**
  * =========================================================
- * INQUIRY FLOW
+ * INQUIRY STATUS
  * =========================================================
  */
 export type InquiryStatus =
@@ -23,18 +16,22 @@ export type InquiryStatus =
 
 /**
  * =========================================================
- * ORDER STATUS (HIGH-LEVEL BUSINESS FLOW)
- * =========================================================
- * This controls admin + customer order lifecycle
+ * ORDER STATUS (MATCHES SUPABASE EXACTLY)
  * =========================================================
  */
 export type OrderStatus =
-  | "pending_review"
-  | "in_review"
+  | "draft"
+  | "requested"
   | "quoted"
-  | "accepted"
+  | "awaiting_payment"
   | "processing"
-  | "ready"
+  | "in_production"
+  | "ready_for_fulfillment"
+  | "ready_for_pickup"
+  | "picked_up"
+  | "ready_for_shipping"
+  | "shipped"
+  | "delivered"
   | "completed"
   | "cancelled";
 
@@ -49,7 +46,7 @@ export type DeliveryMethod =
 
 /**
  * =========================================================
- * USER ROLES
+ * USER ROLE
  * =========================================================
  */
 export type UserRole =
@@ -59,7 +56,7 @@ export type UserRole =
 
 /**
  * =========================================================
- * MESSAGE SENDER
+ * MESSAGE SENDER TYPE
  * =========================================================
  */
 export type SenderType =
@@ -68,26 +65,16 @@ export type SenderType =
 
 /**
  * =========================================================
- * PAYMENT STATUS (CRITICAL FIX)
- * =========================================================
- * This is the correct derived payment state
- * used by paymentAggregateService
+ * PAYMENT STATUS (MATCHES SUPABASE)
  * =========================================================
  */
 export type PaymentStatus =
   | "unpaid"
+  | "pending_verification"
   | "partially_paid"
   | "fully_paid"
-  | "pending_verification"
   | "rejected"
   | "refunded";
-
-/**
- * NOTE:
- * - removed incorrect "verified"
- * - removed duplicate confusion with PaymentVerificationStatus
- * - aligns with your DB enum + business logic
- */
 
 /**
  * =========================================================
@@ -113,32 +100,19 @@ export type ConversationStatus =
 
 /**
  * =========================================================
- * ORDER TIMELINE EVENTS
+ * ORDER TIMELINE EVENT TYPE
  * =========================================================
  */
 export type OrderTimelineEventType =
   | "order_created"
-  | "order_review_started"
-  | "quote_sent"
+  | "order_quoted"
+  | "order_accepted"
   | "payment_submitted"
   | "payment_verified"
   | "production_started"
   | "order_ready"
-  | "order_shipped"
+  | "order_dispatched"
   | "order_delivered"
   | "order_completed"
   | "order_cancelled"
   | "system_note";
-
-/**
- * =========================================================
- * FULFILLMENT STATUS (PHYSICAL WORKFLOW)
- * =========================================================
- */
-export type FulfillmentStatus =
-  | "in_production"
-  | "ready_for_pickup"
-  | "picked_up"
-  | "ready_for_shipping"
-  | "shipped"
-  | "delivered";

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   createFilePreview,
@@ -42,6 +42,12 @@ type BasicInfoKeys =
 
 /* ========================================================= */
 
+const DEBUG = true;
+const log = (...args: any[]) => DEBUG && console.log("🟦 MODAL:", ...args);
+const err = (...args: any[]) => console.error("🟥 MODAL:", ...args);
+
+/* ========================================================= */
+
 export function useFurnitureModalController({
   form,
   item,
@@ -61,39 +67,32 @@ export function useFurnitureModalController({
     updateVariant,
     removeVariant,
     setField,
-    
   } = form;
 
   /* =========================================================
-     UI STATE
+     STABLE REFERENCES (FIX RACE CONDITIONS)
   ========================================================= */
 
+  const modelBlobRef = useRef<string | null>(null);
+  const cleanupRef = useRef<Set<string>>(new Set());
+
+  /* ========================================================= */
   const [submitting, setSubmitting] = useState(false);
   const [activeVariantId, setActiveVariantId] = useState<string | null>(null);
 
-  /* =========================================================
-     KEY RESOLVER
-  ========================================================= */
-
+  /* ========================================================= */
   const getKey = useCallback(
     (x: { id?: string; clientId: string }) => x.id ?? x.clientId,
     []
   );
 
-  /* =========================================================
-     BASIC INFO FIELD SETTER (STRICT FIX)
-  ========================================================= */
-
+  /* ========================================================= */
   const setBasicInfoField = useCallback(
     <K extends BasicInfoKeys>(key: K, value: any) => {
       setField(key, value);
     },
     [setField]
   );
-
-  /* =========================================================
-     MODEL FILE HANDLER (NO setField abuse)
-  ========================================================= */
 
   const setModelFile = useCallback(
     (file?: File) => {
@@ -103,7 +102,7 @@ export function useFurnitureModalController({
   );
 
   /* =========================================================
-     DERIVED STATE
+     DERIVED DATA
   ========================================================= */
 
   const images = useMemo(
@@ -127,7 +126,7 @@ export function useFurnitureModalController({
   }, [activeVariantId, state.variants, getKey]);
 
   /* =========================================================
-     MODEL PREVIEW
+     MODEL PREVIEW (SAFE + NO EARLY REVOCATION)
   ========================================================= */
 
   const [modelPreviewUrl, setModelPreviewUrl] = useState<string | null>(null);
@@ -139,80 +138,110 @@ export function useFurnitureModalController({
     }
 
     const url = createFilePreview(state.modelFile);
+
+    modelBlobRef.current = url;
+    cleanupRef.current.add(url);
+
     setModelPreviewUrl(url);
 
-    return () => {
-      if (url.startsWith("blob:")) {
-        revokeFilePreview(url);
-      }
-    };
+    // ❌ DO NOT revoke here anymore (THIS WAS THE BUG)
   }, [state.modelFile, item]);
 
   /* =========================================================
-     CLEANUP
+     CLEANUP ONLY ON UNMOUNT / CLOSE
   ========================================================= */
+
+  const cleanupBlobs = useCallback(() => {
+    cleanupRef.current.forEach((url) => {
+      if (url?.startsWith("blob:")) {
+        revokeFilePreview(url);
+      }
+    });
+
+    cleanupRef.current.clear();
+    modelBlobRef.current = null;
+  }, []);
 
   useEffect(() => {
     return () => {
-      state.images.forEach((img) => {
-        if (img.url?.startsWith("blob:")) {
-          revokeFilePreview(img.url);
-        }
-      });
-
-      state.variants.forEach((v) => {
-        if (v.previewUrl?.startsWith("blob:")) {
-          revokeFilePreview(v.previewUrl);
-        }
-      });
+      cleanupBlobs();
     };
-  }, [state.images, state.variants]);
+  }, [cleanupBlobs]);
 
-  /* =========================================================
-     CLOSE
-  ========================================================= */
-
+  /* ========================================================= */
   const handleClose = useCallback(() => {
+    cleanupBlobs();
+
     resetForm();
     setActiveVariantId(null);
+
     onClose();
-  }, [resetForm, onClose]);
+  }, [resetForm, onClose, cleanupBlobs]);
 
   /* =========================================================
-     SUBMIT
+     🔥 FIXED SUBMIT (NO SILENT FAILURES)
   ========================================================= */
 
   const handleSubmit = useCallback(async () => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      log("BLOCKED: modal closed");
+      return false;
+    }
 
     setSubmitting(true);
 
     try {
+      log("STEP 1 validate");
       const ok = validate();
-      if (!ok) return;
 
+      if (!ok) {
+        err("validation failed");
+        return false;
+      }
+
+      log("STEP 2 buildPayload");
       const payload = buildPayload();
-      if (!payload) return;
+
+      if (!payload) {
+        err("payload missing");
+        return false;
+      }
+
+      log("STEP 3 onSave START", item?.id);
 
       await onSave(item?.id ?? null, payload);
+
+      log("STEP 4 onSave SUCCESS");
 
       resetForm();
       setActiveVariantId(null);
       onClose();
+
+      return true;
+    } catch (e) {
+      err("submit crashed", e);
+      return false;
     } finally {
       setSubmitting(false);
     }
-  }, [isOpen, validate, buildPayload, onSave, item, resetForm, onClose]);
+  }, [
+    isOpen,
+    validate,
+    buildPayload,
+    onSave,
+    item,
+    resetForm,
+    onClose,
+  ]);
 
-  /* =========================================================
-     VARIANT FILE HANDLER (SAFE)
-  ========================================================= */
-
+  /* ========================================================= */
   const handleVariantFile = useCallback(
     (key: string, file: File | null) => {
       if (!file) return;
 
       const url = createFilePreview(file);
+
+      cleanupRef.current.add(url);
 
       updateVariant(key, "materialFile", file as any);
       updateVariant(key, "previewUrl", url as any);
@@ -220,10 +249,7 @@ export function useFurnitureModalController({
     [updateVariant]
   );
 
-  /* =========================================================
-     RETURN API
-  ========================================================= */
-
+  /* ========================================================= */
   return {
     state,
 

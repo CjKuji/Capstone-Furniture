@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { Plus } from "lucide-react";
 
 import FurnitureCard from "@/app/components/FurnitureCardAdmin";
@@ -20,9 +20,23 @@ import { useUser } from "@/hooks/useUser";
 
 /* ========================================================= */
 
+const DEBUG = true;
+
+const log = (...args: any[]) => {
+  if (DEBUG) console.log("🟦 [ADMIN FURNITURE]", ...args);
+};
+
+const err = (...args: any[]) => {
+  console.error("🟥 [ADMIN FURNITURE ERROR]", ...args);
+};
+
+/* ========================================================= */
+
 export default function AdminFurniture() {
-  const { user } = useUser();
+  const { user, loading: userLoading } = useUser();
   const userId = user?.id ?? null;
+
+  const isMounted = useRef(true);
 
   const [categories, setCategories] = useState<FurnitureCategory[]>([]);
 
@@ -42,12 +56,19 @@ export default function AdminFurniture() {
 
   const {
     data: furniture,
-    loading,
     mutating,
     create,
     update,
     remove,
   } = useFurniture();
+
+  /* ========================================================= */
+  useEffect(() => {
+    isMounted.current = true;
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
 
   /* =========================================================
      CATEGORIES
@@ -58,11 +79,17 @@ export default function AdminFurniture() {
 
     (async () => {
       try {
+        log("FETCH_CATEGORIES_START");
+
         const result = await getCategories();
-        if (!active) return;
+
+        if (!active || !isMounted.current) return;
+
         setCategories(result ?? []);
-      } catch (err) {
-        console.error("[AdminFurniture] categories error:", err);
+
+        log("FETCH_CATEGORIES_SUCCESS", result);
+      } catch (e) {
+        err("FETCH_CATEGORIES_FAILED", e);
       }
     })();
 
@@ -71,10 +98,7 @@ export default function AdminFurniture() {
     };
   }, []);
 
-  /* =========================================================
-     LIST
-  ========================================================= */
-
+  /* ========================================================= */
   const list = useMemo(() => furniture ?? [], [furniture]);
 
   const filteredFurniture = useMemo(() => {
@@ -84,8 +108,7 @@ export default function AdminFurniture() {
     return list.filter((item) => {
       const name = item.name?.toLowerCase() ?? "";
       const description = item.description?.toLowerCase() ?? "";
-      const category =
-        item.furniture_categories?.name?.toLowerCase() ?? "";
+      const category = item.furniture_categories?.name?.toLowerCase() ?? "";
 
       return (
         name.includes(keyword) ||
@@ -95,22 +118,22 @@ export default function AdminFurniture() {
     });
   }, [list, search]);
 
-  /* =========================================================
-     DELETE
-  ========================================================= */
-
+  /* ========================================================= */
   const handleDelete = useCallback(
     async (id: string) => {
       if (!confirm("Delete this furniture item?")) return;
-      await remove(id);
+
+      try {
+        await remove(id);
+        log("DELETE_SUCCESS", id);
+      } catch (e) {
+        err("DELETE_FAILED", e);
+      }
     },
     [remove]
   );
 
-  /* =========================================================
-     VIEW
-  ========================================================= */
-
+  /* ========================================================= */
   const handleView = useCallback(
     (item: FurnitureItemAdmin) => {
       if (!item.model_url) return;
@@ -123,47 +146,61 @@ export default function AdminFurniture() {
         modelUrl: item.model_url,
         activeTexture: variant?.texture_url ?? null,
       });
+
+      log("VIEW_OPENED", item.id);
     },
     [openViewer]
   );
 
   /* =========================================================
-     🔥 FIXED: UNIFIED SAVE HANDLER (NO UNION TYPES)
+     🔥 FIXED SAVE (NO RACE CONDITION)
   ========================================================= */
 
   const handleSave = useCallback(
     async (id: string | null, form: FurnitureFormPayload) => {
-      if (modalState.mode === "create") {
-        if (!userId) return false;
+      log("SAVE_START", {
+        id,
+        mode: modalState.mode,
+        userId,
+        userLoading,
+      });
 
-        const success = await create(form, userId);
-
-        if (success) {
-          setModalState({
-            isOpen: false,
-            mode: "create",
-            item: null,
-          });
-        }
-
-        return success;
+      // 🚨 HARD GUARD (fixes your bug)
+      if (!userId) {
+        err("SAVE_BLOCKED_NO_USER (user not ready yet)");
+        return;
       }
 
-      if (!id) return false;
+      try {
+        if (modalState.mode === "create") {
+          log("CREATE_FLOW");
+          await create(form, userId);
+          log("CREATE_SUCCESS");
+        } else {
+          if (!id) {
+            err("UPDATE_BLOCKED_NO_ID");
+            return;
+          }
 
-      const success = await update(id, form);
+          log("UPDATE_FLOW", id);
+          await update(id, form);
+          log("UPDATE_SUCCESS", id);
+        }
 
-      if (success) {
+        if (!isMounted.current) return;
+
         setModalState({
           isOpen: false,
           mode: "create",
           item: null,
         });
-      }
 
-      return success;
+        log("MODAL_CLOSED_AFTER_SAVE");
+      } catch (e) {
+        err("SAVE_FAILED", e);
+      }
     },
-    [create, update, modalState.mode, userId]
+    [create, update, modalState.mode, userId, userLoading]
   );
 
   /* ========================================================= */
@@ -183,14 +220,16 @@ export default function AdminFurniture() {
         </div>
 
         <button
-          onClick={() =>
+          disabled={!userId}
+          onClick={() => {
+            log("OPEN_CREATE_MODAL");
             setModalState({
               isOpen: true,
               mode: "create",
               item: null,
-            })
-          }
-          className="flex items-center gap-2 bg-neutral-900 text-white px-4 py-2 rounded-lg text-sm hover:bg-black transition"
+            });
+          }}
+          className="flex items-center gap-2 bg-neutral-900 text-white px-4 py-2 rounded-lg text-sm hover:bg-black transition disabled:opacity-50"
         >
           <Plus size={16} />
           Add Furniture
@@ -230,19 +269,20 @@ export default function AdminFurniture() {
         ))}
       </div>
 
-      {/* UNIFIED MODAL */}
+      {/* MODAL */}
       {modalState.isOpen && (
         <FurnitureAdminModal
           isOpen={modalState.isOpen}
           mode={modalState.mode}
           item={modalState.item}
-          onClose={() =>
+          onClose={() => {
+            log("MODAL_CLOSE");
             setModalState({
               isOpen: false,
               mode: "create",
               item: null,
-            })
-          }
+            });
+          }}
           onSave={handleSave}
           categories={categories}
         />
@@ -255,7 +295,7 @@ export default function AdminFurniture() {
         </div>
       )}
 
-      {/* 3D VIEWER */}
+      {/* VIEWER */}
       {viewer && (
         <Furniture3DViewer
           modelUrl={viewer.modelUrl}

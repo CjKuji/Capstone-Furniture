@@ -1,11 +1,6 @@
 "use client";
 
-import React, {
-  Suspense,
-  useMemo,
-  useRef,
-  useEffect,
-} from "react";
+import React, { Suspense, useMemo, useRef, useEffect } from "react";
 
 import * as THREE from "three";
 import { Canvas } from "@react-three/fiber";
@@ -17,7 +12,7 @@ import {
 } from "@react-three/drei";
 
 /* =========================================================
-   MODEL (FIXED: APPLY / SWITCH / REMOVE VARIANTS SAFELY)
+   MODEL (STABLE VERSION)
 ========================================================= */
 
 function Model({
@@ -30,29 +25,33 @@ function Model({
   const { scene } = useGLTF(url);
   const groupRef = useRef<THREE.Group>(null);
 
-  // Clone once per instance
-  const clonedScene = useMemo(() => scene.clone(true), [scene]);
+  /**
+   * IMPORTANT:
+   * clone ONLY once per model load
+   */
+  const clonedScene = useMemo(() => {
+    return scene.clone(true);
+  }, [scene]);
 
   /**
-   * STORE ORIGINAL MATERIALS ON FIRST LOAD
-   * so we can RESTORE them when variant is removed
+   * Store original materials once
    */
-  const originalMaterials = useRef(
-    new Map<THREE.Mesh, THREE.Material | THREE.Material[]>()
-  );
+  const originalMaterials = useRef(new Map());
 
   useEffect(() => {
     clonedScene.traverse((obj) => {
-      if (obj instanceof THREE.Mesh) {
-        if (!originalMaterials.current.has(obj)) {
-          originalMaterials.current.set(obj, obj.material);
+      if ((obj as THREE.Mesh).isMesh) {
+        const mesh = obj as THREE.Mesh;
+
+        if (!originalMaterials.current.has(mesh)) {
+          originalMaterials.current.set(mesh, mesh.material);
         }
       }
     });
   }, [clonedScene]);
 
   /**
-   * TEXTURE LOADER
+   * Texture loading (safe + memoized)
    */
   const texture = useMemo(() => {
     if (!textureUrl) return null;
@@ -68,34 +67,23 @@ function Model({
   }, [textureUrl]);
 
   /**
-   * APPLY / RESTORE LOGIC
+   * MATERIAL APPLICATION (safe update only)
    */
   useEffect(() => {
     clonedScene.traverse((obj) => {
-      if (!(obj instanceof THREE.Mesh)) return;
+      if (!(obj as THREE.Mesh).isMesh) return;
 
-      const original = originalMaterials.current.get(obj);
+      const mesh = obj as THREE.Mesh;
+      const original = originalMaterials.current.get(mesh);
+
       if (!original) return;
 
-      /**
-       * RESET STATE (IMPORTANT)
-       * ensures no leftover textures remain
-       */
-      const restoreMaterial = () => {
-        obj.material = original as any;
-      };
-
-      /**
-       * IF NO VARIANT → RESTORE ORIGINAL MATERIAL
-       */
+      // restore if no texture
       if (!texture) {
-        restoreMaterial();
+        mesh.material = original as any;
         return;
       }
 
-      /**
-       * APPLY TEXTURE TO MATERIAL
-       */
       const apply = (mat: THREE.Material) => {
         const cloned = (mat as THREE.MeshStandardMaterial).clone();
 
@@ -110,19 +98,14 @@ function Model({
         return cloned;
       };
 
-      /**
-       * HANDLE SINGLE OR MULTI MATERIALS
-       */
-      if (Array.isArray(original)) {
-        obj.material = original.map(apply);
-      } else {
-        obj.material = apply(original);
-      }
+      mesh.material = Array.isArray(original)
+        ? original.map(apply)
+        : apply(original);
     });
   }, [texture, clonedScene]);
 
   /**
-   * CENTER MODEL
+   * CENTER MODEL ONCE
    */
   const offset = useMemo(() => {
     const box = new THREE.Box3().setFromObject(clonedScene);
@@ -150,7 +133,7 @@ function Model({
 }
 
 /* =========================================================
-   VIEWER
+   VIEWER (FINAL SAFE VERSION)
 ========================================================= */
 
 export default function Furniture3DViewer({
@@ -160,76 +143,89 @@ export default function Furniture3DViewer({
   modelUrl: string;
   selectedVariantTextureUrl?: string | null;
 }) {
+  /**
+   * STRICT validation (prevents invalid blob / html URLs)
+   */
   const isValidModel = useMemo(() => {
-    return (
-      typeof modelUrl === "string" &&
-      modelUrl.length > 0 &&
-      !modelUrl.endsWith(".html")
-    );
+    if (!modelUrl) return false;
+    if (typeof modelUrl !== "string") return false;
+    if (modelUrl.trim().length === 0) return false;
+    if (modelUrl.endsWith(".html")) return false;
+    if (modelUrl.startsWith("blob:") && modelUrl.includes("undefined")) return false;
+
+    return true;
   }, [modelUrl]);
+
+  /**
+   * DO NOT render Canvas if invalid
+   */
+  if (!isValidModel) {
+    return (
+      <div className="flex items-center justify-center h-[600px] text-neutral-500 text-sm">
+        No model available
+      </div>
+    );
+  }
 
   return (
     <div className="relative w-full h-[600px] bg-neutral-100 rounded-xl overflow-hidden">
 
-      {isValidModel ? (
-        <Canvas
-          shadows
-          camera={{ position: [3, 2, 4], fov: 50 }}
-          gl={{ antialias: true, toneMappingExposure: 0.9 }}
+      <Canvas
+        shadows
+        dpr={[1, 1.5]} // prevents GPU overload (important for Context Lost)
+        camera={{ position: [3, 2, 4], fov: 50 }}
+        gl={{
+          antialias: true,
+          preserveDrawingBuffer: false, // IMPORTANT: reduces memory leaks
+        }}
+      >
+        {/* LIGHTING */}
+        <ambientLight intensity={0.4} />
+        <directionalLight position={[5, 8, 5]} intensity={1} castShadow />
+
+        {/* ENV */}
+        <Environment preset="city" />
+
+        {/* FLOOR */}
+        <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+          <planeGeometry args={[20, 20]} />
+          <meshStandardMaterial color="#d6d6d6" roughness={1} />
+        </mesh>
+
+        {/* WALL */}
+        <mesh position={[0, 3, -6]} receiveShadow>
+          <planeGeometry args={[20, 10]} />
+          <meshStandardMaterial color="#eaeaea" />
+        </mesh>
+
+        {/* MODEL */}
+        <Suspense
+          fallback={
+            <Html center>
+              <div className="text-sm text-black">
+                Loading model...
+              </div>
+            </Html>
+          }
         >
-          {/* LIGHTING */}
-          <ambientLight intensity={0.4} />
-          <directionalLight position={[5, 8, 5]} intensity={1} castShadow />
-
-          {/* ENVIRONMENT */}
-          <Environment preset="city" />
-
-          {/* FLOOR */}
-          <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-            <planeGeometry args={[20, 20]} />
-            <meshStandardMaterial color="#d6d6d6" roughness={1} />
-          </mesh>
-
-          {/* WALL */}
-          <mesh position={[0, 3, -6]} receiveShadow>
-            <planeGeometry args={[20, 10]} />
-            <meshStandardMaterial color="#eaeaea" />
-          </mesh>
-
-          {/* MODEL */}
-          <Suspense
-            fallback={
-              <Html center>
-                <div className="text-sm text-black">
-                  Loading model...
-                </div>
-              </Html>
-            }
-          >
-            <Model
-              url={modelUrl}
-              textureUrl={selectedVariantTextureUrl}
-            />
-          </Suspense>
-
-          {/* CONTROLS */}
-          <OrbitControls
-            enablePan
-            enableZoom
-            enableRotate
-            minDistance={1}
-            maxDistance={10}
+          <Model
+            url={modelUrl}
+            textureUrl={selectedVariantTextureUrl}
           />
-        </Canvas>
-      ) : (
-        <div className="flex items-center justify-center h-full text-neutral-500 text-sm">
-          No model available
-        </div>
-      )}
+        </Suspense>
 
-      {/* OVERLAY */}
+        {/* CONTROLS */}
+        <OrbitControls
+          enablePan
+          enableZoom
+          enableRotate
+          minDistance={1}
+          maxDistance={10}
+        />
+      </Canvas>
+
       <div className="absolute bottom-3 left-3 bg-black/60 text-white text-xs px-3 py-2 rounded-lg backdrop-blur">
-        Select a variant to preview materials • Click X to remove
+        Variant preview active
       </div>
     </div>
   );

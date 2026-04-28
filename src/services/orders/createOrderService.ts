@@ -90,19 +90,17 @@ export async function createOrder(
 
   /*
   =========================================================
-  STEP 5: FIX CATEGORY (IMPORTANT FIX)
+  STEP 5: CATEGORY SAFE RESOLVE
   =========================================================
   */
   const categoryName =
-    // FIX 1: object relation
     (furniture as any).furniture_categories?.name ??
-    // FIX 2: array fallback
     (furniture as any).furniture_categories?.[0]?.name ??
     null;
 
   /*
   =========================================================
-  STEP 6: SNAPSHOT (INDEPENDENT - CORRECT DESIGN)
+  STEP 6: SNAPSHOT
   =========================================================
   */
   const furnitureSnapshot = {
@@ -138,7 +136,7 @@ export async function createOrder(
 
   /*
   =========================================================
-  STEP 7: PRICE
+  STEP 7: PRICE CALCULATION
   =========================================================
   */
   const unitPrice =
@@ -156,17 +154,17 @@ export async function createOrder(
 
   /*
   =========================================================
-  STEP 9: CUSTOMER NAME FIX (IMPORTANT)
+  STEP 9: CUSTOMER NAME
   =========================================================
   */
   const finalCustomerName =
     payload.delivery_method === "pickup"
-      ? user.email // or profile name if available
+      ? user.email
       : payload.customer_name ?? user.email;
 
   /*
   =========================================================
-  STEP 10: CREATE ORDER
+  STEP 10: CREATE ORDER (FIXED STATUS HERE)
   =========================================================
   */
   const { data: order, error: orderError } = await supabase
@@ -176,9 +174,9 @@ export async function createOrder(
 
       delivery_method: payload.delivery_method,
 
-      // FIXED LOGIC
       customer_name: finalCustomerName,
       phone_number: payload.phone_number ?? null,
+
       delivery_address:
         payload.delivery_method === "pickup"
           ? "STORE PICKUP"
@@ -186,7 +184,14 @@ export async function createOrder(
 
       delivery_notes: payload.delivery_notes ?? null,
 
-      status: "pending_review",
+      /**
+       * ✅ FIXED: correct enum field
+       * was: status: "pending_review" ❌
+       */
+      order_status: "requested",
+
+      payment_status: "unpaid",
+
       order_reference_code: orderReferenceCode,
 
       quote_total_price: null,

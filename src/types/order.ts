@@ -2,7 +2,6 @@ import type {
   OrderStatus,
   DeliveryMethod,
   PaymentStatus,
-  FulfillmentStatus,
 } from "./enums";
 
 /**
@@ -14,17 +13,15 @@ export type {
   OrderStatus,
   DeliveryMethod,
   PaymentStatus,
-  FulfillmentStatus,
 };
 
 /**
  * =========================================================
- * ORDER ITEM (SNAPSHOT-BASED - SUPABASE ALIGNED)
+ * ORDER ITEM (SNAPSHOT BASED)
  * =========================================================
  */
 export type OrderItem = {
   id: string;
-
   order_id: string;
 
   furniture_id: string;
@@ -35,16 +32,11 @@ export type OrderItem = {
   unit_price: number;
   total_price: number;
 
-  /**
-   * =========================================================
-   * SNAPSHOT DATA
-   * =========================================================
-   */
   furniture_snapshot: {
     id?: string;
     name?: string;
-
     description?: string | null;
+
     category?: string | null;
 
     base_price?: number | null;
@@ -64,10 +56,8 @@ export type OrderItem = {
   variant_snapshot: {
     id?: string;
     name?: string;
-
     texture_url?: string | null;
     preview_image_url?: string | null;
-
     price_adjustment?: number | null;
   } | null;
 
@@ -78,7 +68,7 @@ export type OrderItem = {
 
 /**
  * =========================================================
- * DELIVERY INFO (NORMALIZED MODEL)
+ * DELIVERY INFO
  * =========================================================
  */
 export type DeliveryInfo = {
@@ -90,25 +80,22 @@ export type DeliveryInfo = {
 
 /**
  * =========================================================
- * ORDER ENTITY (MAIN SOURCE OF TRUTH)
+ * ORDER ENTITY (MATCHES SUPABASE SCHEMA)
  * =========================================================
  */
 export type Order = {
   id: string;
-
   user_id: string;
 
   quote_total_price: number | null;
 
-  status: OrderStatus;
-
   /**
    * =========================================================
-   * PAYMENT + FULFILLMENT (FIXED MISSING FIELDS)
+   * CORE STATUS (ONLY SOURCE OF TRUTH NOW)
    * =========================================================
    */
+  order_status: OrderStatus;
   payment_status: PaymentStatus;
-  fulfillment_status: FulfillmentStatus;
 
   /**
    * =========================================================
@@ -175,7 +162,7 @@ export type CreateOrderPayload = {
 
 /**
  * =========================================================
- * ADMIN VIEW (EXTENDED)
+ * ADMIN EXTENSION
  * =========================================================
  */
 export type OrderAdmin = Order & {
