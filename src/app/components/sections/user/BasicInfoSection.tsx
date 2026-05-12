@@ -2,8 +2,6 @@
 
 import type { FurnitureCategory } from "@/types/furniture";
 
-/* ========================================================= */
-
 type BasicInfoState = {
   name: string;
   description: string;
@@ -14,119 +12,74 @@ type BasicInfoState = {
   heightCm: number | null;
 };
 
-/* ========================================================= */
-
 type Props = {
   state: BasicInfoState;
   categories: FurnitureCategory[];
 };
 
-/* ========================================================= */
-
-export default function BasicInfoSection({
-  state,
-  categories,
-}: Props) {
-  /* Resolve category safely */
+export default function BasicInfoSection({ state, categories }: Props) {
   const categoryName =
     categories.find((c) => c.id === state.categoryId)?.name ??
     "Uncategorized";
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 p-6 space-y-5">
+    <div className="space-y-6">
 
-      {/* HEADER */}
+      {/* TITLE */}
       <div>
-        <h3 className="text-sm font-semibold text-gray-900">
-          Furniture Details
+        <h3 className="text-sm font-semibold text-[#3A2B22]">
+          Product Details
         </h3>
-        <p className="text-xs text-gray-500 mt-1">
-          View product information
+        <p className="text-xs text-[#7A6A5A] mt-1">
+          Core information about this design
         </p>
       </div>
 
       {/* NAME */}
       <div>
-        <label className="text-xs font-medium text-gray-600">
-          Name
-        </label>
-
-        <input
-          value={state.name}
-          readOnly
-          className="w-full mt-2 rounded-xl border border-gray-200 px-4 py-3 text-sm bg-gray-50"
-        />
+        <label className="text-xs text-[#7A6A5A]">Name</label>
+        <div className="mt-1 text-sm font-medium">
+          {state.name}
+        </div>
       </div>
 
       {/* DESCRIPTION */}
       <div>
-        <label className="text-xs font-medium text-gray-600">
-          Description
-        </label>
-
-        <textarea
-          value={state.description}
-          readOnly
-          rows={4}
-          className="w-full mt-2 rounded-xl border border-gray-200 px-4 py-3 text-sm bg-gray-50 resize-none"
-        />
+        <label className="text-xs text-[#7A6A5A]">Description</label>
+        <p className="mt-1 text-sm leading-relaxed text-[#4B3F3F]">
+          {state.description || "No description provided."}
+        </p>
       </div>
 
-      {/* CATEGORY + PRICE */}
-      <div className="grid grid-cols-2 gap-4">
+      {/* META GRID */}
+      <div className="grid grid-cols-2 gap-4 pt-2">
 
         <div>
-          <label className="text-xs font-medium text-gray-600">
-            Category
-          </label>
-
-          <input
-            value={categoryName}
-            readOnly
-            className="w-full mt-2 rounded-xl border border-gray-200 px-4 py-3 text-sm bg-gray-50"
-          />
+          <label className="text-xs text-[#7A6A5A]">Category</label>
+          <div className="mt-1 text-sm">{categoryName}</div>
         </div>
 
         <div>
-          <label className="text-xs font-medium text-gray-600">
-            Base Price
-          </label>
-
-          <input
-            value={state.basePrice ?? 0}
-            readOnly
-            className="w-full mt-2 rounded-xl border border-gray-200 px-4 py-3 text-sm bg-gray-50"
-          />
+          <label className="text-xs text-[#7A6A5A]">Base Price</label>
+          <div className="mt-1 text-sm font-semibold text-[#7A4E2D]">
+            ₱{Number(state.basePrice ?? 0).toLocaleString()}
+          </div>
         </div>
 
       </div>
 
       {/* DIMENSIONS */}
       <div>
-        <label className="text-xs font-medium text-gray-600">
+        <label className="text-xs text-[#7A6A5A]">
           Dimensions (cm)
         </label>
 
-        <div className="grid grid-cols-3 gap-3 mt-2">
-
-          <input
-            value={state.widthCm ?? "-"}
-            readOnly
-            className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm bg-gray-50"
-          />
-
-          <input
-            value={state.depthCm ?? "-"}
-            readOnly
-            className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm bg-gray-50"
-          />
-
-          <input
-            value={state.heightCm ?? "-"}
-            readOnly
-            className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm bg-gray-50"
-          />
-
+        <div className="mt-2 flex gap-4 text-sm">
+          <span>{state.widthCm ?? "—"} W</span>
+          <span>×</span>
+          <span>{state.depthCm ?? "—"} D</span>
+          <span>×</span>
+          <span>{state.heightCm ?? "—"} H</span>
         </div>
       </div>
 

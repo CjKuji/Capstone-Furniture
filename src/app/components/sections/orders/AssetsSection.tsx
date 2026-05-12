@@ -2,13 +2,9 @@
 
 type OrderItem = {
   id: string;
-
   furniture_snapshot?: {
     name?: string;
-    images?: {
-      url: string;
-      isPrimary?: boolean;
-    }[];
+    images?: { url: string; isPrimary?: boolean }[];
   } | null;
 };
 
@@ -17,80 +13,69 @@ type Props = {
 };
 
 export default function OrderAssetsSection({ items }: Props) {
-  const safeItems = Array.isArray(items) ? items : [];
+  const safe = Array.isArray(items) ? items : [];
 
   return (
-    <div className="border rounded-xl p-4 space-y-4">
+    <div className="rounded-2xl bg-white border border-[#E8D7C8] p-5 space-y-6">
 
       {/* HEADER */}
       <div>
-        <h3 className="font-semibold text-gray-800">
-          Order Snapshot Assets
+        <h3 className="font-semibold text-[#3A2B22]">
+          Order Assets
         </h3>
-        <p className="text-xs text-gray-500">
-          Images grouped per order item (locked snapshots)
+        <p className="text-xs text-[#7A6A5A]">
+          Visual snapshots per item
         </p>
       </div>
 
-      {safeItems.length === 0 ? (
-        <div className="text-sm text-gray-400 py-4">
-          No snapshot images available for this order
+      {safe.length === 0 ? (
+        <div className="text-sm text-gray-400">
+          No images available
         </div>
       ) : (
-        <div className="space-y-6">
+        safe.map((item, i) => {
+          const images = item.furniture_snapshot?.images ?? [];
+          const valid = images.filter((img) => img?.url);
 
-          {safeItems.map((item, itemIndex) => {
-            const images = item.furniture_snapshot?.images ?? [];
+          if (!valid.length) return null;
 
-            const validImages = images.filter(
-              (img) => img?.url && !img.url.includes(".glb")
-            );
+          return (
+            <div key={item.id} className="space-y-3">
 
-            if (!validImages.length) return null;
-
-            return (
-              <div key={item.id} className="space-y-2">
-
-                {/* ITEM LABEL */}
-                <div className="flex justify-between items-center">
-                  <p className="text-sm font-semibold">
-                    Item {itemIndex + 1}
-                  </p>
-
-                  <p className="text-xs text-gray-500">
-                    {item.furniture_snapshot?.name ?? "Unnamed"}
-                  </p>
-                </div>
-
-                {/* IMAGES GRID */}
-                <div className="grid grid-cols-2 gap-3">
-
-                  {validImages.map((img, index) => (
-                    <div
-                      key={`${item.id}-${index}`}
-                      className="relative border rounded-lg overflow-hidden bg-gray-50"
-                    >
-                      <img
-                        src={img.url}
-                        alt={`Item ${itemIndex + 1} image ${index}`}
-                        className="w-full h-28 object-cover"
-                      />
-
-                      {img.isPrimary && (
-                        <div className="absolute top-2 left-2 bg-black/70 text-white text-[10px] px-2 py-1 rounded">
-                          Primary
-                        </div>
-                      )}
-                    </div>
-                  ))}
-
-                </div>
-
+              {/* ITEM HEADER */}
+              <div className="flex justify-between text-sm">
+                <span className="font-medium text-[#3A2B22]">
+                  Item {i + 1}
+                </span>
+                <span className="text-[#7A6A5A]">
+                  {item.furniture_snapshot?.name ?? "Unnamed"}
+                </span>
               </div>
-            );
-          })}
 
-        </div>
+              {/* GRID */}
+              <div className="grid grid-cols-2 gap-3">
+                {valid.map((img, idx) => (
+                  <div
+                    key={idx}
+                    className="rounded-xl overflow-hidden bg-[#FAF6F1] border border-[#E8D7C8]"
+                  >
+                    <img
+                      src={img.url}
+                      className="w-full h-28 object-cover"
+                    />
+
+                    {img.isPrimary && (
+                      <div className="absolute mt-2 ml-2 bg-black/70 text-white text-[10px] px-2 py-1 rounded">
+                        Primary
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+            </div>
+          );
+        })
       )}
     </div>
   );

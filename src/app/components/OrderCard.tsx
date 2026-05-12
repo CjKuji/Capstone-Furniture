@@ -278,181 +278,237 @@ const canCancel =
    * RENDER
    * =========================================================
    */
-  return (
-    <>
-      <div className="overflow-hidden rounded-2xl border bg-white shadow-sm transition hover:shadow-md">
+return (
+  <>
+    <div className="group overflow-hidden rounded-2xl border border-[#E8D7C8] bg-white shadow-sm transition hover:shadow-lg">
 
-        {/* HEADER */}
-        <div className="space-y-3 border-b p-5">
-          <div className="flex justify-between">
-            <span className={`rounded-full px-3 py-1 text-xs ${statusUI.color}`}>
-              {statusUI.label}
-            </span>
+      {/* =========================================================
+         HEADER (status + identity)
+      ========================================================= */}
+      <div className="border-b border-[#F0E2D6] p-5">
 
-            <span className="text-xs text-gray-400">
-              {new Date(order.created_at).toLocaleDateString()}
-            </span>
-          </div>
+        <div className="flex items-center justify-between">
 
-          <div>
-            <h2 className="text-sm font-semibold text-gray-900">
-              {order.order_reference_code ?? "Pending Order"}
-            </h2>
-            <p className="text-xs text-gray-500">{totalPieces} items</p>
-          </div>
+          {/* STATUS */}
+          <span
+            className={`rounded-full px-3 py-1 text-xs font-medium ${statusUI.color}`}
+          >
+            {statusUI.label}
+          </span>
 
-          {/* FINANCIAL */}
-          <div className="grid grid-cols-3 gap-3 pt-2">
-            <div className="rounded-xl bg-gray-50 p-3">
-              <p className="text-[10px] text-gray-500">TOTAL</p>
-              <p className="text-sm font-semibold">₱{finalTotal.toLocaleString()}</p>
-            </div>
-
-            <div className="rounded-xl bg-green-50 p-3">
-              <p className="text-[10px] text-gray-500">PAID</p>
-              <p className="text-sm font-semibold text-green-600">
-                {paymentsLoading ? "..." : `₱${totalPaid.toLocaleString()}`}
-              </p>
-            </div>
-
-            <div className={`rounded-xl p-3 ${remaining > 0 ? "bg-red-50" : "bg-green-50"}`}>
-              <p className="text-[10px] text-gray-500">REMAINING</p>
-              <p className={`text-sm font-semibold ${remaining > 0 ? "text-red-600" : "text-green-600"}`}>
-                ₱{remaining.toLocaleString()}
-              </p>
-            </div>
-          </div>
+          <span className="text-xs text-[#7A6A5A]">
+            {new Date(order.created_at).toLocaleDateString()}
+          </span>
         </div>
 
-        {/* MESSAGE */}
-        <div className="px-5 pt-4">
-          <div className="rounded-xl border bg-gray-50 px-3 py-2 text-xs text-gray-600">
-            {orderMessage}
-          </div>
-        </div>
+        {/* ORDER ID */}
+        <div className="mt-3">
+          <h2 className="text-sm font-semibold text-[#3A2B22]">
+            {order.order_reference_code ?? "Pending Order"}
+          </h2>
 
-        {/* DETAILS */}
-        <div className="grid gap-3 px-5 py-4 text-xs text-gray-600">
-          <div className="flex justify-between">
-            <span>Customer</span>
-            <span className="text-gray-900">{customerName}</span>
-          </div>
-
-          <div className="flex justify-between">
-            <span>Phone</span>
-            <span className="text-gray-900">{phoneNumber}</span>
-          </div>
-
-          <div className="flex justify-between">
-            <span>Method</span>
-            <span className="text-gray-900 capitalize">{deliveryMethod}</span>
-          </div>
-
-          <div className="flex justify-between">
-            <span>{isPickup ? "Pickup" : "Address"}</span>
-            <span className="text-right text-gray-900 max-w-[60%]">
-              {isPickup ? pickupLocation : deliveryAddress}
-            </span>
-          </div>
-        </div>
-
-        {/* CHARGES */}
-        <div className="px-5 pb-4">
-          <div className="flex justify-between rounded-xl border bg-gray-50 p-3">
-            <div>
-              <p className="text-[10px] text-gray-500">CHARGES</p>
-              <div className={`mt-1 inline-flex rounded px-2 py-1 text-xs ${chargeUI.color}`}>
-                {chargeUI.label} • {charges.length}
-              </div>
-            </div>
-
-            <button
-              onClick={() => setOpenCharges(true)}
-              className="text-xs text-gray-500 hover:underline"
-            >
-              View Charges
-            </button>
-          </div>
-        </div>
-
-        {/* ACTIONS */}
-        <div className="border-t bg-gray-50 px-5 py-4">
-          <div className="flex flex-wrap gap-2">
-
-            <button
-              onClick={() => setOpenDetail(true)}
-              className="flex-1 rounded-xl border bg-white py-2 text-sm font-medium"
-            >
-              Details
-            </button>
-
-            <button
-              onClick={() => setOpenChat(true)}
-              className="relative flex-1 rounded-xl bg-gray-900 py-2 text-sm font-medium text-white"
-            >
-              Chat
-              {unreadCount > 0 && (
-                <span className="absolute -right-2 -top-2 rounded-full bg-red-500 px-2 text-[10px]">
-                  {unreadCount}
-                </span>
-              )}
-            </button>
-
-            {canCancel && (
-              <button
-                onClick={handleCancelClick}
-                disabled={isCancelling}
-                className="flex-1 rounded-xl bg-red-600 py-2 text-sm font-semibold text-white disabled:opacity-50"
-              >
-                Cancel
-              </button>
-            )}
-
-            {canPay && (
-              <button
-                onClick={() => setOpenPay(true)}
-                className="flex-1 rounded-xl bg-green-600 py-2 text-sm font-semibold text-white"
-              >
-                {payButtonLabel}
-              </button>
-            )}
-          </div>
+          <p className="text-xs text-[#7A6A5A]">
+            {totalPieces} design{totalPieces > 1 ? "s" : ""}
+          </p>
         </div>
       </div>
 
-      {/* MODALS */}
-      <OrderFullDetailModal open={openDetail} onClose={() => setOpenDetail(false)} order={order} />
+      {/* =========================================================
+         FINANCIAL SNAPSHOT (clean cards instead of heavy blocks)
+      ========================================================= */}
+      <div className="grid grid-cols-3 gap-2 p-5">
 
-      <ChatModal
-        open={openChat}
-        onClose={() => setOpenChat(false)}
-        order={order}
-        currentUserId={order.user_id}
-        senderType="customer"
-      />
+        <div className="rounded-xl border border-[#F0E2D6] bg-[#FAF6F1] p-3">
+          <p className="text-[10px] text-[#7A6A5A]">TOTAL</p>
+          <p className="text-sm font-semibold text-[#3A2B22]">
+            ₱{finalTotal.toLocaleString()}
+          </p>
+        </div>
 
-      <UserChargesModal
-        open={openCharges}
-        onClose={() => setOpenCharges(false)}
-        charges={charges}
-        order={order}
-        userId={order.user_id}
-      />
+        <div className="rounded-xl border border-[#DDEFE0] bg-[#F3FAF5] p-3">
+          <p className="text-[10px] text-[#7A6A5A]">PAID</p>
+          <p className="text-sm font-semibold text-green-700">
+            {paymentsLoading ? "..." : `₱${totalPaid.toLocaleString()}`}
+          </p>
+        </div>
 
-      <PayModal
-        open={openPay}
-        onClose={() => setOpenPay(false)}
-        order={order}
-        totalAmount={finalTotal}
-      />
+        <div
+          className={`rounded-xl border p-3 ${
+            remaining > 0
+              ? "border-[#F3D6D6] bg-[#FFF5F5]"
+              : "border-[#DDEFE0] bg-[#F3FAF5]"
+          }`}
+        >
+          <p className="text-[10px] text-[#7A6A5A]">REMAINING</p>
+          <p
+            className={`text-sm font-semibold ${
+              remaining > 0 ? "text-red-600" : "text-green-700"
+            }`}
+          >
+            ₱{remaining.toLocaleString()}
+          </p>
+        </div>
 
-      <CancelOrderModal
-        open={openCancel}
-        onClose={() => setOpenCancel(false)}
-        order={order}
-        mode={cancelMode}
-        onConfirm={handleConfirmCancel}
-      />
-    </>
-  );
+      </div>
+
+      {/* =========================================================
+         MESSAGE (soft insight panel)
+      ========================================================= */}
+      <div className="px-5 pb-4">
+        <div className="rounded-xl border border-[#F0E2D6] bg-[#FAF6F1] px-3 py-2 text-xs text-[#6A5646]">
+          {orderMessage}
+        </div>
+      </div>
+
+      {/* =========================================================
+         DETAILS (clean 2-column system instead of heavy grid)
+      ========================================================= */}
+      <div className="px-5 pb-4 space-y-2 text-xs">
+
+        <div className="flex justify-between">
+          <span className="text-[#7A6A5A]">Customer</span>
+          <span className="text-[#3A2B22] font-medium">{customerName}</span>
+        </div>
+
+        <div className="flex justify-between">
+          <span className="text-[#7A6A5A]">Phone</span>
+          <span className="text-[#3A2B22] font-medium">{phoneNumber}</span>
+        </div>
+
+        <div className="flex justify-between">
+          <span className="text-[#7A6A5A]">Method</span>
+          <span className="text-[#3A2B22] font-medium capitalize">
+            {deliveryMethod}
+          </span>
+        </div>
+
+        <div className="flex justify-between gap-3">
+          <span className="text-[#7A6A5A]">
+            {isPickup ? "Pickup" : "Address"}
+          </span>
+
+          <span className="text-right text-[#3A2B22] font-medium max-w-[65%]">
+            {isPickup ? pickupLocation : deliveryAddress}
+          </span>
+        </div>
+
+      </div>
+
+      {/* =========================================================
+         CHARGES (collapsed premium row)
+      ========================================================= */}
+      <div className="px-5 pb-4">
+        <div className="flex items-center justify-between rounded-xl border border-[#E8D7C8] bg-white px-3 py-3">
+
+          <div>
+            <p className="text-[10px] text-[#7A6A5A]">CHARGES</p>
+            <span className="mt-1 inline-flex rounded-full bg-[#FAF6F1] px-2 py-1 text-xs text-[#3A2B22] border border-[#E8D7C8]">
+              {chargeUI.label} • {charges.length}
+            </span>
+          </div>
+
+          <button
+            onClick={() => setOpenCharges(true)}
+            className="text-xs text-[#7A4E2D] hover:underline"
+          >
+            View →
+          </button>
+
+        </div>
+      </div>
+
+      {/* =========================================================
+         ACTIONS (converted into hierarchy instead of equal buttons)
+      ========================================================= */}
+      <div className="border-t border-[#F0E2D6] bg-[#FAF6F1] p-4">
+
+        <div className="flex flex-wrap gap-2">
+
+          {/* PRIMARY: DETAILS */}
+          <button
+            onClick={() => setOpenDetail(true)}
+            className="flex-1 rounded-xl border border-[#E8D7C8] bg-white py-2 text-sm font-medium text-[#3A2B22] hover:bg-[#F3E2D2] transition"
+          >
+            Details
+          </button>
+
+          {/* PRIMARY: CHAT */}
+          <button
+            onClick={() => setOpenChat(true)}
+            className="relative flex-1 rounded-xl bg-[#3A2B22] py-2 text-sm font-medium text-white hover:bg-black transition"
+          >
+            Chat
+
+            {unreadCount > 0 && (
+              <span className="absolute -right-2 -top-2 rounded-full bg-red-500 px-2 text-[10px] text-white">
+                {unreadCount}
+              </span>
+            )}
+          </button>
+
+          {/* CONDITIONAL ACTIONS */}
+          {canPay && (
+            <button
+              onClick={() => setOpenPay(true)}
+              className="flex-1 rounded-xl bg-[#7A4E2D] py-2 text-sm font-semibold text-white hover:bg-[#663D22] transition"
+            >
+              {payButtonLabel}
+            </button>
+          )}
+
+          {canCancel && (
+            <button
+              onClick={handleCancelClick}
+              disabled={isCancelling}
+              className="flex-1 rounded-xl border border-red-200 bg-white py-2 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50 transition"
+            >
+              Cancel
+            </button>
+          )}
+
+        </div>
+      </div>
+    </div>
+
+    {/* =========================================================
+       MODALS (unchanged logic)
+    ========================================================= */}
+    <OrderFullDetailModal
+      open={openDetail}
+      onClose={() => setOpenDetail(false)}
+      order={order}
+    />
+
+    <ChatModal
+      open={openChat}
+      onClose={() => setOpenChat(false)}
+      order={order}
+      currentUserId={order.user_id}
+      senderType="customer"
+    />
+
+    <UserChargesModal
+      open={openCharges}
+      onClose={() => setOpenCharges(false)}
+      charges={charges}
+      order={order}
+      userId={order.user_id}
+    />
+
+    <PayModal
+      open={openPay}
+      onClose={() => setOpenPay(false)}
+      order={order}
+      totalAmount={finalTotal}
+    />
+
+    <CancelOrderModal
+      open={openCancel}
+      onClose={() => setOpenCancel(false)}
+      order={order}
+      mode={cancelMode}
+      onConfirm={handleConfirmCancel}
+    />
+  </>
+);
 }

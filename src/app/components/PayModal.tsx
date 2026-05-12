@@ -1,10 +1,16 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+
 import type { Order } from "@/types/order";
 
-import { PaymentType, usePayment } from "@/hooks/usePayment";
+import {
+  PaymentType,
+  usePayment,
+} from "@/hooks/usePayment";
+
 import { usePaymentsQuery } from "@/hooks/useFetchPayments";
+
 import { calculatePaymentBreakdown } from "@/utils/paymentCalculator";
 
 type Props = {
@@ -20,59 +26,92 @@ export default function PayModal({
   order,
   totalAmount,
 }: Props) {
-  const { pay, loading, error, resetError } = usePayment();
+  const {
+    pay,
+    loading,
+    error,
+    resetError,
+  } = usePayment();
 
   /**
-   * DB SOURCE OF TRUTH
+   * =========================================================
+   * PAYMENTS QUERY
+   * =========================================================
    */
-  const { data: paymentsData } = usePaymentsQuery(order.id);
+  const { data: paymentsData } =
+    usePaymentsQuery(order.id);
 
-  const totalPaid = paymentsData?.totalPaid ?? 0;
-  const hasPaidAnything = totalPaid > 0;
+  const totalPaid =
+    paymentsData?.totalPaid ?? 0;
+
+  const hasPaidAnything =
+    totalPaid > 0;
 
   /**
+   * =========================================================
    * SAFE TOTAL
+   * =========================================================
    */
   const safeTotalAmount = useMemo(() => {
-    const value = Number(totalAmount);
-    if (!value || value <= 0 || isNaN(value)) return 0;
-    return value;
+    const parsed = Number(totalAmount);
+
+    if (
+      !parsed ||
+      parsed <= 0 ||
+      isNaN(parsed)
+    ) {
+      return 0;
+    }
+
+    return parsed;
   }, [totalAmount]);
 
   /**
-   * ONLY USED FOR FIRST PAYMENT
+   * =========================================================
+   * PAYMENT TYPE
+   * =========================================================
    */
   const [paymentType, setPaymentType] =
     useState<PaymentType>("partial");
 
   /**
+   * =========================================================
    * BREAKDOWN
+   * =========================================================
    */
   const breakdown = useMemo(() => {
-    if (safeTotalAmount <= 0) {
-      return {
-        total: 0,
-        totalPaid,
-        payNow: 0,
-      };
-    }
-
     return calculatePaymentBreakdown(
       safeTotalAmount,
       totalPaid,
       paymentType
     );
-  }, [safeTotalAmount, totalPaid, paymentType]);
+  }, [
+    safeTotalAmount,
+    totalPaid,
+    paymentType,
+  ]);
 
-  const payNowAmount = breakdown.payNow ?? 0;
+  const payNowAmount =
+    breakdown.payNow ?? 0;
+
+  const remainingBalance = Math.max(
+    safeTotalAmount - totalPaid,
+    0
+  );
 
   /**
-   * SHOW OPTIONS ONLY ON FIRST PAYMENT
+   * =========================================================
+   * SHOW OPTIONS
+   * Only on first payment
+   * =========================================================
    */
-  const showPaymentOptions = totalPaid === 0;
+  const showPaymentOptions =
+    totalPaid === 0;
 
   /**
-   * LABEL
+   * =========================================================
+   * LABELS
+   * =========================================================
    */
   const payButtonLabel = hasPaidAnything
     ? "Pay Remaining"
@@ -81,35 +120,58 @@ export default function PayModal({
       : "Pay Partial";
 
   /**
+   * =========================================================
    * ESC CLOSE
+   * =========================================================
    */
   useEffect(() => {
     if (!open) return;
 
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+    const handleKey = (
+      e: KeyboardEvent
+    ) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
     };
 
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
+    window.addEventListener(
+      "keydown",
+      handleKey
+    );
+
+    return () => {
+      window.removeEventListener(
+        "keydown",
+        handleKey
+      );
+    };
   }, [open, onClose]);
 
   /**
+   * =========================================================
    * SCROLL LOCK
+   * =========================================================
    */
   useEffect(() => {
     if (!open) return;
 
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const prevOverflow =
+      document.body.style.overflow;
+
+    document.body.style.overflow =
+      "hidden";
 
     return () => {
-      document.body.style.overflow = prev;
+      document.body.style.overflow =
+        prevOverflow;
     };
   }, [open]);
 
   /**
+   * =========================================================
    * PAY
+   * =========================================================
    */
   const handlePay = async () => {
     try {
@@ -118,138 +180,567 @@ export default function PayModal({
       await pay({
         orderId: order.id,
         userId: order.user_id,
-        type: hasPaidAnything ? "partial" : paymentType,
+
+        type: hasPaidAnything
+          ? "partial"
+          : paymentType,
       });
     } catch (err) {
       console.error(err);
     }
   };
 
+  /**
+   * =========================================================
+   * CLOSE
+   * =========================================================
+   */
   if (!open) return null;
 
   return (
     <div
-      className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/60 p-4"
+      className="
+        fixed inset-0 z-[99999]
+        flex items-center justify-center
+        bg-black/60 backdrop-blur-sm
+        p-4
+      "
       onClick={onClose}
     >
+      {/* =====================================================
+          MODAL
+      ===================================================== */}
       <div
-        className="w-full max-w-lg rounded-3xl overflow-hidden border border-[#E8D9CC] bg-[#FAF7F2] shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e) =>
+          e.stopPropagation()
+        }
+        className="
+          w-full max-w-xl
+          overflow-hidden
+          rounded-[28px]
+          border border-[#E8D9CC]
+          bg-[#FAF6F1]
+          shadow-[0_20px_60px_rgba(0,0,0,0.18)]
+        "
       >
-        {/* HEADER */}
-        <div className="border-b border-[#E8D9CC] bg-white px-5 py-4">
-          <h2 className="text-sm font-semibold text-[#2B1D16]">
-            Complete Payment
-          </h2>
-
-          <p className="mt-1 text-xs text-[#8C593F]">
-            Order #{order.order_reference_code}
-          </p>
-        </div>
-
-        {/* CONTENT */}
-        <div className="space-y-4 p-5">
-
-          {/* ORDER INFO */}
-          <div className="space-y-2 rounded-2xl border border-[#E8D9CC] bg-white p-4">
-
-            <div className="flex justify-between text-sm">
-              <span className="text-[#6B5B52]">Customer</span>
-              <span className="font-medium text-[#2B1D16]">
-                {order.customer_name || "-"}
-              </span>
-            </div>
-
-            <div className="flex justify-between text-sm">
-              <span className="text-[#6B5B52]">Method</span>
-              <span className="capitalize text-[#2B1D16]">
-                {order.delivery_method}
-              </span>
-            </div>
-
-          </div>
-
-          {/* PAYMENT OPTIONS (ONLY FIRST TIME) */}
-          {showPaymentOptions && (
-            <div className="rounded-2xl border border-[#E8D9CC] bg-white p-4">
-
-              <label className="mb-2 block text-xs text-[#6B5B52]">
-                Payment Option
-              </label>
-
-              <select
-                value={paymentType}
-                onChange={(e) =>
-                  setPaymentType(e.target.value as PaymentType)
-                }
-                className="w-full rounded-xl border border-[#E8D9CC] bg-[#FAF7F2] px-3 py-2 text-sm text-[#2B1D16]"
-              >
-                <option value="partial">Partial Payment (50%)</option>
-                <option value="full">Full Payment (100%)</option>
-              </select>
-
-              <p className="mt-2 text-[11px] text-[#8C593F]/80">
-                Choose how you want to start your payment.
-              </p>
-
-            </div>
-          )}
-
-          {/* TOTAL */}
-          <div className="rounded-2xl border border-[#E8D9CC] bg-[#F3E7DD] p-4">
-
-            <div className="flex justify-between text-sm">
-              <span className="text-[#6B5B52]">Total</span>
-              <span className="font-medium text-[#2B1D16]">
-                ₱{safeTotalAmount.toLocaleString()}
-              </span>
-            </div>
-
-            <div className="mt-2 flex justify-between items-center">
-              <span className="text-sm font-semibold text-[#2B1D16]">
-                {hasPaidAnything ? "Pay Remaining" : "Pay Now"}
-              </span>
-
-              <span className="text-xl font-bold text-[#2B1D16]">
-                ₱{payNowAmount.toLocaleString()}
-              </span>
-            </div>
-
-          </div>
-
-          {/* ERROR */}
-          {error && (
-            <p className="text-center text-xs text-red-500">
-              {error}
+        {/* =================================================
+            HEADER
+        ================================================= */}
+        <div
+          className="
+            flex items-start justify-between
+            border-b border-[#E8D9CC]
+            bg-white
+            px-6 py-5
+          "
+        >
+          <div>
+            <p
+              className="
+                text-[11px]
+                uppercase tracking-[0.18em]
+                text-[#8C593F]
+              "
+            >
+              Payment
             </p>
-          )}
 
-        </div>
+            <h2
+              className="
+                mt-1
+                text-xl font-semibold
+                text-[#2B1D16]
+              "
+            >
+              Complete Your Payment
+            </h2>
 
-        {/* ACTIONS */}
-        <div className="flex gap-2 border-t border-[#E8D9CC] bg-white p-5">
+            <p
+              className="
+                mt-1
+                text-sm text-[#7B6A5F]
+              "
+            >
+              Order #
+              {order.order_reference_code}
+            </p>
+          </div>
 
           <button
             onClick={onClose}
+            className="
+              flex h-10 w-10
+              items-center justify-center
+              rounded-full
+              border border-[#E8D9CC]
+              bg-[#FAF6F1]
+              text-[#6B584B]
+              transition
+              hover:bg-[#F3E7DD]
+            "
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* =================================================
+            CONTENT
+        ================================================= */}
+        <div
+          className="
+            max-h-[70vh]
+            overflow-y-auto
+            space-y-5
+            p-6
+          "
+        >
+          {/* =============================================
+              ORDER SUMMARY
+          ============================================= */}
+          <div
+            className="
+              rounded-3xl
+              border border-[#E8D9CC]
+              bg-white
+              p-5
+            "
+          >
+            <div className="mb-4">
+              <h3
+                className="
+                  text-sm font-semibold
+                  text-[#2B1D16]
+                "
+              >
+                Order Summary
+              </h3>
+
+              <p
+                className="
+                  mt-1
+                  text-xs text-[#8C593F]
+                "
+              >
+                Review your payment details
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <SummaryRow
+                label="Customer"
+                value={
+                  order.customer_name ??
+                  "Unknown"
+                }
+              />
+
+              <SummaryRow
+                label="Delivery Method"
+                value={
+                  order.delivery_method
+                }
+                capitalize
+              />
+
+              <SummaryRow
+                label="Order Total"
+                value={`₱${safeTotalAmount.toLocaleString()}`}
+                strong
+              />
+
+              <SummaryRow
+                label="Already Paid"
+                value={`₱${totalPaid.toLocaleString()}`}
+              />
+
+              <div
+                className="
+                  border-t border-dashed
+                  border-[#E8D9CC]
+                  pt-4
+                "
+              >
+                <SummaryRow
+                  label="Remaining Balance"
+                  value={`₱${remainingBalance.toLocaleString()}`}
+                  strong
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* =============================================
+              PAYMENT OPTION
+          ============================================= */}
+          {showPaymentOptions && (
+            <div
+              className="
+                rounded-3xl
+                border border-[#E8D9CC]
+                bg-white
+                p-5
+              "
+            >
+              <div className="mb-4">
+                <h3
+                  className="
+                    text-sm font-semibold
+                    text-[#2B1D16]
+                  "
+                >
+                  Choose Payment Option
+                </h3>
+
+                <p
+                  className="
+                    mt-1
+                    text-xs text-[#8C593F]
+                  "
+                >
+                  Select how you want to
+                  start your order payment
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                {/* PARTIAL */}
+                <button
+                  onClick={() =>
+                    setPaymentType(
+                      "partial"
+                    )
+                  }
+                  className={`
+                    w-full rounded-2xl border p-4 text-left transition
+
+                    ${
+                      paymentType ===
+                      "partial"
+                        ? "border-[#8C593F] bg-[#F6EFE8]"
+                        : "border-[#E8D9CC] bg-white hover:bg-[#FAF6F1]"
+                    }
+                  `}
+                >
+                  <div
+                    className="
+                      flex items-start justify-between
+                    "
+                  >
+                    <div>
+                      <div
+                        className="
+                          text-sm font-semibold
+                          text-[#2B1D16]
+                        "
+                      >
+                        Partial Payment
+                      </div>
+
+                      <div
+                        className="
+                          mt-1
+                          text-xs text-[#7B6A5F]
+                        "
+                      >
+                        Pay 50% now and the
+                        remaining later
+                      </div>
+                    </div>
+
+                    <div
+                      className="
+                        text-right
+                      "
+                    >
+                      <div
+                        className="
+                          text-lg font-bold
+                          text-[#2B1D16]
+                        "
+                      >
+                        ₱
+                        {Math.round(
+                          safeTotalAmount *
+                            0.5
+                        ).toLocaleString()}
+                      </div>
+
+                      <div
+                        className="
+                          text-[11px]
+                          text-[#8C593F]
+                        "
+                      >
+                        Due now
+                      </div>
+                    </div>
+                  </div>
+                </button>
+
+                {/* FULL */}
+                <button
+                  onClick={() =>
+                    setPaymentType("full")
+                  }
+                  className={`
+                    w-full rounded-2xl border p-4 text-left transition
+
+                    ${
+                      paymentType ===
+                      "full"
+                        ? "border-[#8C593F] bg-[#F6EFE8]"
+                        : "border-[#E8D9CC] bg-white hover:bg-[#FAF6F1]"
+                    }
+                  `}
+                >
+                  <div
+                    className="
+                      flex items-start justify-between
+                    "
+                  >
+                    <div>
+                      <div
+                        className="
+                          text-sm font-semibold
+                          text-[#2B1D16]
+                        "
+                      >
+                        Full Payment
+                      </div>
+
+                      <div
+                        className="
+                          mt-1
+                          text-xs text-[#7B6A5F]
+                        "
+                      >
+                        Complete the full
+                        payment immediately
+                      </div>
+                    </div>
+
+                    <div
+                      className="
+                        text-right
+                      "
+                    >
+                      <div
+                        className="
+                          text-lg font-bold
+                          text-[#2B1D16]
+                        "
+                      >
+                        ₱
+                        {safeTotalAmount.toLocaleString()}
+                      </div>
+
+                      <div
+                        className="
+                          text-[11px]
+                          text-[#8C593F]
+                        "
+                      >
+                        Due now
+                      </div>
+                    </div>
+                  </div>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* =============================================
+              PAYMENT TOTAL CARD
+          ============================================= */}
+          <div
+            className="
+              rounded-3xl
+              border border-[#D9C1AF]
+              bg-[#F3E7DD]
+              p-5
+            "
+          >
+            <div
+              className="
+                flex items-center justify-between
+              "
+            >
+              <div>
+                <p
+                  className="
+                    text-xs uppercase tracking-wide
+                    text-[#8C593F]
+                  "
+                >
+                  {hasPaidAnything
+                    ? "Remaining Payment"
+                    : "Amount Due"}
+                </p>
+
+                <h3
+                  className="
+                    mt-2
+                    text-3xl font-bold
+                    text-[#2B1D16]
+                  "
+                >
+                  ₱
+                  {payNowAmount.toLocaleString()}
+                </h3>
+              </div>
+
+              <div
+                className="
+                  rounded-2xl
+                  border border-[#D9C1AF]
+                  bg-white/70
+                  px-4 py-3
+                  text-right
+                "
+              >
+                <div
+                  className="
+                    text-[11px]
+                    text-[#8C593F]
+                  "
+                >
+                  Status
+                </div>
+
+                <div
+                  className="
+                    mt-1
+                    text-sm font-semibold
+                    text-[#2B1D16]
+                  "
+                >
+                  {hasPaidAnything
+                    ? "Remaining Balance"
+                    : paymentType ===
+                        "full"
+                      ? "Full Payment"
+                      : "Partial Payment"}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* =============================================
+              ERROR
+          ============================================= */}
+          {error && (
+            <div
+              className="
+                rounded-2xl
+                border border-red-200
+                bg-red-50
+                px-4 py-3
+                text-sm text-red-600
+              "
+            >
+              {error}
+            </div>
+          )}
+        </div>
+
+        {/* =================================================
+            FOOTER
+        ================================================= */}
+        <div
+          className="
+            flex items-center gap-3
+            border-t border-[#E8D9CC]
+            bg-white
+            p-5
+          "
+        >
+          <button
+            onClick={onClose}
             disabled={loading}
-            className="flex-1 rounded-xl border border-[#E8D9CC] py-2.5"
+            className="
+              flex-1 rounded-2xl
+              border border-[#E8D9CC]
+              bg-white
+              py-3
+              text-sm font-medium
+              text-[#4B3A30]
+              transition
+              hover:bg-[#FAF6F1]
+              disabled:opacity-50
+            "
           >
             Cancel
           </button>
 
           <button
             onClick={handlePay}
-            disabled={loading || payNowAmount <= 0}
-            className="flex-1 rounded-xl bg-[#8C593F] py-2.5 font-semibold text-white"
+            disabled={
+              loading ||
+              payNowAmount <= 0
+            }
+            className="
+              flex-1 rounded-2xl
+              bg-[#8C593F]
+              py-3
+              text-sm font-semibold
+              text-white
+              shadow-sm
+              transition
+              hover:bg-[#73452C]
+              disabled:cursor-not-allowed
+              disabled:opacity-50
+            "
           >
             {loading
               ? "Processing..."
               : `${payButtonLabel} • ₱${payNowAmount.toLocaleString()}`}
           </button>
-
         </div>
-
       </div>
+    </div>
+  );
+}
+
+/* =========================================================
+   SUMMARY ROW
+========================================================= */
+
+type SummaryRowProps = {
+  label: string;
+  value: string;
+  strong?: boolean;
+  capitalize?: boolean;
+};
+
+function SummaryRow({
+  label,
+  value,
+  strong,
+  capitalize,
+}: SummaryRowProps) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <span
+        className="
+          text-sm text-[#6B5B52]
+        "
+      >
+        {label}
+      </span>
+
+      <span
+        className={`
+          text-sm
+          ${
+            strong
+              ? "font-semibold text-[#2B1D16]"
+              : "text-[#2B1D16]"
+          }
+          ${capitalize ? "capitalize" : ""}
+        `}
+      >
+        {value}
+      </span>
     </div>
   );
 }

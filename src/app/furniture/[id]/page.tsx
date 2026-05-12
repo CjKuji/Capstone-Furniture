@@ -6,174 +6,114 @@ import { useMemo, useState } from "react";
 import { useFurniturePublicById } from "@/hooks/useFurnitureById";
 
 import Furniture3DViewer from "@/app/components/Furniture3DViewer";
-
 import BasicInfoSection from "@/app/components/sections/user/BasicInfoSection";
 import AssetsSection from "@/app/components/sections/user/AssetsSection";
 import VariantsSection from "@/app/components/sections/user/VariantSection";
-
 import PlaceOrderModal from "@/app/components/PlaceOrderModal";
 
 export default function FurnitureDetailPage() {
   const router = useRouter();
-
   const params = useParams();
 
   const id = params?.id as string;
 
-  const {
-    data: furniture,
-    isLoading,
-    isError,
-  } = useFurniturePublicById(id);
+  const { data: furniture, isLoading, isError } =
+    useFurniturePublicById(id);
+
+  const [openOrderModal, setOpenOrderModal] = useState(false);
+  const [previewVariantId, setPreviewVariantId] = useState<string | null>(null);
 
   /* =========================================================
-     MODAL STATE
+     GUARD (CRITICAL)
   ========================================================= */
 
-  const [openOrderModal, setOpenOrderModal] =
-    useState(false);
+  const safeFurniture = furniture ?? null;
 
   /* =========================================================
-     3D PREVIEW STATE
-  ========================================================= */
-
-  const [previewVariantId, setPreviewVariantId] =
-    useState<string | null>(null);
-
-  /* =========================================================
-     ACTIVE VARIANT
+     DERIVED VARIANT (SAFE)
   ========================================================= */
 
   const previewVariant = useMemo(() => {
-    if (!furniture || !previewVariantId) {
-      return null;
-    }
+    if (!safeFurniture || !previewVariantId) return null;
 
-    return furniture.variants.find(
+    return safeFurniture.variants.find(
       (v) => v.id === previewVariantId
-    );
-  }, [furniture, previewVariantId]);
+    ) ?? null;
+  }, [safeFurniture, previewVariantId]);
+
+  const modelUrl = safeFurniture?.model_url ?? null;
+  const textureUrl = previewVariant?.texture_url ?? null;
 
   /* =========================================================
-     MODEL + TEXTURE
-  ========================================================= */
-
-  const modelUrl =
-    furniture?.model_url ?? null;
-
-  const textureUrl =
-    previewVariant?.texture_url ?? null;
-
-  /* =========================================================
-     DIMENSIONS
-     IMPORTANT:
-     Passed into 3D viewer for real-world scaling
+     DIMENSIONS (SAFE MEMO)
   ========================================================= */
 
   const dimensions = useMemo(() => {
+    if (!safeFurniture?.dimensions) {
+      return {
+        width_cm: null,
+        depth_cm: null,
+        height_cm: null,
+      };
+    }
+
     return {
-      width_cm:
-        furniture?.dimensions?.width_cm ?? null,
-
-      depth_cm:
-        furniture?.dimensions?.depth_cm ?? null,
-
-      height_cm:
-        furniture?.dimensions?.height_cm ?? null,
+      width_cm: safeFurniture.dimensions.width_cm ?? null,
+      depth_cm: safeFurniture.dimensions.depth_cm ?? null,
+      height_cm: safeFurniture.dimensions.height_cm ?? null,
     };
-  }, [furniture]);
+  }, [safeFurniture]);
 
   /* =========================================================
-     BASIC INFO
+     IMAGES (SAFE)
   ========================================================= */
 
-  const basicInfoState = furniture
-    ? {
-        name: furniture.name,
+  const images = useMemo(() => {
+    if (!safeFurniture?.images) return [];
 
-        description:
-          furniture.description ?? "",
-
-        categoryId:
-          furniture.category?.id ?? null,
-
-        basePrice: furniture.base_price,
-
-        widthCm:
-          furniture.dimensions?.width_cm,
-
-        depthCm:
-          furniture.dimensions?.depth_cm,
-
-        heightCm:
-          furniture.dimensions?.height_cm,
-      }
-    : null;
+    return safeFurniture.images.map((img) => ({
+      id: img.id,
+      clientId: img.id,
+      url: img.image_url,
+      isPrimary: img.is_primary,
+    }));
+  }, [safeFurniture]);
 
   /* =========================================================
-     IMAGES
+     VARIANTS (SAFE)
   ========================================================= */
 
-  const images = (
-    furniture?.images ?? []
-  ).map((img) => ({
-    id: img.id,
+  const variants = useMemo(() => {
+    if (!safeFurniture?.variants) return [];
 
-    clientId: img.id,
-
-    url: img.image_url,
-
-    isPrimary: img.is_primary,
-  }));
-
-  /* =========================================================
-     VARIANTS
-  ========================================================= */
-
-  const variants = (
-    furniture?.variants ?? []
-  ).map((v) => ({
-    id: v.id,
-
-    clientId: v.id,
-
-    name: v.name,
-
-    texture_url: v.texture_url,
-
-    previewUrl:
-      v.preview_image_url ?? "",
-
-    priceAdjustment: Number(
-      v.price_adjustment ?? 0
-    ),
-
-    isActive: v.is_active,
-
-    isDeleted: false,
-
-    isDefault: Boolean(v.is_default),
-  }));
+    return safeFurniture.variants.map((v) => ({
+      id: v.id,
+      clientId: v.id,
+      name: v.name,
+      texture_url: v.texture_url,
+      previewUrl: v.preview_image_url ?? "",
+      priceAdjustment: Number(v.price_adjustment ?? 0),
+      isActive: v.is_active,
+      isDeleted: false,
+      isDefault: Boolean(v.is_default),
+    }));
+  }, [safeFurniture]);
 
   /* =========================================================
-     LOADING
+     LOADING STATES
   ========================================================= */
 
   if (isLoading) {
     return (
-      <div className="py-20 text-center font-semibold">
-        Loading...
+      <div className="min-h-screen flex items-center justify-center bg-[#FAF6F1] text-[#3A2B22]">
+        Loading furniture...
       </div>
     );
   }
 
-  /* =========================================================
-     ERROR
-  ========================================================= */
-
-  if (isError || !furniture) {
+  if (isError || !safeFurniture) {
     return (
-      <div className="py-20 text-center font-semibold text-red-600">
+      <div className="min-h-screen flex items-center justify-center text-red-600 font-semibold">
         Furniture not found
       </div>
     );
@@ -184,139 +124,98 @@ export default function FurnitureDetailPage() {
   ========================================================= */
 
   return (
-    <div className="min-h-screen bg-[#FFF8F0] p-6">
-      {/* =====================================================
-          BACK
-      ===================================================== */}
+    <div className="min-h-screen bg-[#FAF6F1] text-[#3A2B22] flex flex-col">
 
-      <button
-        onClick={() => router.back()}
-        className="mb-4 text-sm text-[#8C593F] hover:underline"
-      >
-        ← Back
-      </button>
+      {/* HEADER */}
+      <div className="sticky top-0 z-40 bg-[#FAF6F1]/80 backdrop-blur border-b border-[#E8D7C8] px-6 py-3">
+        <button
+          onClick={() => router.back()}
+          className="text-sm text-[#7A4E2D] hover:underline"
+        >
+          ← Back to catalog
+        </button>
+      </div>
 
-      <div className="mx-auto grid max-w-7xl grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* ===================================================
-            LEFT: 3D VIEWER
-        =================================================== */}
+      {/* MAIN */}
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-2">
 
-        <div className="flex min-h-[500px] items-center justify-center rounded-2xl bg-white p-4 shadow">
+        {/* LEFT */}
+        <div className="relative min-h-[calc(100vh-56px)] bg-white flex items-center justify-center border-r border-[#E8D7C8]">
+
           {modelUrl ? (
-            <div className="w-full">
-              {/* =============================================
-                  3D VIEWER
-              ============================================= */}
-
+            <div className="w-full h-full">
               <Furniture3DViewer
                 modelUrl={modelUrl}
-                selectedVariantTextureUrl={
-                  textureUrl
-                }
+                selectedVariantTextureUrl={textureUrl}
                 dimensions={dimensions}
               />
-
-              {/* =============================================
-                  DEBUG DIMENSIONS
-                  TEMPORARY FOR SCALE TESTING
-              ============================================= */}
-
-              <div className="mt-3 space-y-1 text-xs text-neutral-500">
-                <div>
-                  Width:{" "}
-                  {dimensions.width_cm ?? 0} cm
-                </div>
-
-                <div>
-                  Height:{" "}
-                  {dimensions.height_cm ?? 0} cm
-                </div>
-
-                <div>
-                  Depth:{" "}
-                  {dimensions.depth_cm ?? 0} cm
-                </div>
-              </div>
             </div>
           ) : (
-            <div className="text-gray-400">
+            <div className="text-[#7A6A5A]">
               No 3D model available
             </div>
           )}
+
         </div>
 
-        {/* ===================================================
-            RIGHT SIDE
-        =================================================== */}
+        {/* RIGHT */}
+        <div className="relative h-[calc(100vh-56px)] flex flex-col border-l border-[#E8D7C8]">
 
-        <div className="max-h-[85vh] space-y-6 overflow-y-auto pr-2">
-          {/* ===============================================
-              BASIC INFO
-          =============================================== */}
+          <div className="flex-1 overflow-y-auto px-6 py-8 space-y-6">
 
-          {basicInfoState && (
-            <BasicInfoSection
-              state={basicInfoState}
-              categories={[
-                {
-                  id:
-                    furniture.category?.id ?? "",
+            <div className="rounded-2xl bg-white border border-[#E8D7C8] p-5">
+              <BasicInfoSection
+                state={{
+                  name: safeFurniture.name,
+                  description: safeFurniture.description ?? "",
+                  categoryId: safeFurniture.category?.id ?? null,
+                  basePrice: safeFurniture.base_price,
+                  widthCm: safeFurniture.dimensions?.width_cm,
+                  depthCm: safeFurniture.dimensions?.depth_cm,
+                  heightCm: safeFurniture.dimensions?.height_cm,
+                }}
+                categories={[
+                  {
+                    id: safeFurniture.category?.id ?? "",
+                    name: safeFurniture.category?.name ?? "Uncategorized",
+                  } as any,
+                ]}
+              />
+            </div>
 
-                  name:
-                    furniture.category?.name ??
-                    "Uncategorized",
-                } as any,
-              ]}
-            />
-          )}
+            <div className="rounded-2xl bg-white border border-[#E8D7C8] p-5">
+              <AssetsSection state={{ images }} />
+            </div>
 
-          {/* ===============================================
-              IMAGES
-          =============================================== */}
+            <div className="rounded-2xl bg-white border border-[#E8D7C8] p-5">
+              <VariantsSection
+                variants={variants}
+                activeVariantId={previewVariantId}
+                onApplyVariant={setPreviewVariantId}
+              />
+            </div>
 
-          <AssetsSection
-            state={{ images }}
-          />
+            <div className="h-24" />
+          </div>
 
-          {/* ===============================================
-              VARIANTS
-          =============================================== */}
+          {/* CTA */}
+          <div className="sticky bottom-0 border-t border-[#E8D7C8] bg-[#FAF6F1]/95 backdrop-blur p-4">
+            <button
+              onClick={() => setOpenOrderModal(true)}
+              className="w-full rounded-2xl bg-[#7A4E2D] py-4 font-semibold text-white shadow-md hover:bg-[#663D22] transition"
+            >
+              Add to Order
+            </button>
+          </div>
 
-          <VariantsSection
-            variants={variants}
-            activeVariantId={
-              previewVariantId
-            }
-            onApplyVariant={
-              setPreviewVariantId
-            }
-          />
-
-          {/* ===============================================
-              ORDER BUTTON
-          =============================================== */}
-
-          <button
-            onClick={() =>
-              setOpenOrderModal(true)
-            }
-            className="w-full rounded-xl bg-[#8C593F] py-3 font-semibold text-white"
-          >
-            Add to Order
-          </button>
         </div>
       </div>
 
-      {/* =====================================================
-          ORDER MODAL
-      ===================================================== */}
-
+      {/* MODAL */}
       <PlaceOrderModal
         open={openOrderModal}
-        onClose={() =>
-          setOpenOrderModal(false)
-        }
-        furniture={furniture}
+        onClose={() => setOpenOrderModal(false)}
+        furniture={safeFurniture}
       />
     </div>
   );

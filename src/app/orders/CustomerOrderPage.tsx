@@ -12,14 +12,8 @@ export default function CustomerOrdersPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  /**
-   * USER
-   */
   const { user } = useUser();
 
-  /**
-   * ORDERS
-   */
   const {
     data: orders = [],
     isLoading,
@@ -27,24 +21,15 @@ export default function CustomerOrdersPage() {
     error,
   } = useMyOrders();
 
-  /**
-   * CONVERSATIONS
-   */
   const { conversations } = useConversationList({
     userId: user?.id ?? "",
     role: "customer",
   });
 
-  /**
-   * MAP
-   */
   const conversationMap = useMemo(() => {
     return new Map(conversations.map((c) => [c.order_id, c]));
   }, [conversations]);
 
-  /**
-   * PAYMENT STATE (URL)
-   */
   const paymentStatus = searchParams.get("payment");
   const paymentOrderId = searchParams.get("orderId");
 
@@ -67,64 +52,75 @@ export default function CustomerOrdersPage() {
     }
   }, [paymentStatus, paymentOrderId]);
 
-  /**
-   * CLOSE MODAL
-   */
   const closeModal = () => {
     router.replace("/orders", { scroll: false });
   };
 
-  /**
-   * LOADING
-   */
+  /* =========================================================
+     LOADING
+  ========================================================= */
   if (isLoading) {
     return (
-      <div className="min-h-screen font-sans bg-[#FFF8F0]">
+      <div className="min-h-screen bg-[#FAF6F1]">
         <Navbar />
-        <div className="flex justify-center items-center h-[70vh] text-[#4B3F3F] font-semibold">
+        <div className="flex h-[70vh] items-center justify-center text-[#5A4636]">
           Loading your orders...
         </div>
       </div>
     );
   }
 
-  /**
-   * ERROR
-   */
+  /* =========================================================
+     ERROR
+  ========================================================= */
   if (isError) {
     return (
-      <div className="min-h-screen font-sans bg-[#FFF8F0]">
+      <div className="min-h-screen bg-[#FAF6F1]">
         <Navbar />
-        <div className="flex justify-center items-center h-[70vh] text-red-600 font-semibold">
-          {error?.message ?? "Failed to load orders"}
+        <div className="flex h-[70vh] flex-col items-center justify-center text-red-600">
+          <p className="font-medium">
+            {error?.message ?? "Failed to load orders"}
+          </p>
+
+          <button
+            onClick={() => router.refresh()}
+            className="mt-4 rounded-xl bg-[#7A4E2D] px-5 py-2 text-white hover:bg-[#663D22] transition"
+          >
+            Retry
+          </button>
         </div>
       </div>
     );
   }
 
-  /**
-   * UI
-   */
   return (
-    <div className="min-h-screen font-sans bg-[#FFF8F0] text-[#4B3F3F]">
+    <div className="min-h-screen bg-[#FAF6F1] text-[#3A2B22]">
       <Navbar />
 
-      {/* HERO */}
-      <section className="py-16 px-8 text-center">
-        <h1 className="text-4xl font-bold mb-4">My Orders</h1>
-        <p className="text-[#6B584B] max-w-xl mx-auto">
-          Track your furniture orders, quotation status, and production progress.
+      {/* =========================================================
+         HERO (aligned with catalog style)
+      ========================================================= */}
+      <section className="mx-auto max-w-7xl px-6 pt-10 pb-6">
+        <h1 className="text-4xl font-bold tracking-tight">
+          My Orders
+        </h1>
+
+        <p className="mt-2 text-sm text-[#6A5646] max-w-2xl">
+          Track your furniture journey — from design selection to production and delivery.
         </p>
       </section>
 
-      {/* ORDERS */}
-      <section className="pb-16 px-8">
+      {/* =========================================================
+         ORDERS GRID
+      ========================================================= */}
+      <section className="mx-auto max-w-7xl px-6 pb-16">
+
         {orders.length === 0 ? (
-          <div className="text-center text-[#6B584B] text-lg">
-            You have no orders yet.
+          <div className="mt-20 text-center text-[#6A5646]">
+            You don’t have any orders yet.
           </div>
         ) : (
-          <div className="grid gap-6 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
             {orders.map((order) => (
               <OrderCard
                 key={order.id}
@@ -137,52 +133,57 @@ export default function CustomerOrdersPage() {
             ))}
           </div>
         )}
+
       </section>
 
-      {/* PAYMENT MODAL */}
+      {/* =========================================================
+         PAYMENT MODAL (refined showroom style)
+      ========================================================= */}
       {hasPaymentModal && paymentModalState && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-xl w-[90%] max-w-md shadow-lg text-center">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
+
+          <div className="w-[90%] max-w-md rounded-2xl bg-white border border-[#E8D7C8] shadow-2xl p-6 text-center">
 
             {paymentModalState.status === "processing" && (
               <>
-                <h2 className="text-lg font-semibold mb-2">
-                  Processing Payment...
+                <h2 className="text-lg font-semibold text-[#3A2B22]">
+                  Processing Payment
                 </h2>
-                <p className="text-sm text-gray-600">
-                  We are confirming your payment.
+                <p className="mt-2 text-sm text-[#6A5646]">
+                  We are confirming your payment with our system.
                 </p>
               </>
             )}
 
             {paymentModalState.status === "success" && (
               <>
-                <h2 className="text-lg font-semibold mb-2 text-green-600">
+                <h2 className="text-lg font-semibold text-green-700">
                   Payment Successful
                 </h2>
-                <p className="text-sm text-gray-600">
-                  Your order has been updated successfully.
+                <p className="mt-2 text-sm text-[#6A5646]">
+                  Your order has been updated and sent to production.
                 </p>
               </>
             )}
 
             {paymentModalState.status === "cancelled" && (
               <>
-                <h2 className="text-lg font-semibold mb-2 text-red-600">
+                <h2 className="text-lg font-semibold text-red-600">
                   Payment Cancelled
                 </h2>
-                <p className="text-sm text-gray-600">
-                  You can try again anytime.
+                <p className="mt-2 text-sm text-[#6A5646]">
+                  No worries — you can retry anytime.
                 </p>
               </>
             )}
 
             <button
               onClick={closeModal}
-              className="mt-4 bg-black text-white px-4 py-2 rounded text-sm"
+              className="mt-6 w-full rounded-xl bg-[#7A4E2D] px-4 py-2 text-white hover:bg-[#663D22] transition"
             >
               Close
             </button>
+
           </div>
         </div>
       )}

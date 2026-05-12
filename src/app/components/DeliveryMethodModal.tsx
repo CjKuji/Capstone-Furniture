@@ -29,21 +29,13 @@ type Props = {
   open: boolean;
   onClose: () => void;
   items: SelectedItem[];
-
-  /**
-   * SAFE CALLBACK (parent must always pass this)
-   */
   onSave?: (data: DeliveryData) => void;
-
-  /**
-   * RESTORE DRAFT WHEN REOPENING
-   */
   initialValue?: DeliveryData | null;
 };
 
 /**
  * =========================================================
- * DELIVERY MODAL (DRAFT EDITOR)
+ * COMPONENT
  * =========================================================
  */
 
@@ -57,40 +49,32 @@ export default function DeliveryMethodModal({
   const STORE_PICKUP =
     "BL Sash Factory, 92 Upper Kalaklan, Olongapo City";
 
-  /**
-   * =========================================================
-   * LOCAL STATE
-   * =========================================================
-   */
-  const [deliveryMethod, setDeliveryMethod] =
-    useState<DeliveryMethod>("pickup");
+  const [method, setMethod] = useState<DeliveryMethod>("pickup");
 
   const [form, setForm] = useState({
     phone_number: "",
     delivery_address: "",
   });
 
-  const isDelivery = deliveryMethod === "delivery";
+  const isDelivery = method === "delivery";
 
   /**
    * =========================================================
-   * SAFE REHYDRATION (ONLY ON OPEN)
+   * HYDRATION
    * =========================================================
-   * - restores draft
-   * - avoids overwriting user edits while open
    */
   useEffect(() => {
     if (!open) return;
 
     if (initialValue) {
-      setDeliveryMethod(initialValue.delivery_method);
+      setMethod(initialValue.delivery_method);
 
       setForm({
         phone_number: initialValue.phone_number ?? "",
         delivery_address: initialValue.delivery_address ?? "",
       });
     } else {
-      setDeliveryMethod("pickup");
+      setMethod("pickup");
       setForm({
         phone_number: "",
         delivery_address: "",
@@ -100,50 +84,37 @@ export default function DeliveryMethodModal({
 
   /**
    * =========================================================
-   * CLOSE (NO STATE RESET)
+   * PAYLOAD
    * =========================================================
    */
-  function handleClose() {
-    onClose();
-  }
-
-  /**
-   * =========================================================
-   * VALIDATION
-   * =========================================================
-   */
-  const canSave = useMemo(() => {
-    const phoneValid = form.phone_number.trim().length >= 10;
-
-    if (!items?.length || !phoneValid) return false;
-
-    if (isDelivery) {
-      return form.delivery_address.trim().length >= 10;
-    }
-
-    return true;
-  }, [form, isDelivery, items]);
-
-  /**
-   * =========================================================
-   * SAVE (DRAFT ONLY → PARENT STATE)
-   * =========================================================
-   */
-  function handleSave() {
-    if (!canSave) return;
-    if (typeof onSave !== "function") return; // 🔥 FIX: prevents runtime crash
-
-    const payload: DeliveryData = {
-      delivery_method: deliveryMethod,
+  const payload: DeliveryData = useMemo(() => {
+    return {
+      delivery_method: method,
       phone_number: form.phone_number.trim() || null,
       delivery_address: isDelivery
-        ? form.delivery_address.trim()
+        ? form.delivery_address.trim() || null
         : null,
       pickup_location: isDelivery ? null : STORE_PICKUP,
     };
+  }, [method, form.phone_number, form.delivery_address, isDelivery]);
+
+  /**
+   * =========================================================
+   * SAVE
+   * =========================================================
+   */
+  function handleSave() {
+    if (!items?.length) return;
+
+    const phoneValid = form.phone_number.trim().length >= 10;
+    const addressValid =
+      !isDelivery || form.delivery_address.trim().length >= 10;
+
+    if (!phoneValid || !addressValid) return;
+    if (typeof onSave !== "function") return;
 
     onSave(payload);
-    handleClose();
+    onClose();
   }
 
   if (!open) return null;
@@ -153,43 +124,42 @@ export default function DeliveryMethodModal({
 
       {/* BACKDROP */}
       <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={handleClose}
+        className="absolute inset-0 bg-black/80"
+        onClick={onClose}
       />
 
       {/* MODAL */}
-      <div className="relative w-full max-w-md max-h-[90vh] overflow-y-auto bg-white rounded-3xl shadow-2xl border border-black/10 p-5 sm:p-7 space-y-6">
+      <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl border border-black p-6 space-y-6">
 
         {/* HEADER */}
-        <div className="space-y-2">
-          <h2 className="text-xl sm:text-2xl font-semibold text-black">
+        <div>
+          <h2 className="text-2xl font-bold text-black">
             Delivery Method
           </h2>
-
-          <p className="text-sm text-black/70">
-            Saved as draft — you can still edit before placing order.
+          <p className="text-sm text-black font-medium mt-1">
+            Choose how your order will be delivered
           </p>
         </div>
 
         {/* TOGGLE */}
-        <div className="flex gap-2">
+        <div className="grid grid-cols-2 gap-3">
           <button
-            onClick={() => setDeliveryMethod("pickup")}
-            className={`flex-1 py-2.5 rounded-xl border transition ${
-              deliveryMethod === "pickup"
+            onClick={() => setMethod("pickup")}
+            className={`py-3 rounded-xl border font-semibold transition ${
+              method === "pickup"
                 ? "bg-black text-white border-black"
-                : "text-black border-black/20 hover:border-black"
+                : "bg-white text-black border-black hover:bg-black hover:text-white"
             }`}
           >
             Pickup
           </button>
 
           <button
-            onClick={() => setDeliveryMethod("delivery")}
-            className={`flex-1 py-2.5 rounded-xl border transition ${
-              deliveryMethod === "delivery"
+            onClick={() => setMethod("delivery")}
+            className={`py-3 rounded-xl border font-semibold transition ${
+              method === "delivery"
                 ? "bg-black text-white border-black"
-                : "text-black border-black/20 hover:border-black"
+                : "bg-white text-black border-black hover:bg-black hover:text-white"
             }`}
           >
             Delivery
@@ -198,17 +168,17 @@ export default function DeliveryMethodModal({
 
         {/* PHONE */}
         <div>
-          <label className="text-sm font-medium text-black">
+          <label className="text-sm font-bold text-black">
             Phone Number
           </label>
 
           <input
-            className="w-full rounded-xl border border-black/20 px-3 py-2 text-sm mt-1"
+            className="w-full mt-2 px-4 py-3 border border-black rounded-xl text-sm text-black placeholder-black/60"
             placeholder="09xx xxx xxxx"
             value={form.phone_number}
             onChange={(e) =>
-              setForm((prev) => ({
-                ...prev,
+              setForm((p) => ({
+                ...p,
                 phone_number: e.target.value,
               }))
             }
@@ -218,17 +188,17 @@ export default function DeliveryMethodModal({
         {/* ADDRESS */}
         {isDelivery && (
           <div>
-            <label className="text-sm font-medium text-black">
+            <label className="text-sm font-bold text-black">
               Delivery Address
             </label>
 
             <textarea
-              className="w-full rounded-xl border border-black/20 px-3 py-2 text-sm min-h-[100px] mt-1"
+              className="w-full mt-2 px-4 py-3 border border-black rounded-xl text-sm text-black min-h-[110px]"
               placeholder="House No, Street, Barangay, City, Province"
               value={form.delivery_address}
               onChange={(e) =>
-                setForm((prev) => ({
-                  ...prev,
+                setForm((p) => ({
+                  ...p,
                   delivery_address: e.target.value,
                 }))
               }
@@ -238,20 +208,26 @@ export default function DeliveryMethodModal({
 
         {/* PICKUP */}
         {!isDelivery && (
-          <div className="rounded-xl border border-black/10 p-4 text-sm">
-            <div className="font-semibold">Pickup Location</div>
-            <div className="text-black/70">{STORE_PICKUP}</div>
+          <div className="rounded-xl border border-black p-4">
+            <div className="font-bold text-black">
+              Pickup Location
+            </div>
+            <div className="text-black font-medium mt-1">
+              {STORE_PICKUP}
+            </div>
           </div>
         )}
 
         {/* ITEMS */}
-        <div className="rounded-xl border border-black/10 p-4 space-y-2">
-          <div className="text-sm font-semibold">Order Items</div>
+        <div className="rounded-xl border border-black p-4 space-y-2">
+          <div className="font-bold text-black">
+            Order Items
+          </div>
 
           {items.map((i, idx) => (
             <div
               key={idx}
-              className="flex justify-between text-sm text-black/70"
+              className="flex justify-between text-sm text-black font-medium"
             >
               <span className="truncate pr-3">{i.label}</span>
               <span>x{i.quantity}</span>
@@ -260,23 +236,22 @@ export default function DeliveryMethodModal({
         </div>
 
         {/* TIP */}
-        <div className="text-xs text-black/60 border border-black/10 p-3 rounded-xl">
-          💡 This is a draft step — nothing is final yet.
+        <div className="text-sm font-medium text-black border border-black p-3 rounded-xl">
+          💡 This is only a draft — you can still edit everything before placing order.
         </div>
 
         {/* ACTIONS */}
         <div className="flex gap-3">
           <button
-            onClick={handleClose}
-            className="flex-1 py-2.5 rounded-xl border border-black/20"
+            onClick={onClose}
+            className="flex-1 py-3 rounded-xl border border-black font-semibold text-black hover:bg-black hover:text-white"
           >
             Cancel
           </button>
 
           <button
             onClick={handleSave}
-            disabled={!canSave}
-            className="flex-1 py-2.5 rounded-xl bg-black text-white disabled:opacity-40"
+            className="flex-1 py-3 rounded-xl bg-black text-white font-semibold hover:opacity-90"
           >
             Save
           </button>

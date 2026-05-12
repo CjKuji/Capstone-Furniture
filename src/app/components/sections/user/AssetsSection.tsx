@@ -2,72 +2,53 @@
 
 import type { ImageUI } from "@/types/furniture-ui";
 
-type AssetsState = {
-  images: ImageUI[];
-};
-
 type Props = {
-  state: AssetsState;
+  state: { images: ImageUI[] };
 };
 
 export default function AssetsSection({ state }: Props) {
-  const hasImages = state.images?.length > 0;
+  const images = state.images?.filter((i) => !i.isDeleted) ?? [];
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 p-6 space-y-5">
+    <div className="space-y-6">
 
-      {/* HEADER */}
+      {/* TITLE */}
       <div>
-        <h3 className="text-sm font-semibold text-gray-900">
-          Media
+        <h3 className="text-sm font-semibold text-[#3A2B22]">
+          Images
         </h3>
-        <p className="text-xs text-gray-500 mt-1">
-          Product images
+        <p className="text-xs text-[#7A6A5A] mt-1">
+          Product visual references
         </p>
       </div>
 
-      {/* IMAGES */}
-      <div>
-        <label className="text-xs font-medium text-gray-600">
-          Images
-        </label>
+      {images.length === 0 ? (
+        <div className="text-sm text-[#9A8A7A]">
+          No images available
+        </div>
+      ) : (
+        <div className="grid grid-cols-3 gap-3">
 
-        {!hasImages ? (
-          <div className="mt-3 text-sm text-gray-400">
-            No images available
-          </div>
-        ) : (
-          <div className="grid grid-cols-3 gap-4 mt-3">
+          {images.map((img) => (
+            <div
+              key={img.id ?? img.clientId}
+              className="relative overflow-hidden rounded-xl bg-white border border-[#E8D7C8]"
+            >
+              <img
+                src={img.url}
+                className="h-24 w-full object-cover"
+              />
 
-            {state.images
-              .filter((i) => !i.isDeleted)
-              .map((img) => {
-                const key = img.id ?? img.clientId;
+              {img.isPrimary && (
+                <div className="absolute top-2 left-2 text-[10px] bg-black/70 text-white px-2 py-1 rounded">
+                  Main
+                </div>
+              )}
+            </div>
+          ))}
 
-                return (
-                  <div
-                    key={key}
-                    className="rounded-xl border overflow-hidden bg-white"
-                  >
-                    <img
-                      src={img.url}
-                      className="h-28 w-full object-cover"
-                      alt=""
-                    />
-
-                    {img.isPrimary && (
-                      <div className="text-[10px] bg-black text-white px-2 py-1">
-                        Thumbnail
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-
-          </div>
-        )}
-      </div>
-
+        </div>
+      )}
     </div>
   );
 }

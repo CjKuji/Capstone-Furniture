@@ -5,15 +5,7 @@ import type { VariantUI } from "@/types/furniture-ui";
 
 type Props = {
   variants: VariantUI[];
-
-  /**
-   * ONLY for 3D model preview
-   */
   onApplyVariant?: (variantId: string | null) => void;
-
-  /**
-   * optional external control (controlled mode)
-   */
   activeVariantId?: string | null;
 };
 
@@ -22,117 +14,93 @@ export default function VariantsSection({
   onApplyVariant,
   activeVariantId,
 }: Props) {
-  /**
-   * =========================================================
-   * INTERNAL STATE (ONLY USED IF NOT CONTROLLED BY PARENT)
-   * =========================================================
-   */
-  const [internalActive, setInternalActive] = useState<string | null>(null);
+  const [internal, setInternal] = useState<string | null>(null);
 
   const isControlled = activeVariantId !== undefined;
-  const currentActive = isControlled ? activeVariantId : internalActive;
+  const active = isControlled ? activeVariantId : internal;
 
-  /**
-   * =========================================================
-   * APPLY VARIANT (3D PREVIEW ONLY)
-   * =========================================================
-   */
-  const applyVariant = (id: string | null) => {
-    if (!isControlled) {
-      setInternalActive(id);
-    }
-
+  const setVariant = (id: string | null) => {
+    if (!isControlled) setInternal(id);
     onApplyVariant?.(id);
   };
 
-  /**
-   * =========================================================
-   * ACTIVE CHECK
-   * =========================================================
-   */
-  const isActive = (id: string | null) => currentActive === id;
-
-  /**
-   * =========================================================
-   * UI
-   * =========================================================
-   */
   return (
-    <div className="bg-white rounded-2xl border border-black p-6 space-y-4">
+    <div className="space-y-6">
 
-      {/* HEADER */}
+      {/* TITLE */}
       <div>
-        <h3 className="text-sm font-semibold text-black">
+        <h3 className="text-sm font-semibold text-[#3A2B22]">
           Variants
         </h3>
-
-        <p className="text-xs text-black mt-1">
-          Click a variant to preview it on the 3D model.
+        <p className="text-xs text-[#7A6A5A] mt-1">
+          Preview different materials and finishes
         </p>
       </div>
 
-      {/* DEFAULT OPTION */}
+      {/* DEFAULT */}
       <button
-        onClick={() => applyVariant(null)}
-        className={`w-full text-left p-4 border rounded-xl transition ${
-          isActive(null)
-            ? "border-black shadow-sm"
-            : "border-black/40"
+        onClick={() => setVariant(null)}
+        className={`w-full text-left p-4 rounded-xl border transition ${
+          active === null
+            ? "border-[#7A4E2D] bg-[#F5E8DA]"
+            : "border-[#E8D7C8] bg-white"
         }`}
       >
-        <div className="text-sm font-semibold text-black">
-          Default Furniture
+        <div className="text-sm font-medium">
+          Default Finish
         </div>
-
-        <div className="text-xs text-black">
-          Base model (no variant texture)
+        <div className="text-xs text-[#7A6A5A]">
+          Base material
         </div>
       </button>
 
-      {/* VARIANTS LIST */}
+      {/* VARIANTS */}
       <div className="space-y-3">
+
         {variants
           .filter((v) => !v.isDeleted)
           .map((v) => {
             const id = v.id ?? v.clientId;
 
+            const isActive = active === id;
+
             return (
               <button
                 key={id}
-                onClick={() => applyVariant(id)}
-                className={`w-full flex items-center gap-3 p-4 border rounded-xl transition ${
-                  isActive(id)
-                    ? "border-black shadow-sm"
-                    : "border-black/40"
+                onClick={() => setVariant(id)}
+                className={`w-full flex items-center gap-3 p-4 rounded-xl border transition ${
+                  isActive
+                    ? "border-[#7A4E2D] bg-[#F5E8DA]"
+                    : "border-[#E8D7C8] bg-white"
                 }`}
               >
+
                 {/* IMAGE */}
-                <div className="w-12 h-12 border border-black rounded-lg overflow-hidden flex-shrink-0">
+                <div className="w-12 h-12 rounded-lg overflow-hidden border border-[#E8D7C8] bg-white">
                   {v.previewUrl ? (
                     <img
                       src={v.previewUrl}
-                      alt={v.name}
                       className="w-full h-full object-cover"
                     />
                   ) : (
-                    <div className="flex items-center justify-center h-full text-xs text-black">
-                      No Img
+                    <div className="text-[10px] flex items-center justify-center h-full text-[#9A8A7A]">
+                      No image
                     </div>
                   )}
                 </div>
 
-                {/* INFO */}
-                <div className="text-left">
-                  <div className="text-sm font-semibold text-black">
+                {/* TEXT */}
+                <div>
+                  <div className="text-sm font-medium">
                     {v.name}
                   </div>
-
-                  <div className="text-xs text-black">
+                  <div className="text-xs text-[#7A6A5A]">
                     {v.priceAdjustment
                       ? `+₱${Number(v.priceAdjustment).toLocaleString()}`
                       : "No price change"}
                   </div>
                 </div>
+
               </button>
             );
           })}

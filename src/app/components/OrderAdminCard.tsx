@@ -212,173 +212,234 @@ export default function OrderCard({
   ========================================================= */
 
   return (
-    <>
-      <div className="overflow-hidden rounded-2xl border bg-white shadow-sm transition hover:shadow-md">
+  <>
+    <div className="group overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm transition hover:shadow-lg">
 
-        {/* HEADER */}
-        <div className="space-y-3 border-b p-5">
-          <div className="flex justify-between">
-            <span className={`rounded-full px-3 py-1 text-xs ${statusUI.color}`}>
-              {statusUI.label}
-            </span>
+      {/* ================= HEADER ================= */}
+      <div className="space-y-4 border-b border-black/10 p-5 bg-gradient-to-b from-white to-[#FAF7F2]">
 
-            <span className="text-xs text-gray-400">
-              {new Date(order.created_at).toLocaleDateString()}
-            </span>
-          </div>
+        <div className="flex items-start justify-between gap-3">
 
-          <div>
-            <h2 className="text-sm font-semibold text-gray-900">
-              {order.order_reference_code ?? "Pending Order"}
-            </h2>
+          {/* STATUS */}
+          <span
+            className={`rounded-full px-3 py-1 text-xs font-semibold tracking-wide ${statusUI.color}`}
+          >
+            {statusUI.label}
+          </span>
 
-            <p className="text-xs text-gray-500">{totalPieces} items</p>
-          </div>
-
-          {/* FINANCIAL */}
-          <div className="grid grid-cols-3 gap-3 pt-2">
-            <div className="rounded-xl bg-gray-50 p-3">
-              <p className="text-[10px] text-gray-500">TOTAL</p>
-              <p className="text-sm font-semibold">₱{finalTotal.toLocaleString()}</p>
-            </div>
-
-            <div className="rounded-xl bg-green-50 p-3">
-              <p className="text-[10px] text-gray-500">PAID</p>
-              <p className="text-sm font-semibold text-green-600">
-                {paymentsLoading ? "..." : `₱${totalPaid.toLocaleString()}`}
-              </p>
-            </div>
-
-            <div className={`rounded-xl p-3 ${remaining > 0 ? "bg-red-50" : "bg-green-50"}`}>
-              <p className="text-[10px] text-gray-500">REMAINING</p>
-              <p className={`text-sm font-semibold ${remaining > 0 ? "text-red-600" : "text-green-600"}`}>
-                ₱{remaining.toLocaleString()}
-              </p>
-            </div>
-          </div>
+          {/* DATE */}
+          <span className="text-xs font-medium text-black/70">
+            {new Date(order.created_at).toLocaleString()}
+          </span>
         </div>
 
-        {/* MESSAGE */}
-        <div className="px-5 pt-4">
-          <div className="rounded-xl border bg-gray-50 px-3 py-2 text-xs text-gray-600">
-            {orderMessage}
-          </div>
+        {/* ORDER ID */}
+        <div>
+          <h2 className="text-sm font-semibold text-black">
+            {order.order_reference_code ?? "Pending Order"}
+          </h2>
+
+          <p className="mt-1 text-xs font-medium text-black/70">
+            {totalPieces} item(s)
+          </p>
         </div>
 
-        {/* DETAILS */}
-        <div className="grid gap-3 px-5 py-4 text-xs text-gray-600">
-          <div className="flex justify-between">
-            <span>Customer</span>
-            <span className="text-gray-900">{order.customer_name || "-"}</span>
+        {/* ================= FINANCIAL STRIP ================= */}
+        <div className="grid grid-cols-3 gap-3">
+
+          <div className="rounded-xl border border-black/10 bg-white p-3">
+            <p className="text-[10px] font-semibold text-black">
+              TOTAL
+            </p>
+            <p className="mt-1 text-sm font-bold text-black">
+              ₱{finalTotal.toLocaleString()}
+            </p>
           </div>
 
-          <div className="flex justify-between">
-            <span>Phone</span>
-            <span className="text-gray-900">{order.phone_number || "-"}</span>
+          <div className="rounded-xl border border-black/10 bg-white p-3">
+            <p className="text-[10px] font-semibold text-black">
+              PAID
+            </p>
+            <p className="mt-1 text-sm font-bold text-green-600">
+              {paymentsLoading ? "..." : `₱${totalPaid.toLocaleString()}`}
+            </p>
           </div>
 
-          <div className="flex justify-between">
-            <span>Method</span>
-            <span className="text-gray-900 capitalize">{order.delivery_method}</span>
-          </div>
-
-          <div className="flex justify-between">
-            <span>{isPickup ? "Pickup" : "Address"}</span>
-            <span className="text-right text-gray-900 max-w-[60%]">
-              {isPickup ? order.pickup_location || "-" : order.delivery_address || "-"}
-            </span>
-          </div>
-        </div>
-
-        {/* CHARGES */}
-        <div className="px-5 pb-4">
-          <div className="flex justify-between rounded-xl border bg-gray-50 p-3">
-            <div>
-              <p className="text-[10px] text-gray-500">CHARGES</p>
-              <div className={`mt-1 inline-flex rounded px-2 py-1 text-xs ${chargeUI.color}`}>
-                {chargeUI.label} • {safeCharges.length}
-              </div>
-            </div>
-
-            <button
-              onClick={() => setOpenViewCharges(true)}
-              className="text-xs text-gray-500 hover:underline"
+          <div className="rounded-xl border border-black/10 bg-white p-3">
+            <p className="text-[10px] font-semibold text-black">
+              BALANCE
+            </p>
+            <p
+              className={`mt-1 text-sm font-bold ${
+                remaining > 0 ? "text-red-600" : "text-green-600"
+              }`}
             >
-              View
-            </button>
+              ₱{remaining.toLocaleString()}
+            </p>
           </div>
-        </div>
 
-        {/* ACTIONS */}
-        <div className="border-t bg-gray-50 px-5 py-4">
-          <OrderActionBar
-            order={order}
-            totalPaid={totalPaid}
-            finalTotal={finalTotal}
-            adminId={adminId}
-            onOpenFinalize={() => setOpenFinalizeCharges(true)}
-          />
-
-          <div className="mt-3 flex gap-2">
-            <button onClick={() => setOpenDetail(true)} className="flex-1 rounded-xl border bg-white py-2 text-sm">
-              Details
-            </button>
-
-            <button onClick={() => setOpenChat(true)} className="flex-1 rounded-xl bg-gray-900 py-2 text-sm text-white">
-              Chat {unreadCount > 0 && `(${unreadCount})`}
-            </button>
-
-            {canReviewCancel && (
-              <button
-                onClick={() => setOpenCancel(true)}
-                className="flex-1 rounded-xl bg-yellow-500 py-2 text-sm font-semibold text-white"
-              >
-                Cancel
-              </button>
-            )}
-          </div>
         </div>
       </div>
 
-      {/* MODALS */}
-      <OrderFullDetailModal open={openDetail} onClose={() => setOpenDetail(false)} order={order} />
+      {/* ================= MESSAGE ================= */}
+      <div className="px-5 pt-4">
+        <div className="rounded-xl border border-black/10 bg-[#FAF7F2] p-3 text-xs font-medium text-black">
+          {orderMessage || "No customer message"}
+        </div>
+      </div>
 
-      <ChatModal
-        open={openChat}
-        onClose={() => setOpenChat(false)}
-        order={order}
-        currentUserId={order.user_id}
-        senderType="admin"
-      />
+      {/* ================= CUSTOMER INFO ================= */}
+      <div className="grid gap-3 px-5 py-4 text-xs">
 
-      <ChargesModal
-        open={openViewCharges}
-        onClose={() => setOpenViewCharges(false)}
-        orderId={order.id}
-        adminId={adminId}
-        chargeStatus={order.charge_status}
-        baseQuoteTotal={Number(order.quote_total_price ?? 0)}
-      />
+        <div className="flex justify-between">
+          <span className="font-medium text-black">Customer</span>
+          <span className="font-semibold text-black">
+            {order.customer_name || "-"}
+          </span>
+        </div>
 
-      <ChargesModal
-        open={openFinalizeCharges}
-        onClose={() => setOpenFinalizeCharges(false)}
-        orderId={order.id}
-        adminId={adminId}
-        chargeStatus={order.charge_status}
-        baseQuoteTotal={Number(order.quote_total_price ?? 0)}
-      />
+        <div className="flex justify-between">
+          <span className="font-medium text-black">Phone</span>
+          <span className="font-semibold text-black">
+            {order.phone_number || "-"}
+          </span>
+        </div>
 
-      <CancelRequestModal
-        open={openCancel}
-        onClose={() => setOpenCancel(false)}
-        reason={order.cancel_reason ?? ""}
-        orderStatus={order.order_status}
-        paymentStatus={order.payment_status}
-        isLoading={isProcessingCancel}
-        onApprove={handleApprove}
-        onReject={handleReject}
-      />
-    </>
-  );
+        <div className="flex justify-between">
+          <span className="font-medium text-black">Method</span>
+          <span className="font-semibold text-black capitalize">
+            {order.delivery_method}
+          </span>
+        </div>
+
+        <div className="flex justify-between gap-4">
+          <span className="font-medium text-black">
+            {isPickup ? "Pickup" : "Address"}
+          </span>
+
+          <span className="max-w-[65%] text-right font-semibold text-black">
+            {isPickup
+              ? order.pickup_location || "-"
+              : order.delivery_address || "-"}
+          </span>
+        </div>
+
+      </div>
+
+      {/* ================= CHARGES ================= */}
+      <div className="px-5 pb-4">
+
+        <div className="flex items-center justify-between rounded-xl border border-black/10 bg-white p-3">
+
+          <div>
+            <p className="text-[10px] font-semibold text-black">
+              CHARGES
+            </p>
+
+            <div
+              className={`mt-1 inline-flex rounded-full px-2 py-1 text-xs font-semibold ${chargeUI.color}`}
+            >
+              {chargeUI.label} • {safeCharges.length}
+            </div>
+          </div>
+
+          <button
+            onClick={() => setOpenViewCharges(true)}
+            className="rounded-lg border border-black/20 px-3 py-1 text-xs font-medium text-black hover:bg-black hover:text-white transition"
+          >
+            View
+          </button>
+
+        </div>
+
+      </div>
+
+      {/* ================= ACTIONS ================= */}
+      <div className="border-t border-black/10 bg-white px-5 py-4">
+
+        <OrderActionBar
+          order={order}
+          totalPaid={totalPaid}
+          finalTotal={finalTotal}
+          adminId={adminId}
+          onOpenFinalize={() => setOpenFinalizeCharges(true)}
+        />
+
+        <div className="mt-4 grid grid-cols-3 gap-2">
+
+          <button
+            onClick={() => setOpenDetail(true)}
+            className="rounded-xl border border-black/20 bg-white py-2 text-sm font-medium text-black hover:bg-black hover:text-white transition"
+          >
+            Details
+          </button>
+
+          <button
+            onClick={() => setOpenChat(true)}
+            className="rounded-xl bg-black py-2 text-sm font-medium text-white hover:opacity-90 transition"
+          >
+            Chat {unreadCount > 0 && `(${unreadCount})`}
+          </button>
+
+          {canReviewCancel && (
+            <button
+              onClick={() => setOpenCancel(true)}
+              className="rounded-xl bg-red-600 py-2 text-sm font-semibold text-white hover:bg-red-700 transition"
+            >
+              Cancel
+            </button>
+          )}
+
+        </div>
+
+      </div>
+
+    </div>
+
+    {/* ================= MODALS ================= */}
+
+    <OrderFullDetailModal
+      open={openDetail}
+      onClose={() => setOpenDetail(false)}
+      order={order}
+    />
+
+    <ChatModal
+      open={openChat}
+      onClose={() => setOpenChat(false)}
+      order={order}
+      currentUserId={adminId}
+      senderType="admin"
+    />
+
+    <ChargesModal
+      open={openViewCharges}
+      onClose={() => setOpenViewCharges(false)}
+      orderId={order.id}
+      adminId={adminId}
+      chargeStatus={order.charge_status}
+      baseQuoteTotal={Number(order.quote_total_price ?? 0)}
+    />
+
+    <ChargesModal
+      open={openFinalizeCharges}
+      onClose={() => setOpenFinalizeCharges(false)}
+      orderId={order.id}
+      adminId={adminId}
+      chargeStatus={order.charge_status}
+      baseQuoteTotal={Number(order.quote_total_price ?? 0)}
+    />
+
+    <CancelRequestModal
+      open={openCancel}
+      onClose={() => setOpenCancel(false)}
+      reason={order.cancel_reason ?? ""}
+      orderStatus={order.order_status}
+      paymentStatus={order.payment_status}
+      isLoading={isProcessingCancel}
+      onApprove={handleApprove}
+      onReject={handleReject}
+    />
+  </>
+);
 }

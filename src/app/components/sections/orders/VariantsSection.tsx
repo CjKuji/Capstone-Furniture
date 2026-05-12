@@ -2,161 +2,113 @@
 
 import { useState } from "react";
 
-/**
- * =========================================================
- * UI-SAFE TYPES (MATCH order.ts SNAPSHOT STYLE)
- * =========================================================
- */
 type VariantSnapshot = {
   id: string;
   name?: string;
   preview_image_url?: string | null;
-  texture_url?: string | null;
   price_adjustment?: number | null;
 };
 
 type OrderItem = {
   id: string;
-
   variant_snapshot?: VariantSnapshot | null;
-
-  furniture_snapshot?: {
-    name?: string | null;
-  } | null;
+  furniture_snapshot?: { name?: string } | null;
 };
 
 type Props = {
   items?: OrderItem[] | null;
-
-  onApplyVariant?: (
-    itemId: string,
-    variant: VariantSnapshot | null
-  ) => void;
+  onApplyVariant?: (itemId: string, variant: VariantSnapshot | null) => void;
 };
 
 export default function OrderVariantsSection({
   items,
   onApplyVariant,
 }: Props) {
-  const safeItems = Array.isArray(items) ? items : [];
+  const safe = Array.isArray(items) ? items : [];
 
-  /**
-   * Track selected variant per item
-   */
-  const [activeVariants, setActiveVariants] = useState<
-    Record<string, string | null>
-  >({});
+  const [active, setActive] = useState<Record<string, string | null>>({});
 
-  if (!safeItems.length) {
+  if (!safe.length) {
     return (
-      <div className="border rounded-xl p-4 text-sm text-gray-400">
-        No variant snapshot available
+      <div className="rounded-2xl bg-white p-5 text-sm text-gray-400">
+        No variants available
       </div>
     );
   }
 
-  const handleApply = (
-    item: OrderItem,
-    variant: VariantSnapshot | null
-  ) => {
-    setActiveVariants((prev) => ({
-      ...prev,
-      [item.id]: variant?.id ?? null,
+  const apply = (item: OrderItem, v: VariantSnapshot | null) => {
+    setActive((p) => ({
+      ...p,
+      [item.id]: v?.id ?? null,
     }));
 
-    onApplyVariant?.(item.id, variant);
+    onApplyVariant?.(item.id, v);
   };
 
   return (
-    <div className="border rounded-xl p-4 space-y-6">
+    <div className="rounded-2xl bg-white border border-[#E8D7C8] p-5 space-y-6">
 
       {/* HEADER */}
       <div>
-        <h3 className="font-semibold">Variant Snapshot</h3>
-        <p className="text-xs text-gray-500">
-          Apply variants for preview (locked from order snapshot)
+        <h3 className="font-semibold text-[#3A2B22]">
+          Variants
+        </h3>
+        <p className="text-xs text-[#7A6A5A]">
+          Preview selectable finishes
         </p>
       </div>
 
-      {/* ITEMS */}
-      {safeItems.map((item, index) => {
-        const snapshot = item.variant_snapshot;
-
-        const isActive =
-          activeVariants[item.id] === snapshot?.id;
+      {safe.map((item, i) => {
+        const v = item.variant_snapshot;
+        const isActive = active[item.id] === v?.id;
 
         return (
           <div key={item.id} className="space-y-3">
 
-            {/* ITEM HEADER */}
-            <div className="flex justify-between items-center">
-              <p className="text-sm font-semibold">
-                Item {index + 1}
-              </p>
-
-              <p className="text-xs text-gray-500">
-                {item.furniture_snapshot?.name ?? "Unnamed Item"}
-              </p>
+            <div className="flex justify-between text-sm">
+              <span className="font-medium text-[#3A2B22]">
+                Item {i + 1}
+              </span>
+              <span className="text-[#7A6A5A]">
+                {item.furniture_snapshot?.name ?? "Unnamed"}
+              </span>
             </div>
 
-            {/* VARIANT BLOCK */}
-            {!snapshot ? (
+            {!v ? (
               <div className="text-sm text-gray-400">
-                No variant snapshot for this item
+                No variant available
               </div>
             ) : (
               <div
-                className={`flex items-center gap-4 p-3 border rounded-xl transition ${
+                className={`flex items-center gap-4 p-3 rounded-xl border transition ${
                   isActive
-                    ? "border-black bg-gray-100"
-                    : "bg-gray-50"
+                    ? "border-[#3A2B22] bg-[#F3E6DA]"
+                    : "border-[#E8D7C8] bg-[#FAF6F1]"
                 }`}
               >
 
-                {/* IMAGE */}
-                <div className="w-12 h-12 rounded overflow-hidden border bg-white">
-                  {snapshot.preview_image_url ? (
-                    <img
-                      src={snapshot.preview_image_url}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="text-[10px] text-gray-400 flex items-center justify-center h-full">
-                      No Img
-                    </div>
-                  )}
-                </div>
+                <img
+                  src={v.preview_image_url ?? ""}
+                  className="w-12 h-12 rounded-lg object-cover bg-white border"
+                />
 
-                {/* INFO */}
                 <div className="flex-1">
-                  <div className="text-sm font-medium">
-                    {snapshot.name ?? "Unnamed Variant"}
-                  </div>
+                  <p className="text-sm font-medium">
+                    {v.name}
+                  </p>
 
-                  <div className="text-xs text-gray-500">
-                    {snapshot.price_adjustment
-                      ? `+₱${Number(
-                          snapshot.price_adjustment
-                        ).toLocaleString()}`
-                      : "No price change"}
-                  </div>
+                  <p className="text-xs text-[#7A6A5A]">
+                    {v.price_adjustment
+                      ? `+₱${v.price_adjustment.toLocaleString()}`
+                      : "No adjustment"}
+                  </p>
                 </div>
 
-                {/* ACTION */}
                 <button
-                  onClick={() =>
-                    handleApply(
-                      item,
-                      isActive ? null : snapshot
-                    )
-                  }
-                  className={`text-xs px-3 py-1 rounded border transition ${
-                    isActive
-                      ? "bg-black text-white"
-                      : "bg-white hover:bg-gray-100"
-                  }`}
+                  onClick={() => apply(item, isActive ? null : v)}
+                  className="text-xs px-3 py-1 rounded-lg bg-[#3A2B22] text-white hover:bg-black"
                 >
-                  {isActive ? "Applied" : "Apply"}
+                  {isActive ? "Remove" : "Apply"}
                 </button>
 
               </div>

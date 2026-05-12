@@ -23,7 +23,7 @@ export default function FurnitureCard({
   onDelete,
 }: FurnitureCardProps) {
   /* =========================================================
-     FIXED FIELD ACCESS (MATCH YOUR NEW TYPES)
+     SAFE DATA
   ========================================================= */
 
   const images = item.images ?? [];
@@ -34,8 +34,7 @@ export default function FurnitureCard({
     images[0]?.image_url ||
     "/placeholder.png";
 
-  const categoryName = item.category?.name ?? "Uncategorized";
-
+  const categoryName = item.category?.name || "Uncategorized";
   const price = item.base_price ?? 0;
 
   const imageCount = images.length;
@@ -43,115 +42,126 @@ export default function FurnitureCard({
 
   const hasModel = Boolean(item.model_url);
 
-  const width = item.width_cm ?? null;
-  const depth = item.depth_cm ?? null;
-  const height = item.height_cm ?? null;
+  const width = item.width_cm;
+  const depth = item.depth_cm;
+  const height = item.height_cm;
 
   const dimensionText =
-    width !== null || depth !== null || height !== null
+    width || depth || height
       ? `${width ?? "-"} × ${depth ?? "-"} × ${height ?? "-"} cm`
-      : "No dimensions";
+      : "No dimensions set";
 
   const status = item.publish_status ?? "draft";
 
   const statusStyle: Record<string, string> = {
-    published: "bg-emerald-50 text-emerald-700 border border-emerald-200",
-    draft: "bg-amber-50 text-amber-700 border border-amber-200",
-    archived: "bg-gray-100 text-gray-600 border border-gray-200",
+    published: "bg-black text-white",
+    draft: "bg-white text-black border border-black/20",
+    archived: "bg-black/10 text-black",
   };
 
-  return (
-    <div className="group bg-white border border-gray-200 rounded-xl overflow-hidden hover:shadow-md hover:border-gray-300 transition-all duration-300">
+  /* =========================================================
+     UI
+  ========================================================= */
 
-      {/* IMAGE */}
-      <div className="relative h-40 bg-gray-100 overflow-hidden">
+  return (
+    <div className="group flex flex-col h-[420px] rounded-2xl border border-black/10 bg-white overflow-hidden transition hover:shadow-lg">
+
+      {/* ================= IMAGE ================= */}
+      <div className="relative h-44 bg-white overflow-hidden flex-shrink-0">
+
         <img
           src={primaryImage}
           alt={item.name}
-          className="w-full h-full object-cover group-hover:scale-[1.02] transition duration-500"
+          className="w-full h-full object-cover group-hover:scale-[1.03] transition duration-500"
         />
 
         {/* STATUS */}
         <div
-          className={`absolute top-3 left-3 text-[10px] px-2.5 py-1 rounded-md font-medium capitalize ${statusStyle[status]}`}
+          className={`absolute top-3 left-3 px-3 py-1 text-[11px] font-semibold rounded-full ${statusStyle[status]}`}
         >
           {status}
         </div>
 
         {/* BADGES */}
-        <div className="absolute bottom-3 left-3 flex flex-wrap gap-2">
-          <div className="flex items-center gap-1 text-[10px] bg-black/75 text-white px-2 py-1 rounded-md">
+        <div className="absolute bottom-3 left-3 flex gap-2 flex-wrap">
+
+          <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-black text-white text-[10px] font-medium">
             <ImageIcon size={12} />
             {imageCount}
           </div>
 
-          <div className="flex items-center gap-1 text-[10px] bg-white text-gray-700 px-2 py-1 rounded-md border">
+          <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-white text-black text-[10px] font-medium border border-black/10">
             <Package size={12} />
             {variantCount}
           </div>
 
           {hasModel && (
-            <div className="flex items-center gap-1 text-[10px] bg-white text-gray-700 px-2 py-1 rounded-md border">
+            <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-white text-black text-[10px] font-medium border border-black/10">
               <Box size={12} />
               3D
             </div>
           )}
+
         </div>
       </div>
 
-      {/* CONTENT */}
-      <div className="p-4 space-y-4">
+      {/* ================= CONTENT ================= */}
+      <div className="p-5 flex flex-col flex-1 space-y-3">
 
-        {/* TITLE */}
-        <div className="flex justify-between items-start gap-3">
+        {/* TITLE + PRICE */}
+        <div className="flex justify-between gap-3">
+
           <div className="min-w-0">
-            <h3 className="text-sm font-semibold text-gray-900 truncate">
+            <h3 className="text-sm font-semibold text-black truncate">
               {item.name}
             </h3>
 
-            <p className="text-xs text-gray-500 mt-0.5">
+            <p className="text-xs font-medium text-black mt-1">
               {categoryName}
             </p>
           </div>
 
           <div className="text-right shrink-0">
-            <p className="text-sm font-semibold text-gray-900">
+            <p className="text-sm font-bold text-black">
               ₱{price.toLocaleString()}
             </p>
-
-            <p className="text-[10px] text-gray-400">
+            <p className="text-[10px] font-medium text-black">
               base price
             </p>
           </div>
+
         </div>
 
-        {/* DESCRIPTION */}
-        {item.description ? (
-          <p className="text-xs text-gray-600 line-clamp-2 leading-relaxed">
-            {item.description}
-          </p>
-        ) : (
-          <p className="text-xs text-gray-400 italic">
-            No description
-          </p>
-        )}
+        {/* DESCRIPTION (FIXED HEIGHT SAFE) */}
+        <div className="h-[40px]">
+          {item.description ? (
+            <p className="text-xs font-medium text-black leading-snug line-clamp-2">
+              {item.description}
+            </p>
+          ) : (
+            <p className="text-xs font-medium text-black">
+              No description added
+            </p>
+          )}
+        </div>
 
         {/* DIMENSIONS */}
-        <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
-          <div className="flex items-center gap-2">
-            <Ruler size={13} className="text-gray-500" />
+        <div className="rounded-xl border border-black/10 p-3 flex items-center gap-2">
 
-            <span className="text-[11px] text-gray-600">
-              {dimensionText}
-            </span>
-          </div>
+          <Ruler size={14} className="text-black" />
+
+          <span className="text-xs font-medium text-black">
+            {dimensionText}
+          </span>
+
         </div>
 
-        {/* ACTIONS */}
-        <div className="pt-3 border-t border-gray-100 flex gap-2">
+        {/* ACTIONS (ALWAYS BOTTOM FIXED) */}
+        <div className="mt-auto flex gap-2">
+
           <button
             onClick={() => onEdit(item)}
-            className="flex-1 h-9 rounded-lg bg-gray-900 text-white text-sm font-medium hover:bg-black transition flex items-center justify-center gap-2"
+            className="flex-1 h-10 rounded-xl bg-black text-white text-sm font-semibold flex items-center justify-center gap-2 hover:opacity-90 transition"
           >
             <Pencil size={14} />
             Manage
@@ -159,12 +169,13 @@ export default function FurnitureCard({
 
           <button
             onClick={() => onDelete(item.id)}
-            title="Delete"
-            className="w-9 h-9 rounded-lg border border-gray-200 text-gray-600 hover:text-red-600 hover:border-red-200 hover:bg-red-50 transition flex items-center justify-center"
+            className="h-10 w-10 rounded-xl border border-black text-black flex items-center justify-center hover:bg-black hover:text-white transition"
           >
-            <Trash2 size={15} />
+            <Trash2 size={16} />
           </button>
+
         </div>
+
       </div>
     </div>
   );

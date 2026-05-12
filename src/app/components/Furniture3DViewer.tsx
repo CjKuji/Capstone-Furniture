@@ -62,32 +62,6 @@ function Model({
 }
 
 /* =========================================================
-   SCALE CUBE (1 meter reference)
-========================================================= */
-
-function RealWorldCube() {
-  return (
-    <group position={[-2, 0.5, 0]}>
-      <mesh>
-        <boxGeometry args={[1, 1, 1]} />
-        <meshStandardMaterial
-          color="#ff3b3b"
-          wireframe
-          transparent
-          opacity={0.25}
-        />
-      </mesh>
-
-      <Html position={[0, 1.2, 0]} center>
-        <div className="rounded bg-black/70 px-2 py-1 text-xs text-white">
-          100cm × 100cm × 100cm (1m³)
-        </div>
-      </Html>
-    </group>
-  );
-}
-
-/* =========================================================
    MAIN VIEWER
 ========================================================= */
 
@@ -98,18 +72,16 @@ export default function Furniture3DViewer({
   modelUrl: string;
   dimensions?: Dimensions;
 }) {
-  const isValid = !!modelUrl;
-
-  if (!isValid) {
+  if (!modelUrl) {
     return (
-      <div className="h-[600px] flex items-center justify-center text-gray-400">
+      <div className="h-[600px] flex items-center justify-center text-black">
         No model available
       </div>
     );
   }
 
   /* =========================================================
-     🔥 FIXED AR FUNCTION (REAL WORKING APPROACH)
+     AR HANDLER (SIMPLIFIED + SAFE)
   ========================================================= */
 
   const enterAR = () => {
@@ -120,20 +92,16 @@ export default function Furniture3DViewer({
     const isIOS = /iPhone|iPad|iPod/i.test(ua);
     const isAndroid = /Android/i.test(ua);
 
-    /* =====================================================
-       🍎 iOS (Quick Look - NEEDS .USDZ)
-    ===================================================== */
+    // iOS AR Quick Look (requires .usdz)
     if (isIOS) {
-      const a = document.createElement("a");
-      a.href = modelUrl; // MUST be .usdz for real AR
-      a.rel = "ar";
-      a.click();
+      const link = document.createElement("a");
+      link.href = modelUrl;
+      link.rel = "ar";
+      link.click();
       return;
     }
 
-    /* =====================================================
-       🤖 ANDROID (Scene Viewer FIX)
-    ===================================================== */
+    // Android Scene Viewer
     if (isAndroid) {
       const intent = `intent://arvr.google.com/scene-viewer/1.0?file=${encodeURIComponent(
         modelUrl
@@ -143,26 +111,24 @@ export default function Furniture3DViewer({
       return;
     }
 
-    /* =====================================================
-       FALLBACK
-    ===================================================== */
+    // fallback
     window.open(modelUrl, "_blank");
   };
 
   return (
-    <div className="relative h-[600px] w-full overflow-hidden rounded-xl bg-neutral-100">
+    <div className="relative h-[600px] w-full overflow-hidden rounded-xl bg-white border">
 
       {/* AR BUTTON */}
       <button
         onClick={enterAR}
-        className="absolute right-3 top-3 z-10 rounded bg-black px-3 py-2 text-xs text-white"
+        className="absolute right-4 top-4 z-10 rounded-xl bg-black px-4 py-2 text-xs font-medium text-white"
       >
         Enter AR
       </button>
 
-      {/* 3D VIEW */}
+      {/* 3D CANVAS */}
       <Canvas camera={{ position: [3, 2, 4], fov: 50 }}>
-        <ambientLight intensity={0.4} />
+        <ambientLight intensity={0.5} />
         <directionalLight position={[5, 8, 5]} intensity={1} />
 
         <Environment preset="city" />
@@ -170,17 +136,14 @@ export default function Furniture3DViewer({
         {/* FLOOR */}
         <mesh rotation={[-Math.PI / 2, 0, 0]}>
           <planeGeometry args={[20, 20]} />
-          <meshStandardMaterial color="#ddd" />
+          <meshStandardMaterial color="#e5e5e5" />
         </mesh>
-
-        {/* SCALE CUBE */}
-        <RealWorldCube />
 
         {/* MODEL */}
         <Suspense
           fallback={
             <Html center>
-              <div>Loading...</div>
+              <div className="text-black">Loading model...</div>
             </Html>
           }
         >
@@ -189,11 +152,6 @@ export default function Furniture3DViewer({
 
         <OrbitControls />
       </Canvas>
-
-      {/* INFO */}
-      <div className="absolute bottom-3 left-3 rounded bg-black/60 px-3 py-2 text-xs text-white">
-        1m reference cube = real-world scale
-      </div>
     </div>
   );
 }

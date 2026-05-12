@@ -10,16 +10,18 @@ type Props = {
   messages: Message[];
   isLoading: boolean;
   currentUserId?: string;
+  senderType?: "customer" | "admin";
 };
 
 export default function ChatMessages({
   messages,
   isLoading,
   currentUserId,
+  senderType = "customer",
 }: Props) {
   /**
    * =========================================================
-   * MEMOIZED RENDER DATA
+   * PREPARE RENDER STRUCTURE
    * =========================================================
    */
   const rendered = useMemo(() => {
@@ -29,8 +31,14 @@ export default function ChatMessages({
       const prev = arr[index - 1];
       const next = arr[index + 1];
 
-      const isMine = msg.sender_id === currentUserId;
-      const isSystem = msg.sender_type === "system";
+      /**
+       * =====================================================
+       * CLEAN OWNERSHIP LOGIC (ONLY ADMIN / CUSTOMER)
+       * =====================================================
+       */
+      const isMine = currentUserId
+        ? msg.sender_id === currentUserId
+        : msg.sender_type === senderType;
 
       const currentDate = getDateLabel(msg.created_at);
       const prevDate = prev ? getDateLabel(prev.created_at) : null;
@@ -47,21 +55,17 @@ export default function ChatMessages({
         next.sender_id === msg.sender_id &&
         getDateLabel(next.created_at) === currentDate;
 
-      const senderName = isSystem
-        ? "System"
-        : isMine
-          ? "You"
-          : msg.sender?.name ||
-            (msg.sender_type === "admin" ? "Admin" : "Customer");
-
-      const senderRole = isSystem ? "system" : msg.sender_type;
+      const senderName = isMine
+        ? "You"
+        : msg.sender_type === "admin"
+          ? "Admin"
+          : "Customer";
 
       return {
         msg,
         isMine,
-        isSystem,
         senderName,
-        senderRole,
+        senderRole: msg.sender_type, // only admin/customer
         showDateSeparator,
         dateLabel: currentDate,
         showSenderName: !prevSameSender,
@@ -69,7 +73,7 @@ export default function ChatMessages({
         isGroupedBottom: !!nextSameSender,
       };
     });
-  }, [messages, currentUserId]);
+  }, [messages, currentUserId, senderType]);
 
   /**
    * =========================================================
@@ -78,9 +82,11 @@ export default function ChatMessages({
    */
   if (isLoading) {
     return (
-      <p className="text-sm text-[#8C593F] text-center mt-10">
-        Loading conversation...
-      </p>
+      <div className="flex items-center justify-center py-10">
+        <p className="text-sm text-[#8C593F] animate-pulse">
+          Loading conversation...
+        </p>
+      </div>
     );
   }
 
@@ -91,25 +97,33 @@ export default function ChatMessages({
    */
   if (!messages.length) {
     return (
-      <p className="text-sm text-[#8C593F] text-center mt-10">
-        No messages yet — start the conversation
-      </p>
+      <div className="flex items-center justify-center py-10">
+        <div className="text-center space-y-1">
+          <p className="text-sm text-[#8C593F]">
+            No messages yet
+          </p>
+          <p className="text-xs text-[#B08A74]">
+            Start the conversation below
+          </p>
+        </div>
+      </div>
     );
   }
 
   /**
    * =========================================================
-   * UI
+   * CHAT LIST UI
    * =========================================================
    */
   return (
-    <div className="space-y-2">
+    <div className="flex flex-col gap-3">
       {rendered.map((item) => (
-        <div key={item.msg.id}>
-          {/* DATE SEPARATOR */}
+        <div key={item.msg.id} className="space-y-2">
+
+          {/* DATE CHIP */}
           {item.showDateSeparator && (
-            <div className="flex justify-center my-4">
-              <div className="text-[11px] px-3 py-1 rounded-full bg-[#FAF7F2] border border-[#E8D9CC] text-[#8C593F] shadow-sm">
+            <div className="flex justify-center py-2">
+              <div className="text-[11px] px-3 py-1 rounded-full bg-white/70 border border-[#E8D9CC] text-[#8C593F] shadow-sm backdrop-blur">
                 {item.dateLabel}
               </div>
             </div>

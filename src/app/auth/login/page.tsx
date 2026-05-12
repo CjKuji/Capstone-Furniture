@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { authService } from "@/services/authService";
 import { useRouter } from "next/navigation";
@@ -13,148 +14,160 @@ export default function Login() {
   const { register, handleSubmit } = useForm<FormData>();
   const router = useRouter();
 
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   const onSubmit = async (data: FormData) => {
+    setLoading(true);
+    setError(null);
+
     try {
-      /**
-       * 1. LOGIN (via authService)
-       */
       const { user } = await authService.signIn(
         data.email,
         data.password
       );
 
       if (!user) {
-        alert("Login failed: no user returned");
+        setError("Invalid login credentials.");
+        setLoading(false);
         return;
       }
 
-      /**
-       * 2. GET PROFILE (role check)
-       */
       const profile = await authService.getProfile(user.id);
 
       if (!profile) {
-        alert("Profile not found");
+        setError("User profile not found.");
+        setLoading(false);
         return;
       }
 
-      /**
-       * 3. ROLE-BASED REDIRECT
-       */
-      if (profile.role === "admin" || profile.role === "super_admin") {
+      if (
+        profile.role === "admin" ||
+        profile.role === "super_admin"
+      ) {
         router.push("/admin");
       } else {
         router.push("/");
       }
     } catch (err: any) {
-      alert(err.message || "Login failed");
+      setError(err?.message || "Login failed. Please try again.");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex bg-[#FFF8F0]">
+    <div className="min-h-screen flex bg-white">
 
-      {/* LEFT SIDE INTRODUCTION */}
-      <div className="hidden lg:flex w-1/2 flex-col justify-center px-20 bg-[#F3E6DA]">
+      {/* LEFT SIDE */}
+      <div className="hidden lg:flex w-1/2 flex-col justify-center px-24 bg-[#F5E9DD]">
 
         <h1 className="text-4xl font-bold text-black mb-6">
           FurniCraft
         </h1>
 
-        <p className="text-black text-lg leading-relaxed mb-6 max-w-lg">
-          Welcome to FurniCraft — a platform where you can explore
-          beautifully designed furniture and customize it to match
-          your personal style and living space.
+        <p className="text-black text-lg leading-relaxed mb-8 max-w-lg">
+          A modern furniture experience — design, customize, and preview your furniture in real-time before ordering.
         </p>
 
-        <div className="space-y-4 text-black">
+        <div className="space-y-6 text-black">
 
           <div>
-            <h3 className="font-semibold text-lg">Customize Your Furniture</h3>
-            <p className="text-sm">
-              Choose materials, colors, and sizes to match your home perfectly.
+            <h3 className="font-semibold text-lg">Customize Everything</h3>
+            <p className="text-base">
+              Change materials, sizes, finishes, and styles in seconds.
             </p>
           </div>
 
           <div>
-            <h3 className="font-semibold text-lg">3D Visualization</h3>
-            <p className="text-sm">
-              Preview furniture models in 3D before placing your order.
+            <h3 className="font-semibold text-lg">3D Preview</h3>
+            <p className="text-base">
+              See your furniture in real scale before you buy.
             </p>
           </div>
 
           <div>
-            <h3 className="font-semibold text-lg">Track Your Orders</h3>
-            <p className="text-sm">
-              Monitor the progress of your furniture from production to pickup.
+            <h3 className="font-semibold text-lg">Order Tracking</h3>
+            <p className="text-base">
+              Follow your order from production to delivery or pickup.
             </p>
           </div>
 
         </div>
       </div>
 
-      {/* LOGIN FORM */}
+      {/* FORM */}
       <div className="flex w-full lg:w-1/2 items-center justify-center px-6">
 
-        <div className="w-full max-w-md bg-white shadow-lg rounded-xl p-8">
+        <div className="w-full max-w-md bg-white border border-black/10 rounded-2xl p-8 shadow-lg">
 
-          <h2 className="text-2xl font-bold text-black mb-2">
-            Login to your account
+          <h2 className="text-2xl font-semibold text-black">
+            Welcome back
           </h2>
 
-          <p className="text-black text-sm mb-6">
-            Enter your credentials to continue.
+          <p className="text-black mt-1 mb-6">
+            Login to continue to your account
           </p>
+
+          {/* ERROR */}
+          {error && (
+            <div className="mb-4 rounded-lg border border-red-500 bg-red-50 px-3 py-2 text-sm text-black">
+              {error}
+            </div>
+          )}
 
           <form
             onSubmit={handleSubmit(onSubmit)}
-            className="flex flex-col gap-4"
+            className="flex flex-col gap-5"
           >
 
             {/* EMAIL */}
-            <div className="flex flex-col gap-1">
+            <div>
               <label className="text-sm font-medium text-black">
-                Email
+                Email Address
               </label>
+
               <input
                 type="email"
                 {...register("email", { required: true })}
-                placeholder="Enter your email"
-                className="border border-gray-300 rounded-lg px-3 py-2 text-black placeholder-black focus:outline-none focus:ring-2 focus:ring-[#A16B4C]"
+                placeholder="you@example.com"
+                className="mt-1 w-full rounded-xl border border-black/20 px-3 py-2 text-black focus:outline-none focus:border-black"
               />
             </div>
 
             {/* PASSWORD */}
-            <div className="flex flex-col gap-1">
+            <div>
               <label className="text-sm font-medium text-black">
                 Password
               </label>
+
               <input
                 type="password"
                 {...register("password", { required: true })}
                 placeholder="Enter your password"
-                className="border border-gray-300 rounded-lg px-3 py-2 text-black placeholder-black focus:outline-none focus:ring-2 focus:ring-[#A16B4C]"
+                className="mt-1 w-full rounded-xl border border-black/20 px-3 py-2 text-black focus:outline-none focus:border-black"
               />
             </div>
 
-            {/* LOGIN BUTTON */}
+            {/* BUTTON */}
             <button
               type="submit"
-              className="mt-2 bg-[#A16B4C] text-white py-2 rounded-lg hover:bg-[#8C593F] transition font-semibold"
+              disabled={loading}
+              className="w-full rounded-xl bg-black py-3 font-medium text-white disabled:opacity-40"
             >
-              Login
+              {loading ? "Signing in..." : "Login"}
             </button>
 
           </form>
 
-          {/* REGISTER LINK */}
-          <p className="text-sm text-black mt-6 text-center">
-            No account?{" "}
+          {/* REGISTER */}
+          <p className="mt-6 text-center text-black">
+            Don’t have an account?{" "}
             <span
               onClick={() => router.push("/auth/register")}
-              className="text-[#A16B4C] font-semibold cursor-pointer hover:underline"
+              className="cursor-pointer font-semibold text-black underline"
             >
-              Register here
+              Create one
             </span>
           </p>
 

@@ -6,7 +6,6 @@ import { createPortal } from "react-dom";
 /**
  * TYPES
  */
-
 type SelectedItem = {
   furniture_id: string;
   variant_id: string | null;
@@ -34,29 +33,19 @@ export default function RequestModal({
   onSave,
   initialValue = null,
 }: Props) {
-  /**
-   * STATE (local draft)
-   */
   const [description, setDescription] = useState("");
 
   /**
-   * FIX:
-   * Sync when modal opens or initialValue changes
-   * (prevents stale value bug)
+   * Sync draft when modal opens
    */
   useEffect(() => {
-    if (open) {
-      setDescription(initialValue?.description ?? "");
-    }
+    if (!open) return;
+    setDescription(initialValue?.description ?? "");
   }, [open, initialValue]);
 
   if (!open) return null;
 
   const canSave = description.trim().length >= 5;
-
-  function handleClose() {
-    onClose();
-  }
 
   function handleSave() {
     if (!canSave) return;
@@ -73,52 +62,67 @@ export default function RequestModal({
 
       {/* BACKDROP */}
       <div
-        className="absolute inset-0 bg-black/60"
-        onClick={handleClose}
+        className="absolute inset-0 bg-black/80"
+        onClick={onClose}
       />
 
       {/* MODAL */}
-      <div className="relative w-full max-w-lg bg-white rounded-2xl p-6 space-y-5 shadow-xl">
+      <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-black/10 p-6 space-y-6">
 
         {/* HEADER */}
         <div>
-          <h2 className="text-lg font-semibold">Custom Request</h2>
-          <p className="text-sm text-black/60">
-            Describe changes like size, material, color, or design.
+          <h2 className="text-xl font-semibold text-black">
+            Custom Request
+          </h2>
+          <p className="text-sm text-black mt-1">
+            Tell us exactly how you want your furniture modified.
           </p>
         </div>
 
-        {/* INPUT */}
-        <textarea
-          className="w-full min-h-[140px] border border-black/20 rounded-lg p-3 text-sm outline-none focus:border-black"
-          placeholder="Example: resize table to 6ft, walnut finish, rounded edges..."
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-        />
+        {/* TEXTAREA */}
+        <div>
+          <label className="text-sm font-medium text-black">
+            Request Details
+          </label>
+
+          <textarea
+            className="w-full mt-2 min-h-[140px] border border-black/20 rounded-xl p-3 text-sm text-black focus:outline-none focus:border-black"
+            placeholder="Example: resize to 6ft, walnut finish, rounded corners, thicker legs..."
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
+        </div>
 
         {/* ITEMS PREVIEW */}
         {items.length > 0 && (
-          <div className="border border-black/10 rounded-lg p-3 space-y-1">
+          <div className="border border-black/10 rounded-xl p-4 space-y-2">
+            <div className="font-semibold text-black text-sm">
+              Items in this order
+            </div>
+
             {items.map((i, idx) => (
-              <div key={idx} className="flex justify-between text-sm">
-                <span>{i.label}</span>
-                <span>x{i.quantity}</span>
+              <div
+                key={idx}
+                className="flex justify-between text-sm text-black"
+              >
+                <span className="truncate pr-4">{i.label}</span>
+                <span className="font-medium">x{i.quantity}</span>
               </div>
             ))}
           </div>
         )}
 
         {/* TIP */}
-        <div className="text-xs text-black/60 border border-black/10 rounded-lg p-3">
-          💡 Be specific: dimensions, material, finish, references help accuracy.
+        <div className="border border-black/10 rounded-xl p-4 text-sm text-black">
+          💡 Be specific — size, material, color, inspiration photos, and finish
+          help us build exactly what you want.
         </div>
 
         {/* ACTIONS */}
         <div className="flex gap-3">
-
           <button
-            onClick={handleClose}
-            className="flex-1 border border-black/20 py-2 rounded-lg"
+            onClick={onClose}
+            className="flex-1 py-3 rounded-xl border border-black text-black font-medium"
           >
             Cancel
           </button>
@@ -126,11 +130,10 @@ export default function RequestModal({
           <button
             onClick={handleSave}
             disabled={!canSave}
-            className="flex-1 bg-black text-white py-2 rounded-lg disabled:opacity-40"
+            className="flex-1 py-3 rounded-xl bg-black text-white font-medium disabled:opacity-40"
           >
             Save Request
           </button>
-
         </div>
 
       </div>

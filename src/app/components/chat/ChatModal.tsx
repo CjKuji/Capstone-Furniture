@@ -32,27 +32,18 @@ export default function ChatModal({
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
-  /**
-   * =========================================================
-   * FIX: PASS readerType (IMPORTANT)
-   * =========================================================
-   */
   const { messages, isLoading, send } = useChat({
     orderId: order?.id ?? "",
-    readerType: senderType, // ✅ FIXED
+    readerType: senderType,
   });
 
-  /* ================= AUTO SCROLL ================= */
+  /* AUTO SCROLL */
   useEffect(() => {
     if (!open) return;
-
-    bottomRef.current?.scrollIntoView({
-      behavior: "smooth",
-      block: "end",
-    });
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, open]);
 
-  /* ================= ESC CLOSE ================= */
+  /* ESC CLOSE IMAGE VIEWER */
   useEffect(() => {
     if (!viewerImage) return;
 
@@ -64,7 +55,7 @@ export default function ChatModal({
     return () => window.removeEventListener("keydown", handleKey);
   }, [viewerImage]);
 
-  /* ================= SEND ================= */
+  /* SEND */
   const handleSend = async () => {
     if (!message.trim() && files.length === 0) return;
 
@@ -91,37 +82,50 @@ export default function ChatModal({
 
   return createPortal(
     <>
-      {/* MODAL */}
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
-        <div className="w-full max-w-2xl h-[85vh] flex flex-col overflow-hidden rounded-3xl bg-[#FAF7F2] border border-[#E8D9CC]">
+      {/* BACKDROP */}
+      <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
 
-          {/* HEADER */}
-          <div className="px-5 py-4 flex justify-between bg-white border-b border-[#E8D9CC]">
-            <div>
+        {/* MODAL WRAPPER */}
+        <div className="w-full max-w-3xl h-[88vh] flex flex-col rounded-3xl overflow-hidden bg-[#FAF7F2] shadow-2xl border border-[#E8D9CC]">
+
+          {/* ================= HEADER ================= */}
+          <div className="flex items-center justify-between px-5 py-4 bg-white/80 backdrop-blur border-b border-[#E8D9CC]">
+
+            <div className="space-y-1">
               <h2 className="text-sm font-semibold text-[#2B1D16]">
-                Order Conversation
+                Order Chat
               </h2>
+
               <p className="text-xs text-[#8C593F]">
                 #{order.order_reference_code}
               </p>
             </div>
 
-            <button onClick={onClose}>✕</button>
+            <button
+              onClick={onClose}
+              className="text-[#2B1D16] hover:bg-black/5 rounded-lg px-2 py-1"
+            >
+              ✕
+            </button>
           </div>
 
-          {/* MESSAGES */}
-          <div className="flex-1 overflow-y-auto px-4 py-5">
-            <ChatMessages
-              messages={messages}
-              isLoading={isLoading}
-              currentUserId={currentUserId}
-            />
+          {/* ================= CHAT AREA ================= */}
+          <div className="flex-1 overflow-y-auto px-4 py-5 space-y-4">
+
+            {/* messages wrapper */}
+            <div className="space-y-3">
+              <ChatMessages
+                messages={messages}
+                isLoading={isLoading}
+                currentUserId={currentUserId}
+              />
+            </div>
 
             <div ref={bottomRef} />
           </div>
 
-          {/* INPUT */}
-          <div className="border-t bg-white px-4 py-3 space-y-3">
+          {/* ================= INPUT AREA (STICKY FEEL) ================= */}
+          <div className="border-t border-[#E8D9CC] bg-white px-4 py-3 space-y-3">
 
             <ChatImagePreview
               files={files}
@@ -130,24 +134,24 @@ export default function ChatModal({
               }
             />
 
-            <ChatInput
-              message={message}
-              setMessage={setMessage}
-              files={files}
-              setFiles={setFiles}
-              onSend={handleSend}
-            />
+           <ChatInput
+  message={message}
+  setMessage={setMessage}
+  files={files}
+  setFiles={setFiles}
+  onSend={handleSend}
+/>
           </div>
         </div>
       </div>
 
-      {/* IMAGE VIEWER */}
+      {/* ================= IMAGE VIEWER ================= */}
       {viewerImage && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90"
           onClick={() => setViewerImage(null)}
         >
-          <div className="relative w-full max-w-4xl h-[80vh]">
+          <div className="relative w-full max-w-5xl h-[85vh]">
             <Image
               src={viewerImage}
               alt="Chat image"
