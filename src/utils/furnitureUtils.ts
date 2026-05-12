@@ -13,7 +13,7 @@ export function revokeFilePreview(url: string): void {
 }
 
 /* =========================================================
-   UI IMAGE MODEL (SINGLE SOURCE OF TRUTH)
+   UI IMAGE MODEL
 ========================================================= */
 
 export type ImageItem = {
@@ -44,7 +44,7 @@ export function ensurePrimaryImage<T extends { isPrimary: boolean }>(
 }
 
 /* =========================================================
-   DB → UI MAPPER (SAFE + CONSISTENT)
+   DB → UI MAPPER (FIXED)
 ========================================================= */
 
 import type { FurnitureItemAdmin } from "@/types/furniture";
@@ -52,9 +52,9 @@ import type { FurnitureItemAdmin } from "@/types/furniture";
 export function mapFurnitureImages(
   item: FurnitureItemAdmin | null
 ): ImageItem[] {
-  if (!item?.furniture_images?.length) return [];
+  if (!item?.images?.length) return [];
 
-  return item.furniture_images.map((img, i) => ({
+  return item.images.map((img, i) => ({
     id: img.id,
     file: undefined,
     url: img.image_url,

@@ -3,285 +3,290 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
 
+import DeliveryMethodModal from "@/app/components/DeliveryMethodModal";
+import RequestModal from "@/app/components/RequestModal";
 import { useOrderCreate } from "@/hooks/useCreateorder";
-import type { DeliveryMethod } from "@/types/enums";
 
-type Props = {
-  open: boolean;
-  onClose: () => void;
+/**
+ * TYPES
+ */
 
-  furnitureId: string;
-  variantId: string | null;
-
-  furnitureName: string;
-
-  basePrice?: number | null;
-  selectedVariantName?: string | null;
-  variantPriceAdjustment?: number | null;
+type FurnitureVariant = {
+  id: string;
+  name: string;
+  price_adjustment: number;
 };
+
+type Furniture = {
+  id: string;
+  name: string;
+  base_price: number;
+  variants: FurnitureVariant[];
+};
+
+type SelectedItem = {
+  furniture_id: string;
+  variant_id: string | null;
+  quantity: number;
+  label: string;
+  unit_price: number;
+};
+
+type DeliveryData = {
+  delivery_method: "pickup" | "delivery";
+  phone_number: string | null;
+  delivery_address: string | null;
+  pickup_location: string | null;
+};
+
+type RequestData = {
+  description: string;
+};
+
+type OrderDraft = {
+  delivery: DeliveryData | null;
+  request: RequestData | null;
+};
+
+/**
+ * FACTORY
+ */
+function buildItems(furniture: Furniture): SelectedItem[] {
+  return [
+    ...furniture.variants.map((v) => ({
+      furniture_id: furniture.id,
+      variant_id: v.id,
+      quantity: 0,
+      label: `${furniture.name} • ${v.name}`,
+      unit_price: furniture.base_price + v.price_adjustment,
+    })),
+    {
+      furniture_id: furniture.id,
+      variant_id: null,
+      quantity: 0,
+      label: furniture.name,
+      unit_price: furniture.base_price,
+    },
+  ];
+}
 
 export default function PlaceOrderModal({
   open,
   onClose,
-  furnitureId,
-  variantId,
-  furnitureName,
-  basePrice = 0,
-  selectedVariantName = null,
-  variantPriceAdjustment = 0,
-}: Props) {
-  const { mutateAsync, isPending } = useOrderCreate();
+  furniture,
+}: {
+  open: boolean;
+  onClose: () => void;
+  furniture: Furniture;
+}) {
+  const { createOrder, isPending } = useOrderCreate();
 
-  const [deliveryMethod, setDeliveryMethod] =
-    useState<DeliveryMethod>("pickup");
+  /**
+   * STATE
+   */
+  const [list, setList] = useState<SelectedItem[]>(() =>
+    buildItems(furniture)
+  );
 
-  const [form, setForm] = useState({
-    customer_name: "",
-    phone_number: "",
-    delivery_address: "",
-    delivery_notes: "",
+  const [orderDraft, setOrderDraft] = useState<OrderDraft>({
+    delivery: null,
+    request: null,
   });
+
+  const [showDelivery, setShowDelivery] = useState(false);
+  const [showRequest, setShowRequest] = useState(false);
 
   if (!open) return null;
 
-  const isDelivery = deliveryMethod === "delivery";
-
-  /*
-  =========================================================
-  PRICE (UI ONLY — backend recalculates anyway)
-  =========================================================
-  */
-  const base = Number(basePrice ?? 0);
-  const variantAdj = Number(variantPriceAdjustment ?? 0);
-  const estimatedTotal = base + variantAdj;
-
-  /*
-  =========================================================
-  VALIDATION
-  =========================================================
-  */
-  function validate() {
-    if (!isDelivery) return true;
-
-    if (
-      !form.customer_name.trim() ||
-      !form.phone_number.trim() ||
-      !form.delivery_address.trim()
-    ) {
-      alert("Please complete delivery details.");
-      return false;
-    }
-
-    return true;
+  /**
+   * RESET
+   */
+  function resetAll() {
+    setList(buildItems(furniture));
+    setOrderDraft({
+      delivery: null,
+      request: null,
+    });
   }
 
-  /*
-  =========================================================
-  SUBMIT ORDER
-  (ALIGNED WITH createOrder SERVICE)
-  =========================================================
-  */
-  async function handleSubmit() {
-    if (isPending) return;
-    if (!validate()) return;
+  /**
+   * UPDATE QTY
+   */
+  function updateQty(index: number, delta: number) {
+    setList((prev) =>
+      prev.map((item, i) =>
+        i === index
+          ? { ...item, quantity: Math.max(0, item.quantity + delta) }
+          : item
+      )
+    );
+  }
+
+  const activeItems = list.filter((i) => i.quantity > 0);
+
+  /**
+   * DEBUG (safe for dev only)
+   */
+  function debug() {
+    console.log("ORDER STATE:", {
+      orderDraft,
+      activeItems,
+    });
+  }
+
+  /**
+   * PLACE ORDER
+   */
+  async function handlePlaceOrder() {
+    debug();
+
+    if (!orderDraft.delivery || activeItems.length === 0) {
+      console.log("BLOCKED: missing delivery or items");
+      return;
+    }
+
+    /**
+     * =========================================================
+     * CLEAN PAYLOAD (MATCHES SERVICE 1:1)
+     * =========================================================
+     */
+    const payload = {
+      delivery_method: orderDraft.delivery.delivery_method,
+      phone_number: orderDraft.delivery.phone_number,
+      delivery_address: orderDraft.delivery.delivery_address,
+      pickup_location: orderDraft.delivery.pickup_location,
+
+      items: activeItems.map((item) => ({
+        furniture_id: item.furniture_id,
+        variant_id: item.variant_id,
+        quantity: item.quantity,
+      })),
+
+      /**
+       * ORDER-LEVEL REQUEST (ONLY ONE SOURCE OF TRUTH)
+       */
+      request: orderDraft.request?.description
+        ? {
+            description: orderDraft.request.description,
+          }
+        : null,
+    };
 
     try {
-      await mutateAsync({
-        furniture_id: furnitureId,
-        variant_id: variantId ?? null,
+      console.log("SENDING ORDER:", payload);
 
-        delivery_method: deliveryMethod,
+      await createOrder(payload);
 
-        customer_name: isDelivery
-          ? form.customer_name.trim()
-          : null,
+      console.log("ORDER SUCCESS");
 
-        phone_number: isDelivery
-          ? form.phone_number.trim()
-          : null,
-
-        delivery_address: isDelivery
-          ? form.delivery_address.trim()
-          : null,
-
-        delivery_notes: form.delivery_notes.trim() || null,
-      });
-
+      resetAll();
       onClose();
     } catch (err) {
-      console.error("❌ Order creation failed:", err);
-      alert("Failed to create order. Please try again.");
+      console.error("ORDER FAILED:", err);
     }
   }
 
-  /*
-  =========================================================
-  UI
-  =========================================================
-  */
   return createPortal(
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-      <div className="bg-white w-full max-w-xl rounded-2xl p-6 space-y-6 max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+
+      <div className="w-full max-w-lg rounded-2xl bg-white p-6 space-y-6 shadow-xl">
 
         {/* HEADER */}
-        <div>
-          <h2 className="text-xl font-semibold">Place Order</h2>
-          <p className="text-sm text-gray-500 mt-1">
-            {furnitureName}
-          </p>
+        <div className="flex justify-between items-center">
+          <h2 className="text-lg font-semibold">Place Order</h2>
+          <button
+            onClick={() => {
+              resetAll();
+              onClose();
+            }}
+          >
+            ✕
+          </button>
         </div>
 
-        {/* ORDER SUMMARY */}
-        <div className="border rounded-xl p-4 bg-[#FAFAFA] space-y-3">
-          <h3 className="font-semibold">Order Summary</h3>
-
-          <div className="flex justify-between text-sm">
-            <span>Furniture</span>
-            <span>{furnitureName}</span>
-          </div>
-
-          <div className="flex justify-between text-sm">
-            <span>Base Price</span>
-            <span>₱{base.toLocaleString()}</span>
-          </div>
-
-          <div className="flex justify-between text-sm">
-            <span>Selected Variant</span>
-            <span>{selectedVariantName || "Default"}</span>
-          </div>
-
-          <div className="flex justify-between text-sm">
-            <span>Variant Adjustment</span>
-            <span>₱{variantAdj.toLocaleString()}</span>
-          </div>
-
-          <div className="border-t pt-3 flex justify-between font-semibold">
-            <span>Estimated Total</span>
-            <span>₱{estimatedTotal.toLocaleString()}</span>
-          </div>
-
-          <p className="text-xs text-gray-500">
-            Final price will be confirmed by admin.
-          </p>
-        </div>
-
-        {/* DELIVERY METHOD */}
-        <div className="space-y-2">
-          <p className="font-medium">Delivery Method</p>
-
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={() => setDeliveryMethod("pickup")}
-              className={`px-4 py-2 rounded-lg border ${
-                deliveryMethod === "pickup"
-                  ? "bg-black text-white"
-                  : ""
-              }`}
+        {/* ITEMS */}
+        <div className="space-y-3 max-h-[300px] overflow-auto">
+          {list.map((item, idx) => (
+            <div
+              key={`${item.furniture_id}-${item.variant_id ?? "base"}`}
+              className="flex justify-between border p-3 rounded-lg"
             >
-              Pickup
-            </button>
+              <div>
+                <div className="text-sm">{item.label}</div>
+                <div className="text-xs opacity-70">
+                  ₱{item.unit_price.toLocaleString()}
+                </div>
+              </div>
 
-            <button
-              type="button"
-              onClick={() => setDeliveryMethod("delivery")}
-              className={`px-4 py-2 rounded-lg border ${
-                deliveryMethod === "delivery"
-                  ? "bg-black text-white"
-                  : ""
-              }`}
-            >
-              Delivery
-            </button>
-          </div>
+              <div className="flex gap-2 items-center">
+                <button onClick={() => updateQty(idx, -1)}>−</button>
+                <span>{item.quantity}</span>
+                <button onClick={() => updateQty(idx, 1)}>+</button>
+              </div>
+            </div>
+          ))}
         </div>
-
-        {/* PICKUP INFO */}
-        {!isDelivery && (
-          <div className="p-4 bg-gray-100 rounded-lg text-sm">
-            <p className="font-medium">Pickup Location</p>
-            <p className="text-gray-600 mt-1">
-              Visit our workshop to collect your furniture.
-            </p>
-          </div>
-        )}
-
-        {/* DELIVERY FORM */}
-        {isDelivery && (
-          <div className="space-y-3">
-            <input
-              placeholder="Full Name"
-              className="w-full border p-3 rounded-lg"
-              value={form.customer_name}
-              onChange={(e) =>
-                setForm({
-                  ...form,
-                  customer_name: e.target.value,
-                })
-              }
-            />
-
-            <input
-              placeholder="Phone Number"
-              className="w-full border p-3 rounded-lg"
-              value={form.phone_number}
-              onChange={(e) =>
-                setForm({
-                  ...form,
-                  phone_number: e.target.value,
-                })
-              }
-            />
-
-            <textarea
-              placeholder="Delivery Address"
-              rows={4}
-              className="w-full border p-3 rounded-lg"
-              value={form.delivery_address}
-              onChange={(e) =>
-                setForm({
-                  ...form,
-                  delivery_address: e.target.value,
-                })
-              }
-            />
-          </div>
-        )}
-
-        {/* NOTES */}
-        <textarea
-          placeholder="Notes (optional)"
-          rows={3}
-          className="w-full border p-3 rounded-lg"
-          value={form.delivery_notes}
-          onChange={(e) =>
-            setForm({
-              ...form,
-              delivery_notes: e.target.value,
-            })
-          }
-        />
 
         {/* ACTIONS */}
-        <div className="flex justify-end gap-3">
+        <div className="space-y-2">
+
           <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 border rounded-lg"
+            onClick={() => setShowDelivery(true)}
+            className="w-full border p-2 rounded"
           >
-            Cancel
+            Select Delivery Method
           </button>
 
           <button
-            type="button"
-            disabled={isPending}
-            onClick={handleSubmit}
-            className="px-5 py-2 bg-black text-white rounded-lg disabled:opacity-50"
+            onClick={() => setShowRequest(true)}
+            className="w-full border p-2 rounded"
           >
-            {isPending ? "Creating..." : "Confirm Order"}
+            Request Details
           </button>
+
+          <button
+            onClick={handlePlaceOrder}
+            disabled={!orderDraft.delivery || isPending}
+            className="w-full bg-black text-white p-2 rounded"
+          >
+            {isPending ? "Placing..." : "Place Order"}
+          </button>
+
+          <button
+            onClick={() => {
+              resetAll();
+              onClose();
+            }}
+            className="w-full border p-2 rounded"
+          >
+            Close
+          </button>
+
         </div>
       </div>
+
+      {/* DELIVERY MODAL */}
+      <DeliveryMethodModal
+        open={showDelivery}
+        onClose={() => setShowDelivery(false)}
+        items={activeItems}
+        onSave={(d) =>
+          setOrderDraft((p) => ({ ...p, delivery: d }))
+        }
+      />
+
+      {/* REQUEST MODAL */}
+      <RequestModal
+        open={showRequest}
+        onClose={() => setShowRequest(false)}
+        items={activeItems}
+        onSave={(d) =>
+          setOrderDraft((p) => ({
+            ...p,
+            request: d,
+          }))
+        }
+      />
     </div>,
     document.body
   );

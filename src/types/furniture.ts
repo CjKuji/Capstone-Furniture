@@ -1,7 +1,7 @@
 import type { PublishStatus } from "./enums";
 
 /* =========================================================
-   DATABASE TYPES
+   DATABASE CORE TABLE (READ ONLY - CAN USE NULL)
 ========================================================= */
 
 export type FurnitureDB = {
@@ -27,7 +27,7 @@ export type FurnitureDB = {
 };
 
 /* =========================================================
-   CATEGORY
+   CATEGORY TABLE
 ========================================================= */
 
 export type FurnitureCategory = {
@@ -36,7 +36,7 @@ export type FurnitureCategory = {
 };
 
 /* =========================================================
-   IMAGE (DB)
+   IMAGE TABLE
 ========================================================= */
 
 export type FurnitureImage = {
@@ -48,7 +48,7 @@ export type FurnitureImage = {
 };
 
 /* =========================================================
-   VARIANT (DB)
+   VARIANT TABLE (READ TYPE - DB SAFE)
 ========================================================= */
 
 export type FurnitureVariant = {
@@ -71,17 +71,36 @@ export type FurnitureVariant = {
 };
 
 /* =========================================================
-   ADMIN VIEW MODEL (JOINED)
+   UI / ADMIN MODEL
 ========================================================= */
 
 export type FurnitureItemAdmin = FurnitureDB & {
-  furniture_categories?: FurnitureCategory | null;
-  furniture_images?: FurnitureImage[];
-  furniture_variants?: FurnitureVariant[];
+  category: FurnitureCategory | null;
+  images: FurnitureImage[];
+  variants: FurnitureVariant[];
 };
 
 /* =========================================================
-   IMAGE PAYLOAD (MERGE ENGINE)
+   LIST ITEM
+========================================================= */
+
+export type FurnitureListItem = {
+  id: string;
+  name: string;
+  slug: string;
+
+  base_price: number;
+  publish_status: PublishStatus;
+
+  category_id: string | null;
+
+  thumbnail_url: string | null;
+
+  created_at: string;
+};
+
+/* =========================================================
+   IMAGE PAYLOAD (UI STATE)
 ========================================================= */
 
 export type FurnitureImagePayload = {
@@ -94,7 +113,7 @@ export type FurnitureImagePayload = {
 };
 
 /* =========================================================
-   VARIANT PAYLOAD (MERGE ENGINE)
+   VARIANT PAYLOAD (UI STATE)
 ========================================================= */
 
 export type FurnitureVariantPayload = {
@@ -105,6 +124,7 @@ export type FurnitureVariantPayload = {
   materialFile?: File;
 
   priceAdjustment?: number;
+
   isActive?: boolean;
   isDefault?: boolean;
 
@@ -113,19 +133,38 @@ export type FurnitureVariantPayload = {
   isDeleted?: boolean;
 };
 
+/* =========================================================
+   🔥 VARIANT INSERT TYPE (WRITE SAFE - NO NULL)
+========================================================= */
+
 export type FurnitureVariantInsert = {
   furniture_id: string;
   name: string;
-  texture_url: string | null;
-  preview_image_url: string | null;
+
+  texture_url?: string;         // ✅ FIXED (NO NULL)
+  preview_image_url?: string;   // ✅ FIXED (NO NULL)
+
   price_adjustment: number;
   is_active: boolean;
   sort_order: number;
 };
 
 /* =========================================================
-   FORM PAYLOAD (API LAYER)
-   🔥 FIX: dimensions is NOW REQUIRED
+   OPTIONAL: UPDATE TYPE (SAFE)
+========================================================= */
+
+export type FurnitureVariantUpdate = Partial<{
+  name: string;
+  texture_url: string;
+  preview_image_url: string;
+  price_adjustment: number;
+  is_active: boolean;
+  is_default: boolean;
+  sort_order: number;
+}>;
+
+/* =========================================================
+   FORM PAYLOAD
 ========================================================= */
 
 export type FurnitureFormPayload = {
@@ -146,32 +185,4 @@ export type FurnitureFormPayload = {
     depthCm: number;
     heightCm: number;
   };
-};
-
-/* =========================================================
-   UI IMAGE TYPE (FRONTEND STATE ONLY)
-========================================================= */
-
-export type ImageItem = {
-  id?: string;
-  file?: File;
-  url: string;
-
-  isPrimary: boolean;
-  isDeleted?: boolean;
-};
-
-export type FurnitureListItem = {
-  id: string;
-  name: string;
-  slug: string;
-
-  base_price: number;
-  publish_status: PublishStatus;
-
-  category_id: string | null;
-
-  thumbnail_url?: string | null;
-
-  created_at: string;
 };

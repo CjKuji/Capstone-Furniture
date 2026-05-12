@@ -1,12 +1,30 @@
-// lib/supabase.ts
 import { createClient } from "@supabase/supabase-js";
+import type { Database } from "@/types/supabase";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-export const supabase = createClient(supabaseUrl, supabaseKey, {
-  auth: {
-    persistSession: true,       // <-- store session in localStorage
-    detectSessionInUrl: true,   // <-- needed if using OAuth redirects
-  },
-});
+/**
+ * =========================================================
+ * TYPED SUPABASE CLIENT (SINGLETON)
+ * =========================================================
+ */
+
+declare global {
+
+  var __supabase__: ReturnType<typeof createClient<Database>> | undefined;
+}
+
+export const supabase: ReturnType<typeof createClient<Database>> =
+  globalThis.__supabase__ ??
+  createClient<Database>(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: false,
+    },
+  });
+
+if (process.env.NODE_ENV !== "production") {
+  globalThis.__supabase__ = supabase;
+}

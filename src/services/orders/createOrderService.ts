@@ -1,14 +1,26 @@
 import { supabase } from "@/lib/supabase";
 import type { CreateOrderPayload, Order } from "@/types/order";
 
+/**
+ * =========================================================
+ * CREATE ORDER (FINAL STABLE VERSION)
+ * =========================================================
+ * - order-level request only
+ * - chat message is the single source of truth
+ * - safe pricing (no NaN / negative crash)
+ * - snapshot guaranteed
+ */
+
 export async function createOrder(
-  payload: CreateOrderPayload
+  payload: CreateOrderPayload & {
+    request?: { description: string } | null;
+  }
 ): Promise<Order> {
-  /*
-  =========================================================
-  STEP 0: AUTH
-  =========================================================
-  */
+  /**
+   * =========================================================
+   * AUTH
+   * =========================================================
+   */
   const {
     data: { user },
     error: authError,
@@ -18,185 +30,203 @@ export async function createOrder(
     throw new Error("User not authenticated");
   }
 
-  /*
-  =========================================================
-  STEP 1: ADMIN
-  =========================================================
-  */
-  const { data: adminProfile, error: adminError } = await supabase
+  /**
+   * =========================================================
+   * ADMIN
+   * =========================================================
+   */
+  const { data: adminProfile } = await supabase
     .from("profiles")
     .select("id")
     .eq("role", "admin")
     .limit(1)
     .maybeSingle();
 
-  if (adminError || !adminProfile) {
+  if (!adminProfile) {
     throw new Error("No admin found");
   }
 
-  /*
-  =========================================================
-  STEP 2: FETCH FURNITURE
-  =========================================================
-  */
-  const { data: furniture, error: furnitureError } = await supabase
-    .from("furniture")
-    .select(`
-      id,
-      name,
-      description,
-      model_url,
-      base_price,
-      width_cm,
-      depth_cm,
-      height_cm,
-      category_id,
-      furniture_categories (
-        name
-      )
-    `)
-    .eq("id", payload.furniture_id)
+  /**
+   * =========================================================
+   * USER PROFILE
+   * =========================================================
+   */
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("full_name")
+    .eq("id", user.id)
     .single();
 
-  if (furnitureError || !furniture) {
-    throw new Error("Furniture not found");
-  }
+  const fallbackName =
+    profile?.full_name ||
+    payload.customer_name ||
+    user.email ||
+    "Unknown Customer";
 
-  /*
-  =========================================================
-  STEP 3: FETCH VARIANT
-  =========================================================
-  */
-  const { data: variant } = payload.variant_id
-    ? await supabase
-        .from("furniture_variants")
-        .select(
-          "id, name, texture_url, preview_image_url, price_adjustment"
-        )
-        .eq("id", payload.variant_id)
-        .single()
-    : { data: null };
-
-  /*
-  =========================================================
-  STEP 4: FETCH IMAGES
-  =========================================================
-  */
-  const { data: images } = await supabase
-    .from("furniture_images")
-    .select("image_url, is_primary")
-    .eq("furniture_id", payload.furniture_id)
-    .order("sort_order", { ascending: true });
-
-  /*
-  =========================================================
-  STEP 5: CATEGORY SAFE RESOLVE
-  =========================================================
-  */
-  const categoryName =
-    (furniture as any).furniture_categories?.name ??
-    (furniture as any).furniture_categories?.[0]?.name ??
-    null;
-
-  /*
-  =========================================================
-  STEP 6: SNAPSHOT
-  =========================================================
-  */
-  const furnitureSnapshot = {
-    id: furniture.id,
-    name: furniture.name,
-    description: furniture.description ?? null,
-
-    base_price: furniture.base_price,
-
-    width_cm: furniture.width_cm,
-    depth_cm: furniture.depth_cm,
-    height_cm: furniture.height_cm,
-
-    category: categoryName,
-
-    model_url: furniture.model_url,
-
-    images: (images ?? []).map((img) => ({
-      url: img.image_url,
-      isPrimary: img.is_primary,
-    })),
-  };
-
-  const variantSnapshot = variant
-    ? {
-        id: variant.id,
-        name: variant.name,
-        texture_url: variant.texture_url,
-        preview_image_url: variant.preview_image_url,
-        price_adjustment: variant.price_adjustment,
-      }
-    : null;
-
-  /*
-  =========================================================
-  STEP 7: PRICE CALCULATION
-  =========================================================
-  */
-  const unitPrice =
-    Number(furniture.base_price ?? 0) +
-    Number(variant?.price_adjustment ?? 0);
-
-  /*
-  =========================================================
-  STEP 8: ORDER CODE
-  =========================================================
-  */
-  const orderReferenceCode = `ORD-${Date.now()}-${Math.floor(
+  /**
+   * =========================================================
+   * ORDER REFERENCE
+   * =========================================================
+   */
+  const order_reference_code = `ORD-${Date.now()}-${Math.floor(
     Math.random() * 1000
   )}`;
 
-  /*
-  =========================================================
-  STEP 9: CUSTOMER NAME
-  =========================================================
-  */
-  const finalCustomerName =
-    payload.delivery_method === "pickup"
-      ? user.email
-      : payload.customer_name ?? user.email;
+  /**
+   * =========================================================
+   * REQUEST (ORDER LEVEL ONLY)
+   * =========================================================
+   */
+  const requestText = payload.request?.description?.trim() || null;
+  const hasCustomerRequest = !!requestText;
 
-  /*
-  =========================================================
-  STEP 10: CREATE ORDER (FIXED STATUS HERE)
-  =========================================================
-  */
+  /**
+   * =========================================================
+   * ITEMS + TOTAL
+   * =========================================================
+   */
+  const itemsToInsert: any[] = [];
+  let quoteTotalPrice = 0;
+
+  for (const item of payload.items) {
+    const { data: furniture, error: furnitureError } = await supabase
+      .from("furniture")
+      .select(`
+        id,
+        name,
+        description,
+        base_price,
+        model_url,
+        width_cm,
+        depth_cm,
+        height_cm,
+        category:furniture_categories(name)
+      `)
+      .eq("id", item.furniture_id)
+      .single();
+
+    if (furnitureError || !furniture) {
+      throw new Error("Furniture not found");
+    }
+
+    const { data: images } = await supabase
+      .from("furniture_images")
+      .select("image_url, is_primary")
+      .eq("furniture_id", item.furniture_id);
+
+    const { data: variant } = item.variant_id
+      ? await supabase
+          .from("furniture_variants")
+          .select(`
+            id,
+            name,
+            price_adjustment,
+            texture_url,
+            preview_image_url
+          `)
+          .eq("id", item.variant_id)
+          .single()
+      : { data: null };
+
+    /**
+     * SAFE PRICING
+     */
+    const basePrice = Number(furniture.base_price ?? 0);
+    const variantPrice = Number(variant?.price_adjustment ?? 0);
+
+    const unitPrice = Math.max(basePrice + variantPrice, 0);
+    const quantity = Math.max(Number(item.quantity ?? 0), 0);
+
+    const totalPrice = unitPrice * quantity;
+
+    quoteTotalPrice += totalPrice;
+
+    /**
+     * SNAPSHOT
+     */
+    itemsToInsert.push({
+      order_id: "",
+
+      furniture_id: item.furniture_id,
+      selected_variant_id: item.variant_id ?? null,
+
+      quantity,
+      unit_price: unitPrice,
+      total_price: totalPrice,
+
+      furniture_snapshot: {
+        id: furniture.id,
+        name: furniture.name,
+        description: furniture.description,
+        base_price: basePrice,
+        model_url: furniture.model_url,
+        width_cm: furniture.width_cm,
+        depth_cm: furniture.depth_cm,
+        height_cm: furniture.height_cm,
+        category: furniture.category?.name ?? null,
+        images: (images ?? []).map((img) => ({
+          url: img.image_url,
+          isPrimary: img.is_primary,
+        })),
+      },
+
+      variant_snapshot: variant
+        ? {
+            id: variant.id,
+            name: variant.name,
+            price_adjustment: variant.price_adjustment,
+            texture_url: variant.texture_url,
+            preview_image_url: variant.preview_image_url,
+          }
+        : null,
+
+      model_snapshot_url: furniture.model_url ?? null,
+    });
+  }
+
+  /**
+   * =========================================================
+   * VALIDATION
+   * =========================================================
+   */
+  if (!Number.isFinite(quoteTotalPrice) || quoteTotalPrice <= 0) {
+    throw new Error("Invalid order total computed");
+  }
+
+  /**
+   * =========================================================
+   * CREATE ORDER
+   * =========================================================
+   */
   const { data: order, error: orderError } = await supabase
     .from("orders")
     .insert({
       user_id: user.id,
-
       delivery_method: payload.delivery_method,
-
-      customer_name: finalCustomerName,
+      customer_name: fallbackName,
       phone_number: payload.phone_number ?? null,
 
       delivery_address:
+        payload.delivery_method === "delivery"
+          ? payload.delivery_address ?? null
+          : null,
+
+      pickup_location:
         payload.delivery_method === "pickup"
-          ? "STORE PICKUP"
-          : payload.delivery_address ?? null,
+          ? payload.pickup_location ??
+            "Store: BL Sash Factory, 92 Upper Kalaklan Olongapo City"
+          : null,
 
       delivery_notes: payload.delivery_notes ?? null,
 
-      /**
-       * ✅ FIXED: correct enum field
-       * was: status: "pending_review" ❌
-       */
       order_status: "requested",
-
       payment_status: "unpaid",
 
-      order_reference_code: orderReferenceCode,
+      order_reference_code,
+      quote_total_price: quoteTotalPrice,
 
-      quote_total_price: null,
       admin_notes: null,
-      price_breakdown: null,
+      has_customer_request: hasCustomerRequest,
     })
     .select("*")
     .single();
@@ -205,36 +235,30 @@ export async function createOrder(
     throw new Error(orderError?.message || "Order creation failed");
   }
 
-  /*
-  =========================================================
-  STEP 11: ORDER ITEM
-  =========================================================
-  */
-  const { error: itemError } = await supabase.from("order_items").insert({
+  /**
+   * =========================================================
+   * INSERT ITEMS
+   * =========================================================
+   */
+  const finalItems = itemsToInsert.map((item) => ({
+    ...item,
     order_id: order.id,
-    furniture_id: payload.furniture_id,
-    selected_variant_id: payload.variant_id ?? null,
+  }));
 
-    quantity: 1,
-    unit_price: unitPrice,
-    total_price: unitPrice,
+  const { error: itemsError } = await supabase
+    .from("order_items")
+    .insert(finalItems);
 
-    furniture_snapshot: furnitureSnapshot,
-    variant_snapshot: variantSnapshot,
-
-    model_snapshot_url: furniture.model_url ?? null,
-  });
-
-  if (itemError) {
-    throw new Error(itemError.message);
+  if (itemsError) {
+    throw new Error(itemsError.message);
   }
 
-  /*
-  =========================================================
-  STEP 12: CONVERSATION
-  =========================================================
-  */
-  const { data: conversation, error: convError } = await supabase
+  /**
+   * =========================================================
+   * CONVERSATION
+   * =========================================================
+   */
+  const { data: conversation } = await supabase
     .from("conversations")
     .insert({
       user_id: user.id,
@@ -244,15 +268,15 @@ export async function createOrder(
     .select("id")
     .single();
 
-  if (convError || !conversation) {
+  if (!conversation) {
     throw new Error("Conversation creation failed");
   }
 
-  /*
-  =========================================================
-  STEP 13: SYSTEM MESSAGE
-  =========================================================
-  */
+  /**
+   * =========================================================
+   * SYSTEM MESSAGE
+   * =========================================================
+   */
   await supabase.from("messages").insert({
     conversation_id: conversation.id,
     sender_id: user.id,
@@ -263,6 +287,28 @@ export async function createOrder(
       order_id: order.id,
     },
   });
+
+  /**
+   * =========================================================
+   * CUSTOMER REQUEST MESSAGE (ORDER LEVEL ONLY)
+   * =========================================================
+   */
+  if (requestText) {
+    const { error: requestMsgError } = await supabase.from("messages").insert({
+      conversation_id: conversation.id,
+      sender_id: user.id,
+      is_system: false,
+      message: requestText,
+      metadata: {
+        type: "customer_request",
+        scope: "order_level",
+      },
+    });
+
+    if (requestMsgError) {
+      throw new Error(requestMsgError.message);
+    }
+  }
 
   return order as Order;
 }

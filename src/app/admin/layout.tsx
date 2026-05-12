@@ -23,10 +23,10 @@ export default function AdminLayout({
 
     const init = async () => {
       try {
-        /**
-         * STEP 1:
-         * Get authenticated user
-         */
+        /* =========================================================
+           STEP 1: AUTH USER
+        ========================================================= */
+
         const {
           data: { user },
           error: authError,
@@ -37,10 +37,10 @@ export default function AdminLayout({
           return;
         }
 
-        /**
-         * STEP 2:
-         * Get profile + role
-         */
+        /* =========================================================
+           STEP 2: FETCH PROFILE
+        ========================================================= */
+
         const { data: profileData, error: profileError } =
           await supabase
             .from("profiles")
@@ -53,13 +53,27 @@ export default function AdminLayout({
           return;
         }
 
-        /**
-         * STEP 3:
-         * Role guard
-         */
+        /* =========================================================
+           STEP 3: SAFE ROLE NORMALIZATION
+        ========================================================= */
+
+        const normalizedProfile: Profile = {
+  ...profileData,
+
+  role: profileData.role ?? "customer",
+
+  created_at:
+    profileData.created_at ??
+    new Date().toISOString(),
+};
+
+        /* =========================================================
+           STEP 4: ADMIN GUARD
+        ========================================================= */
+
         const isAdmin =
-          profileData.role === "admin" ||
-          profileData.role === "super_admin";
+          normalizedProfile.role === "admin" ||
+          normalizedProfile.role === "super_admin";
 
         if (!isAdmin) {
           router.replace("/");
@@ -68,9 +82,9 @@ export default function AdminLayout({
 
         if (!mounted) return;
 
-        setProfile(profileData);
+        setProfile(normalizedProfile);
       } catch (error) {
-        console.error(error);
+        console.error("ADMIN_LAYOUT_ERROR", error);
         router.replace("/auth/login");
       } finally {
         if (mounted) {
@@ -86,9 +100,10 @@ export default function AdminLayout({
     };
   }, [router]);
 
-  /**
-   * FIRST LOAD ONLY
-   */
+  /* =========================================================
+     LOADING
+  ========================================================= */
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen text-sm text-neutral-500">
@@ -97,11 +112,16 @@ export default function AdminLayout({
     );
   }
 
+  /* =========================================================
+     BLOCK RENDER
+  ========================================================= */
+
   if (!profile) return null;
 
-  /**
-   * PERSISTENT DASHBOARD SHELL
-   */
+  /* =========================================================
+     DASHBOARD SHELL
+  ========================================================= */
+
   return (
     <div className="flex min-h-screen bg-neutral-50 text-neutral-900">
       <AdminSidebar />

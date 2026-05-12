@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import { useFurniturePublicById } from "@/hooks/useFurnitureById";
 
 import Furniture3DViewer from "@/app/components/Furniture3DViewer";
+
 import BasicInfoSection from "@/app/components/sections/user/BasicInfoSection";
 import AssetsSection from "@/app/components/sections/user/AssetsSection";
 import VariantsSection from "@/app/components/sections/user/VariantSection";
@@ -14,14 +15,10 @@ import PlaceOrderModal from "@/app/components/PlaceOrderModal";
 
 export default function FurnitureDetailPage() {
   const router = useRouter();
+
   const params = useParams();
+
   const id = params?.id as string;
-
-  const [activeVariantId, setActiveVariantId] =
-    useState<string | null>(null);
-
-  const [openOrderModal, setOpenOrderModal] =
-    useState(false);
 
   const {
     data: furniture,
@@ -29,114 +26,218 @@ export default function FurnitureDetailPage() {
     isError,
   } = useFurniturePublicById(id);
 
-  /*
-  =========================================================
-  HOOKS FIRST (SAFE)
-  =========================================================
-  */
+  /* =========================================================
+     MODAL STATE
+  ========================================================= */
 
-  const selectedVariant = useMemo(() => {
-    if (!furniture) return null;
+  const [openOrderModal, setOpenOrderModal] =
+    useState(false);
 
-    return (
-      furniture.variants?.find(
-        (variant) => variant.id === activeVariantId
-      ) ?? null
+  /* =========================================================
+     3D PREVIEW STATE
+  ========================================================= */
+
+  const [previewVariantId, setPreviewVariantId] =
+    useState<string | null>(null);
+
+  /* =========================================================
+     ACTIVE VARIANT
+  ========================================================= */
+
+  const previewVariant = useMemo(() => {
+    if (!furniture || !previewVariantId) {
+      return null;
+    }
+
+    return furniture.variants.find(
+      (v) => v.id === previewVariantId
     );
-  }, [activeVariantId, furniture]);
+  }, [furniture, previewVariantId]);
 
-  /*
-  =========================================================
-  EARLY RETURNS
-  =========================================================
-  */
+  /* =========================================================
+     MODEL + TEXTURE
+  ========================================================= */
+
+  const modelUrl =
+    furniture?.model_url ?? null;
+
+  const textureUrl =
+    previewVariant?.texture_url ?? null;
+
+  /* =========================================================
+     DIMENSIONS
+     IMPORTANT:
+     Passed into 3D viewer for real-world scaling
+  ========================================================= */
+
+  const dimensions = useMemo(() => {
+    return {
+      width_cm:
+        furniture?.dimensions?.width_cm ?? null,
+
+      depth_cm:
+        furniture?.dimensions?.depth_cm ?? null,
+
+      height_cm:
+        furniture?.dimensions?.height_cm ?? null,
+    };
+  }, [furniture]);
+
+  /* =========================================================
+     BASIC INFO
+  ========================================================= */
+
+  const basicInfoState = furniture
+    ? {
+        name: furniture.name,
+
+        description:
+          furniture.description ?? "",
+
+        categoryId:
+          furniture.category?.id ?? null,
+
+        basePrice: furniture.base_price,
+
+        widthCm:
+          furniture.dimensions?.width_cm,
+
+        depthCm:
+          furniture.dimensions?.depth_cm,
+
+        heightCm:
+          furniture.dimensions?.height_cm,
+      }
+    : null;
+
+  /* =========================================================
+     IMAGES
+  ========================================================= */
+
+  const images = (
+    furniture?.images ?? []
+  ).map((img) => ({
+    id: img.id,
+
+    clientId: img.id,
+
+    url: img.image_url,
+
+    isPrimary: img.is_primary,
+  }));
+
+  /* =========================================================
+     VARIANTS
+  ========================================================= */
+
+  const variants = (
+    furniture?.variants ?? []
+  ).map((v) => ({
+    id: v.id,
+
+    clientId: v.id,
+
+    name: v.name,
+
+    texture_url: v.texture_url,
+
+    previewUrl:
+      v.preview_image_url ?? "",
+
+    priceAdjustment: Number(
+      v.price_adjustment ?? 0
+    ),
+
+    isActive: v.is_active,
+
+    isDeleted: false,
+
+    isDefault: Boolean(v.is_default),
+  }));
+
+  /* =========================================================
+     LOADING
+  ========================================================= */
 
   if (isLoading) {
     return (
-      <div className="text-center py-20 font-semibold">
+      <div className="py-20 text-center font-semibold">
         Loading...
       </div>
     );
   }
 
+  /* =========================================================
+     ERROR
+  ========================================================= */
+
   if (isError || !furniture) {
     return (
-      <div className="text-center py-20 text-red-600 font-semibold">
+      <div className="py-20 text-center font-semibold text-red-600">
         Furniture not found
       </div>
     );
   }
 
-  /*
-  =========================================================
-  SAFE DERIVED VALUES
-  =========================================================
-  */
-
-  const modelUrl = furniture.model_url ?? null;
-
-  const variantTexture =
-    activeVariantId === null
-      ? null
-      : selectedVariant?.texture_url ?? null;
-
-  const categoryName =
-    furniture.category?.name ?? "Uncategorized";
-
-  const basicInfoState = {
-    name: furniture.name,
-    description: furniture.description ?? "",
-    categoryId: furniture.category?.id ?? null,
-    basePrice: furniture.base_price,
-    widthCm: furniture.dimensions?.width_cm,
-    depthCm: furniture.dimensions?.depth_cm,
-    heightCm: furniture.dimensions?.height_cm,
-  };
-
-  const images = (furniture.images ?? []).map((img) => ({
-    id: img.id,
-    url: img.image_url,
-    isPrimary: img.is_primary,
-    clientId: img.id,
-  }));
-
-  const variants = (furniture.variants ?? []).map((variant) => ({
-    id: variant.id,
-    clientId: variant.id,
-    name: variant.name,
-    texture_url: variant.texture_url,
-    previewUrl: variant.preview_image_url ?? "",
-    priceAdjustment: variant.price_adjustment,
-    isActive: variant.is_active,
-    isDeleted: false,
-    isDefault: variant.is_default ?? false,
-  }));
-
-  /*
-  =========================================================
-  UI
-  =========================================================
-  */
+  /* =========================================================
+     UI
+  ========================================================= */
 
   return (
     <div className="min-h-screen bg-[#FFF8F0] p-6">
+      {/* =====================================================
+          BACK
+      ===================================================== */}
+
       <button
         onClick={() => router.back()}
-        className="text-sm text-[#8C593F] hover:underline mb-4"
+        className="mb-4 text-sm text-[#8C593F] hover:underline"
       >
         ← Back
       </button>
 
-      <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* LEFT SIDE */}
-        <div className="bg-white rounded-2xl shadow p-4 flex items-center justify-center min-h-[500px]">
+      <div className="mx-auto grid max-w-7xl grid-cols-1 gap-6 lg:grid-cols-2">
+        {/* ===================================================
+            LEFT: 3D VIEWER
+        =================================================== */}
+
+        <div className="flex min-h-[500px] items-center justify-center rounded-2xl bg-white p-4 shadow">
           {modelUrl ? (
-            <Furniture3DViewer
-              modelUrl={modelUrl}
-              selectedVariantTextureUrl={
-                variantTexture
-              }
-            />
+            <div className="w-full">
+              {/* =============================================
+                  3D VIEWER
+              ============================================= */}
+
+              <Furniture3DViewer
+                modelUrl={modelUrl}
+                selectedVariantTextureUrl={
+                  textureUrl
+                }
+                dimensions={dimensions}
+              />
+
+              {/* =============================================
+                  DEBUG DIMENSIONS
+                  TEMPORARY FOR SCALE TESTING
+              ============================================= */}
+
+              <div className="mt-3 space-y-1 text-xs text-neutral-500">
+                <div>
+                  Width:{" "}
+                  {dimensions.width_cm ?? 0} cm
+                </div>
+
+                <div>
+                  Height:{" "}
+                  {dimensions.height_cm ?? 0} cm
+                </div>
+
+                <div>
+                  Depth:{" "}
+                  {dimensions.depth_cm ?? 0} cm
+                </div>
+              </div>
+            </div>
           ) : (
             <div className="text-gray-400">
               No 3D model available
@@ -144,59 +245,78 @@ export default function FurnitureDetailPage() {
           )}
         </div>
 
-        {/* RIGHT SIDE */}
-        <div className="space-y-6 overflow-y-auto max-h-[85vh] pr-2">
-          <BasicInfoSection
-            state={basicInfoState}
-            categories={[
-              {
-                id: furniture.category?.id ?? "",
-                name: categoryName,
-              } as any,
-            ]}
-          />
+        {/* ===================================================
+            RIGHT SIDE
+        =================================================== */}
+
+        <div className="max-h-[85vh] space-y-6 overflow-y-auto pr-2">
+          {/* ===============================================
+              BASIC INFO
+          =============================================== */}
+
+          {basicInfoState && (
+            <BasicInfoSection
+              state={basicInfoState}
+              categories={[
+                {
+                  id:
+                    furniture.category?.id ?? "",
+
+                  name:
+                    furniture.category?.name ??
+                    "Uncategorized",
+                } as any,
+              ]}
+            />
+          )}
+
+          {/* ===============================================
+              IMAGES
+          =============================================== */}
 
           <AssetsSection
-            state={{
-              images,
-            }}
+            state={{ images }}
           />
+
+          {/* ===============================================
+              VARIANTS
+          =============================================== */}
 
           <VariantsSection
             variants={variants}
-            activeVariantId={activeVariantId}
-            setActiveVariantId={
-              setActiveVariantId
+            activeVariantId={
+              previewVariantId
+            }
+            onApplyVariant={
+              setPreviewVariantId
             }
           />
+
+          {/* ===============================================
+              ORDER BUTTON
+          =============================================== */}
 
           <button
             onClick={() =>
               setOpenOrderModal(true)
             }
-            className="w-full bg-[#8C593F] text-white py-3 rounded-xl font-semibold"
+            className="w-full rounded-xl bg-[#8C593F] py-3 font-semibold text-white"
           >
-            Place Order
+            Add to Order
           </button>
         </div>
       </div>
 
-      {/* ORDER MODAL */}
+      {/* =====================================================
+          ORDER MODAL
+      ===================================================== */}
+
       <PlaceOrderModal
         open={openOrderModal}
         onClose={() =>
           setOpenOrderModal(false)
         }
-        furnitureId={furniture.id}
-        variantId={selectedVariant?.id ?? null}
-        furnitureName={furniture.name}
-        basePrice={furniture.base_price ?? 0}
-        selectedVariantName={
-          selectedVariant?.name ?? null
-        }
-        variantPriceAdjustment={
-          selectedVariant?.price_adjustment ?? 0
-        }
+        furniture={furniture}
       />
     </div>
   );

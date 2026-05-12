@@ -1,55 +1,123 @@
 "use client";
 
+import { useState } from "react";
+
+/**
+ * =========================================================
+ * UI-SAFE TYPES (MATCH order.ts SNAPSHOT STYLE)
+ * =========================================================
+ */
 type VariantSnapshot = {
   id: string;
-  name: string;
+  name?: string;
   preview_image_url?: string | null;
   texture_url?: string | null;
   price_adjustment?: number | null;
 };
 
+type OrderItem = {
+  id: string;
+
+  variant_snapshot?: VariantSnapshot | null;
+
+  furniture_snapshot?: {
+    name?: string | null;
+  } | null;
+};
+
 type Props = {
-  variants: VariantSnapshot[];
-  activeVariantId: string | null;
-  setActiveVariantId: (id: string | null) => void;
+  items?: OrderItem[] | null;
+
+  onApplyVariant?: (
+    itemId: string,
+    variant: VariantSnapshot | null
+  ) => void;
 };
 
 export default function OrderVariantsSection({
-  variants,
-  activeVariantId,
-  setActiveVariantId,
+  items,
+  onApplyVariant,
 }: Props) {
-  return (
-    <div className="border rounded-xl p-4 space-y-4">
+  const safeItems = Array.isArray(items) ? items : [];
 
+  /**
+   * Track selected variant per item
+   */
+  const [activeVariants, setActiveVariants] = useState<
+    Record<string, string | null>
+  >({});
+
+  if (!safeItems.length) {
+    return (
+      <div className="border rounded-xl p-4 text-sm text-gray-400">
+        No variant snapshot available
+      </div>
+    );
+  }
+
+  const handleApply = (
+    item: OrderItem,
+    variant: VariantSnapshot | null
+  ) => {
+    setActiveVariants((prev) => ({
+      ...prev,
+      [item.id]: variant?.id ?? null,
+    }));
+
+    onApplyVariant?.(item.id, variant);
+  };
+
+  return (
+    <div className="border rounded-xl p-4 space-y-6">
+
+      {/* HEADER */}
       <div>
         <h3 className="font-semibold">Variant Snapshot</h3>
         <p className="text-xs text-gray-500">
-          Locked state at order time
+          Apply variants for preview (locked from order snapshot)
         </p>
       </div>
 
-      {variants.length === 0 ? (
-        <div className="text-sm text-gray-400">
-          No variant snapshot available
-        </div>
-      ) : (
-        <div className="space-y-3">
+      {/* ITEMS */}
+      {safeItems.map((item, index) => {
+        const snapshot = item.variant_snapshot;
 
-          {variants.map((v) => {
-            const active = activeVariantId === v.id;
+        const isActive =
+          activeVariants[item.id] === snapshot?.id;
 
-            return (
+        return (
+          <div key={item.id} className="space-y-3">
+
+            {/* ITEM HEADER */}
+            <div className="flex justify-between items-center">
+              <p className="text-sm font-semibold">
+                Item {index + 1}
+              </p>
+
+              <p className="text-xs text-gray-500">
+                {item.furniture_snapshot?.name ?? "Unnamed Item"}
+              </p>
+            </div>
+
+            {/* VARIANT BLOCK */}
+            {!snapshot ? (
+              <div className="text-sm text-gray-400">
+                No variant snapshot for this item
+              </div>
+            ) : (
               <div
-                key={v.id}
-                className={`flex items-center gap-4 p-3 border rounded-xl transition
-                  ${active ? "border-black bg-gray-50" : "border-gray-200"}`}
+                className={`flex items-center gap-4 p-3 border rounded-xl transition ${
+                  isActive
+                    ? "border-black bg-gray-100"
+                    : "bg-gray-50"
+                }`}
               >
 
+                {/* IMAGE */}
                 <div className="w-12 h-12 rounded overflow-hidden border bg-white">
-                  {v.preview_image_url ? (
+                  {snapshot.preview_image_url ? (
                     <img
-                      src={v.preview_image_url}
+                      src={snapshot.preview_image_url}
                       className="w-full h-full object-cover"
                     />
                   ) : (
@@ -59,30 +127,43 @@ export default function OrderVariantsSection({
                   )}
                 </div>
 
+                {/* INFO */}
                 <div className="flex-1">
-                  <div className="text-sm font-medium">{v.name}</div>
+                  <div className="text-sm font-medium">
+                    {snapshot.name ?? "Unnamed Variant"}
+                  </div>
+
                   <div className="text-xs text-gray-500">
-                    {v.price_adjustment
-                      ? `+₱${v.price_adjustment}`
+                    {snapshot.price_adjustment
+                      ? `+₱${Number(
+                          snapshot.price_adjustment
+                        ).toLocaleString()}`
                       : "No price change"}
                   </div>
                 </div>
 
+                {/* ACTION */}
                 <button
                   onClick={() =>
-                    setActiveVariantId(active ? null : v.id)
+                    handleApply(
+                      item,
+                      isActive ? null : snapshot
+                    )
                   }
-                  className="text-xs px-3 py-1 border rounded"
+                  className={`text-xs px-3 py-1 rounded border transition ${
+                    isActive
+                      ? "bg-black text-white"
+                      : "bg-white hover:bg-gray-100"
+                  }`}
                 >
-                  {active ? "Selected" : "Select"}
+                  {isActive ? "Applied" : "Apply"}
                 </button>
 
               </div>
-            );
-          })}
-
-        </div>
-      )}
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

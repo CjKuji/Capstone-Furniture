@@ -63,6 +63,7 @@ export default function AdminFurniture() {
   } = useFurniture();
 
   /* ========================================================= */
+
   useEffect(() => {
     isMounted.current = true;
     return () => {
@@ -99,6 +100,7 @@ export default function AdminFurniture() {
   }, []);
 
   /* ========================================================= */
+
   const list = useMemo(() => furniture ?? [], [furniture]);
 
   const filteredFurniture = useMemo(() => {
@@ -108,7 +110,7 @@ export default function AdminFurniture() {
     return list.filter((item) => {
       const name = item.name?.toLowerCase() ?? "";
       const description = item.description?.toLowerCase() ?? "";
-      const category = item.furniture_categories?.name?.toLowerCase() ?? "";
+      const category = item.category?.name?.toLowerCase() ?? "";
 
       return (
         name.includes(keyword) ||
@@ -119,6 +121,7 @@ export default function AdminFurniture() {
   }, [list, search]);
 
   /* ========================================================= */
+
   const handleDelete = useCallback(
     async (id: string) => {
       if (!confirm("Delete this furniture item?")) return;
@@ -134,17 +137,14 @@ export default function AdminFurniture() {
   );
 
   /* ========================================================= */
+
   const handleView = useCallback(
     (item: FurnitureItemAdmin) => {
-      if (!item.model_url) return;
-
-      const variant =
-        item.furniture_variants?.find((v) => v.is_default) ??
-        item.furniture_variants?.[0];
+      if (!item?.model_url) return;
 
       openViewer({
         modelUrl: item.model_url,
-        activeTexture: variant?.texture_url ?? null,
+        variants: item.variants ?? [],
       });
 
       log("VIEW_OPENED", item.id);
@@ -153,7 +153,7 @@ export default function AdminFurniture() {
   );
 
   /* =========================================================
-     🔥 FIXED SAVE (NO RACE CONDITION)
+     SAVE
   ========================================================= */
 
   const handleSave = useCallback(
@@ -165,15 +165,13 @@ export default function AdminFurniture() {
         userLoading,
       });
 
-      // 🚨 HARD GUARD (fixes your bug)
       if (!userId) {
-        err("SAVE_BLOCKED_NO_USER (user not ready yet)");
+        err("SAVE_BLOCKED_NO_USER");
         return;
       }
 
       try {
         if (modalState.mode === "create") {
-          log("CREATE_FLOW");
           await create(form, userId);
           log("CREATE_SUCCESS");
         } else {
@@ -182,7 +180,6 @@ export default function AdminFurniture() {
             return;
           }
 
-          log("UPDATE_FLOW", id);
           await update(id, form);
           log("UPDATE_SUCCESS", id);
         }
@@ -211,9 +208,7 @@ export default function AdminFurniture() {
       {/* HEADER */}
       <div className="flex items-end justify-between">
         <div>
-          <h1 className="text-xl font-semibold">
-            Furniture Inventory
-          </h1>
+          <h1 className="text-xl font-semibold">Furniture Inventory</h1>
           <p className="text-sm text-neutral-500 mt-1">
             Manage AR-ready furniture assets
           </p>
@@ -221,14 +216,13 @@ export default function AdminFurniture() {
 
         <button
           disabled={!userId}
-          onClick={() => {
-            log("OPEN_CREATE_MODAL");
+          onClick={() =>
             setModalState({
               isOpen: true,
               mode: "create",
               item: null,
-            });
-          }}
+            })
+          }
           className="flex items-center gap-2 bg-neutral-900 text-white px-4 py-2 rounded-lg text-sm hover:bg-black transition disabled:opacity-50"
         >
           <Plus size={16} />
@@ -253,19 +247,18 @@ export default function AdminFurniture() {
       {/* GRID */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
         {filteredFurniture.map((item) => (
-          <FurnitureCard
-            key={item.id}
-            item={item}
-            onEdit={() =>
-              setModalState({
-                isOpen: true,
-                mode: "edit",
-                item,
-              })
-            }
-            onDelete={() => handleDelete(item.id)}
-            onView={() => handleView(item)}
-          />
+      <FurnitureCard
+  key={item.id}
+  item={item}
+  onEdit={() =>
+    setModalState({
+      isOpen: true,
+      mode: "edit",
+      item,
+    })
+  }
+  onDelete={() => handleDelete(item.id)}
+/>
         ))}
       </div>
 
@@ -275,14 +268,13 @@ export default function AdminFurniture() {
           isOpen={modalState.isOpen}
           mode={modalState.mode}
           item={modalState.item}
-          onClose={() => {
-            log("MODAL_CLOSE");
+          onClose={() =>
             setModalState({
               isOpen: false,
               mode: "create",
               item: null,
-            });
-          }}
+            })
+          }
           onSave={handleSave}
           categories={categories}
         />

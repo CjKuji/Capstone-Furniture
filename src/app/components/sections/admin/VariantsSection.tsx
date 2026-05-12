@@ -76,10 +76,16 @@ export default function VariantsSection({
           .map((v) => {
             const key = getKey(v);
 
+            /**
+             * =====================================================
+             * NORMALIZED PREVIEW (FIX)
+             * =====================================================
+             */
             const preview =
-              v.previewUrl ||
-              v.texture_url ||
-              v.textureUrl;
+              (v as any).previewUrl ||
+              (v as any).textureUrl ||
+              (v as any).texture_url || // fallback from API
+              null;
 
             const isActive = activeVariantId === key;
 

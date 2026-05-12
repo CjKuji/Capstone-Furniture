@@ -1,7 +1,7 @@
 "use client";
 
 import { useForm } from "react-hook-form";
-import { supabase } from "@/lib/supabase";
+import { authService } from "@/services/authService";
 import { useRouter } from "next/navigation";
 
 type FormData = {
@@ -14,27 +14,41 @@ export default function Login() {
   const router = useRouter();
 
   const onSubmit = async (data: FormData) => {
-    const { error: signInError, data: signInData } =
-      await supabase.auth.signInWithPassword({
-        email: data.email,
-        password: data.password,
-      });
+    try {
+      /**
+       * 1. LOGIN (via authService)
+       */
+      const { user } = await authService.signIn(
+        data.email,
+        data.password
+      );
 
-    if (signInError) return alert(signInError.message);
+      if (!user) {
+        alert("Login failed: no user returned");
+        return;
+      }
 
-    const userId = signInData.user?.id;
-    if (!userId) return alert("User ID not found.");
+      /**
+       * 2. GET PROFILE (role check)
+       */
+      const profile = await authService.getProfile(user.id);
 
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", userId)
-      .single();
+      if (!profile) {
+        alert("Profile not found");
+        return;
+      }
 
-    if (profileError) return alert(profileError.message);
-
-    if (profile.role === "admin") router.push("/admin");
-    else router.push("/");
+      /**
+       * 3. ROLE-BASED REDIRECT
+       */
+      if (profile.role === "admin" || profile.role === "super_admin") {
+        router.push("/admin");
+      } else {
+        router.push("/");
+      }
+    } catch (err: any) {
+      alert(err.message || "Login failed");
+    }
   };
 
   return (
@@ -104,7 +118,7 @@ export default function Login() {
               </label>
               <input
                 type="email"
-                {...register("email")}
+                {...register("email", { required: true })}
                 placeholder="Enter your email"
                 className="border border-gray-300 rounded-lg px-3 py-2 text-black placeholder-black focus:outline-none focus:ring-2 focus:ring-[#A16B4C]"
               />
@@ -117,7 +131,7 @@ export default function Login() {
               </label>
               <input
                 type="password"
-                {...register("password")}
+                {...register("password", { required: true })}
                 placeholder="Enter your password"
                 className="border border-gray-300 rounded-lg px-3 py-2 text-black placeholder-black focus:outline-none focus:ring-2 focus:ring-[#A16B4C]"
               />

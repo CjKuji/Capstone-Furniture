@@ -7,16 +7,29 @@ import type { FurnitureVariant } from "@/types/furniture";
    TYPES
 ========================================================= */
 
+type Dimensions = {
+  width_cm?: number | null;
+  depth_cm?: number | null;
+  height_cm?: number | null;
+};
+
 type ViewerState = {
   modelUrl: string;
   variants: FurnitureVariant[];
+
   activeTexture: string | null;
   activeVariantId: string | null;
+
+  // ✅ NEW: required for AR scaling consistency
+  dimensions?: Dimensions;
 };
 
 type OpenViewerParams = {
   modelUrl: string;
   variants: FurnitureVariant[];
+
+  // ✅ NEW
+  dimensions?: Dimensions;
 };
 
 /* =========================================================
@@ -30,21 +43,28 @@ export function useFurnitureViewer() {
      OPEN VIEWER
   ========================================================= */
 
-  const openViewer = useCallback(({ modelUrl, variants }: OpenViewerParams) => {
-    if (!modelUrl) return;
+  const openViewer = useCallback(
+    ({ modelUrl, variants, dimensions }: OpenViewerParams) => {
+      if (!modelUrl) return;
 
-    const defaultVariant =
-      variants?.find((v) => v.is_default) ??
-      variants?.[0] ??
-      null;
+      const defaultVariant =
+        variants?.find((v) => v.is_default) ??
+        variants?.[0] ??
+        null;
 
-    setViewer({
-      modelUrl,
-      variants: variants ?? [],
-      activeTexture: defaultVariant?.texture_url ?? null,
-      activeVariantId: defaultVariant?.id ?? null,
-    });
-  }, []);
+      setViewer({
+        modelUrl,
+        variants: variants ?? [],
+
+        activeTexture: defaultVariant?.texture_url ?? null,
+        activeVariantId: defaultVariant?.id ?? null,
+
+        // ✅ PASS THROUGH REAL-WORLD DATA
+        dimensions,
+      });
+    },
+    []
+  );
 
   /* =========================================================
      CLOSE VIEWER
@@ -55,7 +75,7 @@ export function useFurnitureViewer() {
   }, []);
 
   /* =========================================================
-     SET ACTIVE TEXTURE (3D MATERIAL SWITCH)
+     SET ACTIVE TEXTURE
   ========================================================= */
 
   const setActiveTexture = useCallback(
@@ -74,7 +94,7 @@ export function useFurnitureViewer() {
   );
 
   /* =========================================================
-     SET ACTIVE BY VARIANT ID (SAFER UX OPTION)
+     SET ACTIVE VARIANT
   ========================================================= */
 
   const setActiveVariant = useCallback((variantId: string) => {
@@ -92,7 +112,7 @@ export function useFurnitureViewer() {
   }, []);
 
   /* =========================================================
-     GET ACTIVE VARIANT (DERIVED SAFE VALUE)
+     GET ACTIVE VARIANT
   ========================================================= */
 
   const getActiveVariant = useCallback(() => {
@@ -103,6 +123,14 @@ export function useFurnitureViewer() {
         (v) => v.id === viewer.activeVariantId
       ) ?? null
     );
+  }, [viewer]);
+
+  /* =========================================================
+     GET DIMENSIONS (HELPER FOR MODEL / AR)
+  ========================================================= */
+
+  const getDimensions = useCallback(() => {
+    return viewer?.dimensions ?? null;
   }, [viewer]);
 
   /* =========================================================
@@ -119,5 +147,8 @@ export function useFurnitureViewer() {
     setActiveVariant,
 
     getActiveVariant,
+
+    // ✅ NEW: important for AR + scaling pipeline
+    getDimensions,
   };
 }

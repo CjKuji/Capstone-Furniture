@@ -15,7 +15,6 @@ export interface FurnitureCardProps {
   item: FurnitureItemAdmin;
   onEdit: (item: FurnitureItemAdmin) => void;
   onDelete: (id: string) => void;
-  onView?: (url: string) => void;
 }
 
 export default function FurnitureCard({
@@ -23,20 +22,25 @@ export default function FurnitureCard({
   onEdit,
   onDelete,
 }: FurnitureCardProps) {
-  const images = item.furniture_images ?? [];
-  const variants = item.furniture_variants ?? [];
+  /* =========================================================
+     FIXED FIELD ACCESS (MATCH YOUR NEW TYPES)
+  ========================================================= */
+
+  const images = item.images ?? [];
+  const variants = item.variants ?? [];
 
   const primaryImage =
     images.find((img) => img.is_primary)?.image_url ||
     images[0]?.image_url ||
     "/placeholder.png";
 
-  const categoryName =
-    item.furniture_categories?.name ?? "Uncategorized";
+  const categoryName = item.category?.name ?? "Uncategorized";
 
   const price = item.base_price ?? 0;
+
   const imageCount = images.length;
   const variantCount = variants.length;
+
   const hasModel = Boolean(item.model_url);
 
   const width = item.width_cm ?? null;
@@ -51,20 +55,15 @@ export default function FurnitureCard({
   const status = item.publish_status ?? "draft";
 
   const statusStyle: Record<string, string> = {
-    published:
-      "bg-emerald-50 text-emerald-700 border border-emerald-200",
-    draft:
-      "bg-amber-50 text-amber-700 border border-amber-200",
-    archived:
-      "bg-gray-100 text-gray-600 border border-gray-200",
+    published: "bg-emerald-50 text-emerald-700 border border-emerald-200",
+    draft: "bg-amber-50 text-amber-700 border border-amber-200",
+    archived: "bg-gray-100 text-gray-600 border border-gray-200",
   };
 
   return (
     <div className="group bg-white border border-gray-200 rounded-xl overflow-hidden hover:shadow-md hover:border-gray-300 transition-all duration-300">
 
-      {/* =====================================================
-          IMAGE
-      ====================================================== */}
+      {/* IMAGE */}
       <div className="relative h-40 bg-gray-100 overflow-hidden">
         <img
           src={primaryImage}
@@ -100,12 +99,10 @@ export default function FurnitureCard({
         </div>
       </div>
 
-      {/* =====================================================
-          CONTENT
-      ====================================================== */}
+      {/* CONTENT */}
       <div className="p-4 space-y-4">
 
-        {/* TITLE + PRICE */}
+        {/* TITLE */}
         <div className="flex justify-between items-start gap-3">
           <div className="min-w-0">
             <h3 className="text-sm font-semibold text-gray-900 truncate">

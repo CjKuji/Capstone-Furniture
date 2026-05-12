@@ -5,31 +5,79 @@ import { supabase } from "@/lib/supabase";
 
 import type { Profile } from "@/types/user";
 import type { UserRole } from "@/types/enums";
+
 import { getCurrentProfile } from "@/services/userService";
+
+/* =========================================================
+   GLOBAL CACHE
+========================================================= */
+
+let cachedProfile: Profile | null = null;
+let activeProfilePromise: Promise<Profile | null> | null = null;
 
 /* ========================================================= */
 
 export function useUser() {
-  const [user, setUser] = useState<Profile | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [initialized, setInitialized] = useState(false);
+  const [profile, setProfile] = useState<Profile | null>(cachedProfile);
+  const [authUser, setAuthUser] = useState<any | null>(null);
+
+  const [loading, setLoading] = useState(!cachedProfile);
+  const [initialized, setInitialized] = useState(!!cachedProfile);
 
   const mounted = useRef(true);
+  const role = profile?.role ?? null;
 
-  const role = user?.role ?? null;
-
-  /* ========================================================= */
+  /* =========================================================
+     MOUNT SAFETY
+  ========================================================= */
 
   useEffect(() => {
     mounted.current = true;
-
     return () => {
       mounted.current = false;
     };
   }, []);
 
   /* =========================================================
-     CORE FIX: SESSION RESTORE (IMPORTANT)
+     SAFE PROFILE FETCH (NO DUPLICATES)
+  ========================================================= */
+
+  const fetchProfile = useCallback(async (userId: string) => {
+    try {
+      if (activeProfilePromise) return activeProfilePromise;
+
+      activeProfilePromise = getCurrentProfile(userId);
+
+      const result = await activeProfilePromise;
+
+      cachedProfile = result;
+
+      if (!mounted.current) return null;
+
+      setProfile(result);
+      setLoading(false);
+      setInitialized(true);
+
+      return result;
+    } catch (error) {
+      console.error("[useUser] profile fetch error:", error);
+
+      cachedProfile = null;
+
+      if (mounted.current) {
+        setProfile(null);
+        setLoading(false);
+        setInitialized(true);
+      }
+
+      return null;
+    } finally {
+      activeProfilePromise = null;
+    }
+  }, []);
+
+  /* =========================================================
+     INITIAL LOAD
   ========================================================= */
 
   const loadUser = useCallback(async () => {
@@ -40,68 +88,73 @@ export function useUser() {
         data: { session },
       } = await supabase.auth.getSession();
 
-      if (!session?.user) {
-        if (!mounted.current) return;
+      const user = session?.user ?? null;
+      setAuthUser(user);
 
-        setUser(null);
-        setLoading(false);
-        setInitialized(true);
+      if (!user) {
+        cachedProfile = null;
+
+        if (mounted.current) {
+          setProfile(null);
+          setLoading(false);
+          setInitialized(true);
+        }
+
         return;
       }
 
-      const profile = await getCurrentProfile(session.user.id);
+      await fetchProfile(user.id);
+    } catch (error) {
+      console.error("[useUser] loadUser error:", error);
 
-      if (!mounted.current) return;
-
-      setUser(profile);
-    } catch (e) {
-      console.error("[useUser] loadUser error:", e);
-
-      if (!mounted.current) return;
-
-      setUser(null);
-    } finally {
-      if (!mounted.current) return;
-
-      setLoading(false);
-      setInitialized(true);
+      if (mounted.current) {
+        setProfile(null);
+        setLoading(false);
+        setInitialized(true);
+      }
     }
-  }, []);
-
-  /* =========================================================
-     FIX: AUTH LISTENER (CRITICAL MISSING PIECE)
-  ========================================================= */
+  }, [fetchProfile]);
 
   useEffect(() => {
     loadUser();
+  }, [loadUser]);
 
+  /* =========================================================
+     AUTH LISTENER (SINGLE SOURCE OF TRUTH)
+  ========================================================= */
+
+  useEffect(() => {
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (!mounted.current) return;
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      queueMicrotask(async () => {
+        if (!mounted.current) return;
 
-      if (!session?.user) {
-        setUser(null);
-        setLoading(false);
-        setInitialized(true);
-        return;
-      }
+        const user = session?.user ?? null;
+        setAuthUser(user);
 
-      const profile = await getCurrentProfile(session.user.id);
+        if (!user) {
+          cachedProfile = null;
 
-      if (!mounted.current) return;
+          setProfile(null);
+          setLoading(false);
+          setInitialized(true);
 
-      setUser(profile);
-      setLoading(false);
-      setInitialized(true);
+          return;
+        }
+
+        await fetchProfile(user.id);
+      });
     });
 
     return () => {
       subscription.unsubscribe();
     };
-  }, [loadUser]);
+  }, [fetchProfile]);
 
-  /* ========================================================= */
+  /* =========================================================
+     ROLE CHECK
+  ========================================================= */
 
   const hasRole = useCallback(
     (required: UserRole) => {
@@ -118,11 +171,15 @@ export function useUser() {
     [role]
   );
 
-  /* ========================================================= */
+  /* =========================================================
+     API
+  ========================================================= */
 
   return {
-    user,
+    user: profile,
+    authUser,
     role,
+
     loading,
     initialized,
 

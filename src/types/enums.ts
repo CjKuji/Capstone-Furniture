@@ -1,3 +1,8 @@
+/**
+ * =========================================================
+ * PUBLISH STATUS
+ * =========================================================
+ */
 export type PublishStatus =
   | "draft"
   | "published"
@@ -16,24 +21,39 @@ export type InquiryStatus =
 
 /**
  * =========================================================
- * ORDER STATUS (MATCHES SUPABASE EXACTLY)
+ * ORDER STATUS
  * =========================================================
+ * Operational workflow only
  */
 export type OrderStatus =
-  | "draft"
   | "requested"
-  | "quoted"
+  | "accepted"
   | "awaiting_payment"
-  | "processing"
+  | "payment_verification"
   | "in_production"
-  | "ready_for_fulfillment"
+
+  // fulfillment
   | "ready_for_pickup"
-  | "picked_up"
-  | "ready_for_shipping"
+  | "ready_for_shipment"
+
+  // logistics
   | "shipped"
-  | "delivered"
+  | "in_transit"
+
+  // final
   | "completed"
   | "cancelled";
+
+/**
+ * =========================================================
+ * CANCEL STATUS
+ * =========================================================
+ */
+export type CancelStatus =
+  | "none"
+  | "requested"
+  | "approved"
+  | "rejected";
 
 /**
  * =========================================================
@@ -60,13 +80,15 @@ export type UserRole =
  * =========================================================
  */
 export type SenderType =
-  | "user"
-  | "admin";
+  | "customer"
+  | "admin"
+  | "system";
 
 /**
  * =========================================================
- * PAYMENT STATUS (MATCHES SUPABASE)
+ * PAYMENT STATUS
  * =========================================================
+ * STRICTLY financial state
  */
 export type PaymentStatus =
   | "unpaid"
@@ -86,7 +108,8 @@ export type PaymentMethod =
   | "bank_transfer"
   | "cash_on_pickup"
   | "cash_on_delivery"
-  | "maya_manual";
+  | "maya_manual"
+  | "paymongo_checkout";
 
 /**
  * =========================================================
@@ -102,17 +125,30 @@ export type ConversationStatus =
  * =========================================================
  * ORDER TIMELINE EVENT TYPE
  * =========================================================
+ * Legacy support only
  */
 export type OrderTimelineEventType =
   | "order_created"
-  | "order_quoted"
   | "order_accepted"
+  | "order_quoted"
   | "payment_submitted"
   | "payment_verified"
   | "production_started"
-  | "order_ready"
+  | "ready_for_pickup"
+  | "ready_for_shipment"
   | "order_dispatched"
   | "order_delivered"
   | "order_completed"
   | "order_cancelled"
   | "system_note";
+
+/**
+ * =========================================================
+ * CHARGE STATUS
+ * =========================================================
+ */
+export type ChargeStatus =
+  | "none"
+  | "pending"
+  | "accepted"
+  | "rejected";

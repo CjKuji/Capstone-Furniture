@@ -1,7 +1,7 @@
 "use client";
 
 import { useForm } from "react-hook-form";
-import { supabase } from "@/lib/supabase";
+import { authService } from "@/services/authService";
 import { useRouter } from "next/navigation";
 
 type FormData = {
@@ -15,29 +15,29 @@ export default function Register() {
   const router = useRouter();
 
   const onSubmit = async (data: FormData) => {
-    const { data: signUpData, error: signUpError } =
-      await supabase.auth.signUp({
-        email: data.email,
-        password: data.password,
-      });
+    try {
+      /**
+       * 1. SIGN UP (handled by authService)
+       * - profile will be auto-created via DB trigger
+       */
+      const { user } = await authService.signUp(
+        data.email,
+        data.password,
+        data.name
+      );
 
-    if (signUpError) return alert(signUpError.message);
-    if (!signUpData.user) return alert("User creation failed.");
+      if (!user) {
+        return alert("User creation failed.");
+      }
 
-    const { error: profileError } = await supabase
-      .from("profiles")
-      .insert([
-        {
-          id: signUpData.user.id,
-          full_name: data.name,
-          role: "customer",
-        },
-      ]);
-
-    if (profileError) return alert(profileError.message);
-
-    alert("Registered successfully!");
-    router.push("/auth/login");
+      /**
+       * 2. SUCCESS
+       */
+      alert("Registered successfully!");
+      router.push("/auth/login");
+    } catch (err: any) {
+      alert(err.message || "Registration failed");
+    }
   };
 
   return (
@@ -107,7 +107,7 @@ export default function Register() {
               </label>
               <input
                 type="text"
-                {...register("name")}
+                {...register("name", { required: true })}
                 placeholder="Enter your full name"
                 className="border border-gray-300 rounded-lg px-3 py-2 text-black placeholder-black focus:outline-none focus:ring-2 focus:ring-[#A16B4C]"
               />
@@ -120,7 +120,7 @@ export default function Register() {
               </label>
               <input
                 type="email"
-                {...register("email")}
+                {...register("email", { required: true })}
                 placeholder="Enter your email"
                 className="border border-gray-300 rounded-lg px-3 py-2 text-black placeholder-black focus:outline-none focus:ring-2 focus:ring-[#A16B4C]"
               />
@@ -133,7 +133,7 @@ export default function Register() {
               </label>
               <input
                 type="password"
-                {...register("password")}
+                {...register("password", { required: true })}
                 placeholder="Create a password"
                 className="border border-gray-300 rounded-lg px-3 py-2 text-black placeholder-black focus:outline-none focus:ring-2 focus:ring-[#A16B4C]"
               />

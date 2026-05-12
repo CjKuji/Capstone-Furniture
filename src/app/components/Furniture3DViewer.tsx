@@ -1,9 +1,16 @@
 "use client";
 
-import React, { Suspense, useMemo, useRef, useEffect } from "react";
+import React, {
+  Suspense,
+  useMemo,
+  useRef,
+  useEffect,
+} from "react";
 
 import * as THREE from "three";
+
 import { Canvas } from "@react-three/fiber";
+
 import {
   OrbitControls,
   useGLTF,
@@ -11,106 +18,183 @@ import {
   Environment,
 } from "@react-three/drei";
 
+import { computeRealScale } from "@/lib/3D/nomarlizeFurnitureModel";
+
 /* =========================================================
-   MODEL (STABLE VERSION)
+   TYPES
+========================================================= */
+
+type Dimensions = {
+  width_cm?: number | null;
+  depth_cm?: number | null;
+  height_cm?: number | null;
+};
+
+/* =========================================================
+   MODEL
 ========================================================= */
 
 function Model({
   url,
   textureUrl,
+  dimensions,
 }: {
   url: string;
   textureUrl?: string | null;
+  dimensions?: Dimensions;
 }) {
   const { scene } = useGLTF(url);
+
   const groupRef = useRef<THREE.Group>(null);
 
-  /**
-   * IMPORTANT:
-   * clone ONLY once per model load
-   */
+  /* =========================================================
+     CLONE SCENE ONCE
+  ========================================================= */
+
   const clonedScene = useMemo(() => {
     return scene.clone(true);
   }, [scene]);
 
-  /**
-   * Store original materials once
-   */
-  const originalMaterials = useRef(new Map());
+  /* =========================================================
+     STORE ORIGINAL MATERIALS
+  ========================================================= */
 
-  useEffect(() => {
-    clonedScene.traverse((obj) => {
-      if ((obj as THREE.Mesh).isMesh) {
-        const mesh = obj as THREE.Mesh;
+  const originalMaterials = useRef(
+    new Map<
+      THREE.Mesh,
+      THREE.Material | THREE.Material[]
+    >()
+  );
 
-        if (!originalMaterials.current.has(mesh)) {
-          originalMaterials.current.set(mesh, mesh.material);
-        }
-      }
-    });
-  }, [clonedScene]);
-
-  /**
-   * Texture loading (safe + memoized)
-   */
-  const texture = useMemo(() => {
-    if (!textureUrl) return null;
-
-    const loader = new THREE.TextureLoader();
-    const tex = loader.load(textureUrl);
-
-    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-    tex.flipY = false;
-    tex.anisotropy = 8;
-
-    return tex;
-  }, [textureUrl]);
-
-  /**
-   * MATERIAL APPLICATION (safe update only)
-   */
   useEffect(() => {
     clonedScene.traverse((obj) => {
       if (!(obj as THREE.Mesh).isMesh) return;
 
       const mesh = obj as THREE.Mesh;
-      const original = originalMaterials.current.get(mesh);
 
-      if (!original) return;
+      if (
+        !originalMaterials.current.has(mesh)
+      ) {
+        originalMaterials.current.set(
+          mesh,
+          mesh.material
+        );
+      }
+    });
+  }, [clonedScene]);
 
-      // restore if no texture
-      if (!texture) {
-        mesh.material = original as any;
+  /* =========================================================
+     TEXTURE LOADING
+  ========================================================= */
+
+  const texture = useMemo(() => {
+    if (!textureUrl) return null;
+
+    const loader = new THREE.TextureLoader();
+
+    const tex = loader.load(textureUrl);
+
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+
+    tex.flipY = false;
+
+    tex.anisotropy = 8;
+
+    return tex;
+  }, [textureUrl]);
+
+  /* =========================================================
+     APPLY MATERIALS
+  ========================================================= */
+
+  useEffect(() => {
+    clonedScene.traverse((obj) => {
+      if (!(obj as THREE.Mesh).isMesh) {
         return;
       }
 
-      const apply = (mat: THREE.Material) => {
-        const cloned = (mat as THREE.MeshStandardMaterial).clone();
+      const mesh = obj as THREE.Mesh;
 
-        if (cloned instanceof THREE.MeshStandardMaterial) {
+      const original =
+        originalMaterials.current.get(mesh);
+
+      if (!original) return;
+
+      /* =====================================================
+         RESTORE ORIGINAL MATERIAL
+      ===================================================== */
+
+      if (!texture) {
+        mesh.material = original;
+        return;
+      }
+
+      /* =====================================================
+         APPLY TEXTURE SAFELY
+      ===================================================== */
+
+      const apply = (
+        mat: THREE.Material
+      ) => {
+        const cloned =
+          (
+            mat as THREE.MeshStandardMaterial
+          ).clone();
+
+        if (
+          cloned instanceof
+          THREE.MeshStandardMaterial
+        ) {
           cloned.map = texture;
+
           cloned.roughness = 0.9;
+
           cloned.metalness = 0.05;
+
           cloned.envMapIntensity = 0.6;
+
           cloned.needsUpdate = true;
         }
 
         return cloned;
       };
 
-      mesh.material = Array.isArray(original)
+      mesh.material = Array.isArray(
+        original
+      )
         ? original.map(apply)
         : apply(original);
     });
   }, [texture, clonedScene]);
 
-  /**
-   * CENTER MODEL ONCE
-   */
-  const offset = useMemo(() => {
-    const box = new THREE.Box3().setFromObject(clonedScene);
+  /* =========================================================
+     REAL-WORLD SCALE
+     IMPORTANT:
+     Converts model into real-world size
+  ========================================================= */
 
-    const center = new THREE.Vector3();
+  const scale = useMemo(() => {
+    if (!dimensions) return 1;
+
+    return computeRealScale(
+      clonedScene,
+      dimensions
+    );
+  }, [clonedScene, dimensions]);
+
+  /* =========================================================
+     CENTER MODEL
+  ========================================================= */
+
+  const offset = useMemo(() => {
+    const box = new THREE.Box3().setFromObject(
+      clonedScene
+    );
+
+    const center =
+      new THREE.Vector3();
+
     box.getCenter(center);
 
     return {
@@ -120,10 +204,74 @@ function Model({
     };
   }, [clonedScene]);
 
+  /* =========================================================
+     APPLY TRANSFORMS
+  ========================================================= */
+
   useEffect(() => {
     if (!groupRef.current) return;
-    groupRef.current.position.set(offset.x, offset.y, offset.z);
-  }, [offset]);
+
+    groupRef.current.position.set(
+      offset.x,
+      offset.y,
+      offset.z
+    );
+
+    groupRef.current.scale.setScalar(
+      scale
+    );
+  }, [offset, scale]);
+
+  /* =========================================================
+     DEBUG FINAL REAL SIZE
+     TEMPORARY FOR TESTING
+  ========================================================= */
+
+  useEffect(() => {
+    if (!groupRef.current) return;
+
+    const finalBox =
+      new THREE.Box3().setFromObject(
+        groupRef.current
+      );
+
+    const finalSize =
+      new THREE.Vector3();
+
+    finalBox.getSize(finalSize);
+
+    console.log(
+      "FINAL MODEL SIZE (meters)"
+    );
+
+    console.log({
+      width: finalSize.x,
+      height: finalSize.y,
+      depth: finalSize.z,
+    });
+
+    console.log(
+      "EXPECTED DB SIZE (meters)"
+    );
+
+    console.log({
+      width:
+        (dimensions?.width_cm ?? 0) /
+        100,
+
+      height:
+        (dimensions?.height_cm ?? 0) /
+        100,
+
+      depth:
+        (dimensions?.depth_cm ?? 0) /
+        100,
+    });
+  }, [dimensions, scale]);
+
+  /* =========================================================
+     RENDER
+  ========================================================= */
 
   return (
     <group ref={groupRef}>
@@ -133,72 +281,161 @@ function Model({
 }
 
 /* =========================================================
-   VIEWER (FINAL SAFE VERSION)
+   VIEWER
 ========================================================= */
 
 export default function Furniture3DViewer({
   modelUrl,
   selectedVariantTextureUrl,
+  dimensions,
 }: {
   modelUrl: string;
-  selectedVariantTextureUrl?: string | null;
+
+  selectedVariantTextureUrl?:
+    | string
+    | null;
+
+  dimensions?: Dimensions;
 }) {
-  /**
-   * STRICT validation (prevents invalid blob / html URLs)
-   */
+  /* =========================================================
+     MODEL VALIDATION
+  ========================================================= */
+
   const isValidModel = useMemo(() => {
     if (!modelUrl) return false;
-    if (typeof modelUrl !== "string") return false;
-    if (modelUrl.trim().length === 0) return false;
-    if (modelUrl.endsWith(".html")) return false;
-    if (modelUrl.startsWith("blob:") && modelUrl.includes("undefined")) return false;
+
+    if (
+      typeof modelUrl !== "string"
+    ) {
+      return false;
+    }
+
+    if (
+      modelUrl.trim().length === 0
+    ) {
+      return false;
+    }
+
+    if (
+      modelUrl.endsWith(".html")
+    ) {
+      return false;
+    }
+
+    if (
+      modelUrl.startsWith("blob:") &&
+      modelUrl.includes("undefined")
+    ) {
+      return false;
+    }
 
     return true;
   }, [modelUrl]);
 
-  /**
-   * DO NOT render Canvas if invalid
-   */
+  /* =========================================================
+     INVALID MODEL
+  ========================================================= */
+
   if (!isValidModel) {
     return (
-      <div className="flex items-center justify-center h-[600px] text-neutral-500 text-sm">
+      <div className="flex h-[600px] items-center justify-center text-sm text-neutral-500">
         No model available
       </div>
     );
   }
 
-  return (
-    <div className="relative w-full h-[600px] bg-neutral-100 rounded-xl overflow-hidden">
+  /* =========================================================
+     RENDER
+  ========================================================= */
 
+  return (
+    <div className="relative h-[600px] w-full overflow-hidden rounded-xl bg-neutral-100">
       <Canvas
         shadows
-        dpr={[1, 1.5]} // prevents GPU overload (important for Context Lost)
-        camera={{ position: [3, 2, 4], fov: 50 }}
+        dpr={[1, 1.5]}
+        camera={{
+          position: [3, 2, 4],
+          fov: 50,
+        }}
         gl={{
           antialias: true,
-          preserveDrawingBuffer: false, // IMPORTANT: reduces memory leaks
+
+          preserveDrawingBuffer: false,
         }}
       >
-        {/* LIGHTING */}
-        <ambientLight intensity={0.4} />
-        <directionalLight position={[5, 8, 5]} intensity={1} castShadow />
+        {/* ===================================================
+            LIGHTING
+        =================================================== */}
 
-        {/* ENV */}
+        <ambientLight intensity={0.4} />
+
+        <directionalLight
+          position={[5, 8, 5]}
+          intensity={1}
+          castShadow
+        />
+
+        {/* ===================================================
+            ENVIRONMENT
+        =================================================== */}
+
         <Environment preset="city" />
 
-        {/* FLOOR */}
-        <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-          <planeGeometry args={[20, 20]} />
-          <meshStandardMaterial color="#d6d6d6" roughness={1} />
+        {/* ===================================================
+            FLOOR
+        =================================================== */}
+
+        <mesh
+          rotation={[
+            -Math.PI / 2,
+            0,
+            0,
+          ]}
+          receiveShadow
+        >
+          <planeGeometry
+            args={[20, 20]}
+          />
+
+          <meshStandardMaterial
+            color="#d6d6d6"
+            roughness={1}
+          />
         </mesh>
 
-        {/* WALL */}
-        <mesh position={[0, 3, -6]} receiveShadow>
-          <planeGeometry args={[20, 10]} />
+        {/* ===================================================
+            WALL
+        =================================================== */}
+
+        <mesh
+          position={[0, 3, -6]}
+          receiveShadow
+        >
+          <planeGeometry
+            args={[20, 10]}
+          />
+
           <meshStandardMaterial color="#eaeaea" />
         </mesh>
 
-        {/* MODEL */}
+        {/* ===================================================
+            1 METER DEBUG CUBE
+            TEMPORARY SCALE TEST
+        =================================================== */}
+
+        <mesh position={[-2, 0.5, 0]}>
+          <boxGeometry args={[1, 1, 1]} />
+
+          <meshStandardMaterial
+            color="red"
+            wireframe
+          />
+        </mesh>
+
+        {/* ===================================================
+            MODEL
+        =================================================== */}
+
         <Suspense
           fallback={
             <Html center>
@@ -210,11 +447,17 @@ export default function Furniture3DViewer({
         >
           <Model
             url={modelUrl}
-            textureUrl={selectedVariantTextureUrl}
+            textureUrl={
+              selectedVariantTextureUrl
+            }
+            dimensions={dimensions}
           />
         </Suspense>
 
-        {/* CONTROLS */}
+        {/* ===================================================
+            CONTROLS
+        =================================================== */}
+
         <OrbitControls
           enablePan
           enableZoom
@@ -224,7 +467,11 @@ export default function Furniture3DViewer({
         />
       </Canvas>
 
-      <div className="absolute bottom-3 left-3 bg-black/60 text-white text-xs px-3 py-2 rounded-lg backdrop-blur">
+      {/* =====================================================
+          UI BADGE
+      ===================================================== */}
+
+      <div className="absolute bottom-3 left-3 rounded-lg bg-black/60 px-3 py-2 text-xs text-white backdrop-blur">
         Variant preview active
       </div>
     </div>

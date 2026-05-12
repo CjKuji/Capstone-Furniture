@@ -18,25 +18,29 @@ interface Stats {
 
 /* =========================================================
    SIMPLE MEMORY CACHE
-   Prevents flicker when switching tabs
 ========================================================= */
 
 let dashboardCache: Stats | null = null;
 let dashboardCacheTime = 0;
 
-const CACHE_TTL = 1000 * 60 * 2; // 2 minutes
+const CACHE_TTL = 1000 * 60 * 2;
 
 /* =========================================================
    PAGE
 ========================================================= */
 
 export default function AdminDashboard() {
+  const { user } = useUser();
+
   /* =========================================================
-     AUTH (CENTRALIZED)
-     Layout handles auth + sidebar already
+     SAFE EMAIL EXTRACTION (FIX)
   ========================================================= */
 
-  const { user } = useUser();
+  // 🔥 FIX: handle Supabase/Auth shape safely
+  const email =
+    (user as any)?.email ??
+    (user as any)?.profile?.email ??
+    null;
 
   /* =========================================================
      STATE
@@ -55,8 +59,6 @@ export default function AdminDashboard() {
 
   /* =========================================================
      LOAD DASHBOARD
-     Cached → instant render
-     Fresh fetch → silent refresh
   ========================================================= */
 
   useEffect(() => {
@@ -69,23 +71,13 @@ export default function AdminDashboard() {
         dashboardCache &&
         now - dashboardCacheTime < CACHE_TTL;
 
-      /* -----------------------------------------
-         Fresh cache hit → no loading flicker
-      ----------------------------------------- */
-
       if (hasFreshCache) {
         setStats(dashboardCache!);
         setLoading(false);
         return;
       }
 
-      /* -----------------------------------------
-         First load only
-      ----------------------------------------- */
-
-      if (!dashboardCache) {
-        setLoading(true);
-      }
+      if (!dashboardCache) setLoading(true);
 
       try {
         const dashboardStats = await getAdminStats();
@@ -94,21 +86,12 @@ export default function AdminDashboard() {
 
         setStats(dashboardStats);
 
-        /* -----------------------------------------
-           Update cache
-        ----------------------------------------- */
-
         dashboardCache = dashboardStats;
         dashboardCacheTime = Date.now();
       } catch (error) {
-        console.error(
-          "Failed to load dashboard stats:",
-          error
-        );
+        console.error("Failed to load dashboard stats:", error);
       } finally {
-        if (mounted) {
-          setLoading(false);
-        }
+        if (mounted) setLoading(false);
       }
     };
 
@@ -125,10 +108,8 @@ export default function AdminDashboard() {
 
   return (
     <main className="flex-1 p-10 space-y-8">
-      {/* =====================================================
-          HEADER
-      ====================================================== */}
 
+      {/* HEADER */}
       <div className="flex items-end justify-between">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">
@@ -136,25 +117,19 @@ export default function AdminDashboard() {
           </h1>
 
           <p className="text-sm text-neutral-500 mt-1">
-            {user?.email
-              ? `Signed in as ${user.email}`
+            {email
+              ? `Signed in as ${email}`
               : "System control center"}
           </p>
         </div>
 
         <div className="text-xs text-neutral-500">
           Live system status:{" "}
-          <span className="text-emerald-600">
-            Operational
-          </span>
+          <span className="text-emerald-600">Operational</span>
         </div>
       </div>
 
-      {/* =====================================================
-          KPI SECTION
-          No blocking loader if cache exists
-      ====================================================== */}
-
+      {/* KPI */}
       {loading && !dashboardCache ? (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {Array.from({ length: 4 }).map((_, i) => (
@@ -166,22 +141,13 @@ export default function AdminDashboard() {
         </div>
       ) : (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <KpiCard
-            label="Furniture Items"
-            value={stats.totalFurniture}
-          />
-
+          <KpiCard label="Furniture Items" value={stats.totalFurniture} />
           <KpiCard
             label="Published"
             value={stats.publishedFurniture}
             tone="success"
           />
-
-          <KpiCard
-            label="Users"
-            value={stats.totalUsers}
-          />
-
+          <KpiCard label="Users" value={stats.totalUsers} />
           <KpiCard
             label="Saved Configs"
             value={stats.savedConfigs}
@@ -190,41 +156,28 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* =====================================================
-          PANELS
-      ====================================================== */}
-
+      {/* PANELS */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* ================= SYSTEM ACTIVITY ================= */}
-
         <div className="lg:col-span-2 border rounded-xl bg-white p-5">
-          <h2 className="text-sm font-semibold">
-            System Activity
-          </h2>
-
+          <h2 className="text-sm font-semibold">System Activity</h2>
           <div className="mt-4 text-sm text-neutral-500">
             Activity feed placeholder
-            (orders, edits, uploads, etc.)
           </div>
         </div>
 
-        {/* ================= QUICK ACTIONS ================= */}
-
         <div className="border rounded-xl bg-white p-5">
-          <h2 className="text-sm font-semibold">
-            Quick Actions
-          </h2>
+          <h2 className="text-sm font-semibold">Quick Actions</h2>
 
           <div className="mt-4 space-y-2 text-sm">
-            <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-neutral-100 transition">
+            <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-neutral-100">
               + Add Furniture
             </button>
 
-            <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-neutral-100 transition">
+            <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-neutral-100">
               View Orders
             </button>
 
-            <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-neutral-100 transition">
+            <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-neutral-100">
               Manage Users
             </button>
           </div>
@@ -254,14 +207,10 @@ function KpiCard({
   };
 
   return (
-    <div className="rounded-xl border bg-white p-5 hover:shadow-sm transition">
-      <p className="text-xs text-neutral-500">
-        {label}
-      </p>
+    <div className="rounded-xl border bg-white p-5">
+      <p className="text-xs text-neutral-500">{label}</p>
 
-      <p
-        className={`text-2xl font-semibold mt-2 ${toneStyles[tone]}`}
-      >
+      <p className={`text-2xl font-semibold mt-2 ${toneStyles[tone]}`}>
         {value}
       </p>
     </div>

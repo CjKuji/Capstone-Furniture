@@ -8,51 +8,44 @@ import type {
 import { upload, buildPaths, removeFiles } from "@/services/storageService";
 
 /* =========================================================
-   DEBUG LOGGER
+   DEBUG
 ========================================================= */
 
 const DEBUG = true;
 
 function log(step: string, data?: unknown) {
-  if (!DEBUG) return;
-  console.log(`[VARIANT:${step}]`, data);
+  if (DEBUG) console.log(`[VARIANT:${step}]`, data);
 }
 
 /* =========================================================
-   VALIDATION (VARIANT IS OPTIONAL NOW)
+   CLEAN VALUE HELPERS
+========================================================= */
+
+function cleanString(value: string | null | undefined): string | undefined {
+  return value ?? undefined;
+}
+
+/* =========================================================
+   VALIDATION
 ========================================================= */
 
 export function validateVariants(variants: FurnitureVariantPayload[]) {
   const active = variants.filter((v) => !v.isDeleted);
 
-  log("VALIDATE_INPUT", {
+  log("VALIDATE", {
     total: variants.length,
     active: active.length,
-    activeData: active,
   });
 
-  // 🔥 UPDATED: variants are optional
-  // only validate if user actually provided something meaningful
-  if (variants.length === 0) {
-    log("VALIDATE_SKIP_EMPTY");
-    return;
-  }
-
-  // if everything is deleted → allow it
-  if (active.length === 0) {
-    log("VALIDATE_ALL_DELETED_ALLOWED");
-    return;
-  }
+  if (!variants.length) return;
+  if (!active.length) return;
 }
 
 /* =========================================================
-   NORMALIZATION (NO DEFAULT RULES)
+   NORMALIZE
 ========================================================= */
 
 function normalizeVariants(variants: FurnitureVariantPayload[]) {
-  log("NORMALIZE_INPUT", variants);
-
-  // no mutation logic
   return variants;
 }
 
@@ -63,71 +56,51 @@ function normalizeVariants(variants: FurnitureVariantPayload[]) {
 async function uploadVariantFile(furnitureId: string, file: File) {
   const path = buildPaths.variant(furnitureId, file);
 
-  log("UPLOAD_FILE", {
-    furnitureId,
-    fileName: file.name,
-    path,
-  });
-
   return upload(file, path);
 }
 
 /* =========================================================
-   CREATE
+   CREATE VARIANTS
 ========================================================= */
 
 export async function createVariants(
   furnitureId: string,
   variants: FurnitureVariantPayload[]
 ) {
-  log("CREATE_INPUT", {
-    furnitureId,
-    variantsCount: variants.length,
-    variants,
-  });
-
   const targets = variants.filter((v) => !v.isDeleted);
 
-  if (!targets.length) {
-    log("CREATE_ABORT_NO_TARGETS");
-    return;
-  }
+  if (!targets.length) return;
 
   const rows: FurnitureVariantInsert[] = [];
 
   for (let i = 0; i < targets.length; i++) {
     const v = targets[i];
 
-    let textureUrl: string | null = null;
+    let textureUrl: string | undefined;
 
     if (v.materialFile) {
-      log("UPLOAD_START", { index: i, name: v.name });
-
-      textureUrl = await uploadVariantFile(
-        furnitureId,
-        v.materialFile
-      );
+      textureUrl = await uploadVariantFile(furnitureId, v.materialFile);
     }
 
     rows.push({
       furniture_id: furnitureId,
       name: v.name,
-      texture_url: textureUrl,
-      preview_image_url: textureUrl,
+
+      texture_url: cleanString(textureUrl) as any,
+      preview_image_url: cleanString(textureUrl) as any,
+
       price_adjustment: v.priceAdjustment ?? 0,
       is_active: v.isActive ?? true,
       sort_order: i,
     });
   }
 
-  log("INSERT_ROWS", rows);
-
   const { error } = await supabase
     .from("furniture_variants")
-    .insert(rows);
+    .insert(rows as any);
 
   if (error) {
-    console.error("❌ VARIANT INSERT ERROR:", error);
+    console.error("❌ INSERT ERROR:", error);
     throw error;
   }
 
@@ -135,35 +108,18 @@ export async function createVariants(
 }
 
 /* =========================================================
-   UPDATE
+   UPDATE VARIANTS
 ========================================================= */
 
 export async function updateVariants(
   furnitureId: string,
   variants: FurnitureVariantPayload[]
 ) {
-  log("RAW_INPUT", { furnitureId, variants });
-
-  /* ---------------- SPLIT ---------------- */
-
   const toDelete = variants.filter((v) => v.id && v.isDeleted);
-
   const toKeep = variants.filter((v) => v.id && !v.isDeleted);
-
   const toInsert = variants.filter((v) => !v.id && !v.isDeleted);
 
-  log("SPLIT", {
-    toDelete: toDelete.length,
-    toKeep: toKeep.length,
-    toInsert: toInsert.length,
-  });
-
-  /* ---------------- NORMALIZE ---------------- */
-
-  const fullNormalized = normalizeVariants([
-    ...toKeep,
-    ...toInsert,
-  ]);
+  const fullNormalized = normalizeVariants([...toKeep, ...toInsert]);
 
   validateVariants(fullNormalized);
 
@@ -172,8 +128,6 @@ export async function updateVariants(
   const deleteIds = toDelete.map((v) => v.id!);
 
   if (deleteIds.length) {
-    log("DELETE_IDS", deleteIds);
-
     const { data, error } = await supabase
       .from("furniture_variants")
       .select("texture_url")
@@ -181,9 +135,11 @@ export async function updateVariants(
 
     if (error) throw error;
 
-    if (data?.length) {
-      await removeFiles(data.map((d) => d.texture_url));
-    }
+    await removeFiles(
+      (data ?? [])
+        .map((d) => d.texture_url)
+        .filter(Boolean)
+    );
 
     const { error: delError } = await supabase
       .from("furniture_variants")
@@ -208,8 +164,6 @@ export async function updateVariants(
     };
 
     if (v.materialFile) {
-      log("REPLACE_TEXTURE", { id: v.id });
-
       const { data: old } = await supabase
         .from("furniture_variants")
         .select("texture_url")
@@ -225,15 +179,13 @@ export async function updateVariants(
         v.materialFile
       );
 
-      updateData.texture_url = textureUrl;
-      updateData.preview_image_url = textureUrl;
+      updateData.texture_url = textureUrl as any;
+      updateData.preview_image_url = textureUrl as any;
     }
-
-    log("UPDATE_ITEM", { id: v.id, updateData });
 
     const { error } = await supabase
       .from("furniture_variants")
-      .update(updateData)
+      .update(updateData as any)
       .eq("id", v.id!);
 
     if (error) {
@@ -249,8 +201,6 @@ export async function updateVariants(
   );
 
   if (normalizedInsert.length) {
-    log("INSERT_NEW", normalizedInsert);
-
     await createVariants(furnitureId, normalizedInsert);
   }
 

@@ -1,283 +1,244 @@
 import { supabase } from "@/lib/supabase";
-import type { OrderStatus, PaymentStatus } from "@/types/enums";
-
-import { paymentAggregateService } from "./paymentAggregateService";
-import { paymentService } from "./paymentService";
-import { fulfillmentService } from "./fulfillmentService";
-import { timelineService } from "./timelineService";
+import type { OrderStatus } from "@/types/enums";
 
 /**
  * =========================================================
- * ORDER FLOW SERVICE (ORCHESTRATOR)
- * =========================================================
- * ONLY responsible for:
- * - state transitions
- * - coordinating services
+ * INTERNAL HELPER
  * =========================================================
  */
-
-/* =========================================================
-   1. ACCEPT ORDER
-   pending_review → in_review
-========================================================= */
-export async function acceptOrder(orderId: string, adminId: string) {
-  const { error } = await supabase
+async function getOrder(orderId: string) {
+  const { data, error } = await supabase
     .from("orders")
-    .update({
-      status: "in_review" as OrderStatus,
-    })
-    .eq("id", orderId);
+    .select("id, order_status, delivery_method, payment_status")
+    .eq("id", orderId)
+    .single();
 
-  if (error) throw error;
-
-  await timelineService.log({
-    orderId,
-    actorId: adminId,
-    title: "Order Accepted",
-    description: "Admin started reviewing order",
-    event: "order_review_started",
-  });
+  if (error) throw new Error(error.message);
+  return data;
 }
 
-/* =========================================================
-   2. CREATE / SEND QUOTE
-   in_review → quoted
-========================================================= */
-export async function createQuote(
+async function updateOrderStatus(
   orderId: string,
-  adminId: string,
-  items: { name: string; amount: number; type?: string }[]
+  status: OrderStatus
 ) {
-  const total = items.reduce((s, i) => s + Number(i.amount), 0);
-
-  const { error } = await supabase.from("order_quote_items").insert(
-    items.map((i) => ({
-      order_id: orderId,
-      name: i.name,
-      amount: i.amount,
-      type: i.type ?? "fee",
-      created_by: adminId,
-    }))
-  );
-
-  if (error) throw error;
-
-  const { error: updateError } = await supabase
+  const { data, error } = await supabase
     .from("orders")
     .update({
-      status: "quoted" as OrderStatus,
-      quote_total_price: total,
-    })
-    .eq("id", orderId);
-
-  if (updateError) throw updateError;
-
-  await timelineService.log({
-    orderId,
-    actorId: adminId,
-    title: "Quote Sent",
-    description: `Total: ₱${total}`,
-    event: "quote_sent",
-  });
-}
-
-/* =========================================================
-   3. USER ACCEPTS QUOTE
-   quoted → accepted
-========================================================= */
-export async function acceptQuote(orderId: string, userId: string) {
-  const { error } = await supabase
-    .from("orders")
-    .update({
-      status: "accepted" as OrderStatus,
-      payment_status: "unpaid" as PaymentStatus,
+      order_status: status,
+      updated_at: new Date().toISOString(),
     })
     .eq("id", orderId)
-    .eq("user_id", userId);
+    .select("*")
+    .single();
 
-  if (error) throw error;
-
-  await timelineService.log({
-    orderId,
-    actorId: userId,
-    title: "Quote Accepted",
-    description: "Customer accepted quote",
-    event: "quote_sent",
-  });
+  if (error) throw new Error(error.message);
+  return data;
 }
 
-/* =========================================================
-   4. USER SUBMITS PAYMENT
-   accepted → processing
-========================================================= */
-export async function submitPayment({
-  orderId,
-  userId,
-  amount,
-  referenceNumber,
-  proofImageUrl,
-}: {
+/**
+ * =========================================================
+ * ACCEPT ORDER
+ * =========================================================
+ */
+export async function acceptOrder(params: {
   orderId: string;
-  userId: string;
-  amount: number;
-  referenceNumber?: string | null;
-  proofImageUrl: string;
+  adminId: string;
 }) {
-  // 1. create payment
-  await paymentService.createPayment({
+  const { orderId, adminId } = params;
+
+  if (!orderId) throw new Error("orderId is required");
+  if (!adminId) throw new Error("adminId is required");
+
+  const order = await getOrder(orderId);
+
+  if (order.order_status !== "requested") {
+    throw new Error("Only requested orders can be accepted");
+  }
+
+  return updateOrderStatus(orderId, "accepted");
+}
+
+/**
+ * =========================================================
+ * START PRODUCTION (FIXED)
+ * =========================================================
+ */
+export async function startProduction(orderId: string) {
+  const order = await getOrder(orderId);
+
+  // ✅ MUST be accepted
+  if (order.order_status !== "accepted") {
+    throw new Error("Order must be accepted before starting production");
+  }
+
+  // ✅ MUST be partially or fully paid
+  if (
+    order.payment_status !== "partially_paid" &&
+    order.payment_status !== "fully_paid"
+  ) {
+    throw new Error(
+      "Cannot start production: requires partial or full payment"
+    );
+  }
+
+  return updateOrderStatus(orderId, "in_production");
+}
+
+/**
+ * =========================================================
+ * MARK READY (BRANCH BASED ON DELIVERY METHOD)
+ * =========================================================
+ */
+export async function markOrderReady(orderId: string) {
+  const order = await getOrder(orderId);
+
+  if (order.order_status !== "in_production") {
+    throw new Error("Order must be in production");
+  }
+
+  if (order.delivery_method === "pickup") {
+    return updateOrderStatus(orderId, "ready_for_pickup");
+  }
+
+  return updateOrderStatus(orderId, "ready_for_shipment");
+}
+
+/**
+ * =========================================================
+ * DISPATCH ORDER
+ * =========================================================
+ */
+export async function dispatchOrder(orderId: string) {
+  const order = await getOrder(orderId);
+
+  if (order.delivery_method === "pickup") {
+    throw new Error("Pickup orders cannot be dispatched");
+  }
+
+  if (order.order_status !== "ready_for_shipment") {
+    throw new Error("Order not ready for shipment");
+  }
+
+  return updateOrderStatus(orderId, "shipped");
+}
+
+/**
+ * =========================================================
+ * COMPLETE ORDER
+ * =========================================================
+ */
+export async function completeOrder(orderId: string) {
+  const order = await getOrder(orderId);
+
+  // PICKUP FLOW
+  if (order.delivery_method === "pickup") {
+    if (order.order_status !== "ready_for_pickup") {
+      throw new Error("Order not ready for pickup completion");
+    }
+
+    return updateOrderStatus(orderId, "completed");
+  }
+
+  // DELIVERY FLOW
+  if (order.delivery_method === "delivery") {
+    if (order.order_status !== "shipped") {
+      throw new Error("Order must be shipped before completion");
+    }
+
+    return updateOrderStatus(orderId, "completed");
+  }
+
+  throw new Error("Invalid delivery method");
+}
+
+/**
+ * =========================================================
+ * ADD ORDER CHARGE
+ * =========================================================
+ */
+export async function addOrderCharge(params: {
+  orderId: string;
+  type: string;
+  label?: string;
+  amount: number;
+  isAdditive?: boolean;
+  createdBy: string;
+}) {
+  const {
     orderId,
-    userId,
+    type,
+    label,
     amount,
-    referenceNumber,
-    proofImageUrl,
-  });
+    isAdditive = true,
+    createdBy,
+  } = params;
 
-  // 2. compute payment status
-  const paymentStatus =
-    await paymentAggregateService.calculatePaymentStatus(orderId);
+  if (!orderId) throw new Error("orderId is required");
+  if (!type) throw new Error("type is required");
+  if (amount === undefined || amount === null)
+    throw new Error("amount is required");
+  if (!createdBy) throw new Error("createdBy is required");
 
-  // 3. update order
-  await supabase
-    .from("orders")
-    .update({
-      status: "processing" as OrderStatus,
-      payment_status: paymentStatus,
+  const { data, error } = await supabase
+    .from("order_charges")
+    .insert({
+      order_id: orderId,
+      type,
+      label: label ?? null,
+      amount,
+      is_additive: isAdditive,
+      created_by: createdBy,
     })
-    .eq("id", orderId);
+    .select("*")
+    .single();
 
-  await timelineService.log({
-    orderId,
-    actorId: userId,
-    title: "Payment Submitted",
-    description: `Status: ${paymentStatus}`,
-    event: "payment_submitted",
-  });
+  if (error) throw new Error(error.message);
+
+  await recalculateOrderTotal(orderId);
+
+  return data;
 }
 
-/* =========================================================
-   5. ADMIN VERIFIES PAYMENT
-========================================================= */
-export async function verifyPayment(orderId: string, adminId: string) {
-  const paymentStatus =
-    await paymentAggregateService.calculatePaymentStatus(orderId);
-
-  await supabase
+/**
+ * =========================================================
+ * RECALCULATE TOTAL
+ * =========================================================
+ */
+export async function recalculateOrderTotal(orderId: string) {
+  const { data: order, error: orderError } = await supabase
     .from("orders")
-    .update({
-      payment_status: paymentStatus,
-    })
-    .eq("id", orderId);
+    .select("quote_total_price")
+    .eq("id", orderId)
+    .single();
 
-  await timelineService.log({
-    orderId,
-    actorId: adminId,
-    title: "Payment Verified",
-    description: `Updated to ${paymentStatus}`,
-    event: "payment_verified",
-  });
-}
+  if (orderError) throw new Error(orderError.message);
 
-/* =========================================================
-   6. START PRODUCTION
-========================================================= */
-export async function startProduction(orderId: string, adminId: string) {
-  const paymentStatus =
-    await paymentAggregateService.calculatePaymentStatus(orderId);
+  const { data: charges, error: chargesError } = await supabase
+    .from("order_charges")
+    .select("amount, is_additive")
+    .eq("order_id", orderId);
 
-  if (paymentStatus === "unpaid") {
-    throw new Error("Cannot start production: no payment");
-  }
+  if (chargesError) throw new Error(chargesError.message);
 
-  const { error } = await supabase
-    .from("orders")
-    .update({
-      fulfillment_status: "in_production",
-    })
-    .eq("id", orderId);
+  const totalCharges = (charges ?? []).reduce((sum, c) => {
+    return c.is_additive
+      ? sum + Number(c.amount)
+      : sum - Number(c.amount);
+  }, 0);
 
-  if (error) throw error;
-
-  await timelineService.log({
-    orderId,
-    actorId: adminId,
-    title: "Production Started",
-    description: "Work has begun",
-    event: "production_started",
-  });
-}
-
-/* =========================================================
-   7. MARK READY (ONLY FULLY PAID)
-========================================================= */
-export async function markReady(orderId: string, adminId: string) {
-  const paymentStatus =
-    await paymentAggregateService.calculatePaymentStatus(orderId);
-
-  if (paymentStatus !== "fully_paid") {
-    throw new Error("Order must be fully paid before marking ready");
-  }
+  const base = Number(order.quote_total_price ?? 0);
+  const finalTotal = base + totalCharges;
 
   await supabase
     .from("orders")
     .update({
-      fulfillment_status: "ready_for_pickup",
+      updated_at: new Date().toISOString(),
     })
     .eq("id", orderId);
 
-  await timelineService.log({
-    orderId,
-    actorId: adminId,
-    title: "Order Ready",
-    description: "Fully paid and ready for release",
-    event: "order_ready",
-  });
-}
-
-/* =========================================================
-   8. SHIP / PICKUP FLOW
-========================================================= */
-export async function markShipped(orderId: string, adminId: string) {
-  await fulfillmentService.markShipped(orderId);
-
-  await timelineService.log({
-    orderId,
-    actorId: adminId,
-    title: "Order Shipped",
-    description: "On the way",
-    event: "order_shipped",
-  });
-}
-
-export async function markPickedUp(orderId: string, adminId: string) {
-  await fulfillmentService.markPickedUp(orderId);
-
-  await timelineService.log({
-    orderId,
-    actorId: adminId,
-    title: "Order Picked Up",
-    description: "Customer collected item",
-    event: "order_completed",
-  });
-}
-
-/* =========================================================
-   9. DELIVERED
-========================================================= */
-export async function markDelivered(orderId: string, adminId: string) {
-  await fulfillmentService.markDelivered(orderId);
-
-  await supabase
-    .from("orders")
-    .update({
-      status: "completed" as OrderStatus,
-    })
-    .eq("id", orderId);
-
-  await timelineService.log({
-    orderId,
-    actorId: adminId,
-    title: "Order Delivered",
-    description: "Completed successfully",
-    event: "order_delivered",
-  });
+  return {
+    base,
+    totalCharges,
+    finalTotal,
+  };
 }

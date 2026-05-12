@@ -14,7 +14,7 @@ import { supabase } from "@/lib/supabase";
 
 /* =========================================================
    TYPES
-   ========================================================= */
+========================================================= */
 
 type NavItem = {
   label: string;
@@ -29,14 +29,19 @@ type NavGroup = {
 };
 
 /* =========================================================
-   MENU CONFIG (SCALES CLEANLY)
-   ========================================================= */
+   NAV CONFIG
+========================================================= */
 
 const NAVIGATION: NavGroup[] = [
   {
-    title: "Core",
+    title: "Overview",
     items: [
       { label: "Dashboard", path: "/admin", icon: Home, exact: true },
+    ],
+  },
+  {
+    title: "Management",
+    items: [
       { label: "Furniture", path: "/admin/furniture", icon: Box },
       { label: "Orders", path: "/admin/orders", icon: ShoppingCart },
     ],
@@ -52,7 +57,7 @@ const NAVIGATION: NavGroup[] = [
 
 /* =========================================================
    COMPONENT
-   ========================================================= */
+========================================================= */
 
 export default function AdminSidebar() {
   const router = useRouter();
@@ -69,27 +74,34 @@ export default function AdminSidebar() {
   };
 
   return (
-    <aside className="w-64 h-screen sticky top-0 bg-white border-r border-neutral-200 flex flex-col">
+    <aside className="h-screen w-64 border-r border-neutral-200 bg-white flex flex-col sticky top-0">
 
-      {/* ================= BRAND ================= */}
+      {/* =========================================================
+          BRAND HEADER
+      ========================================================= */}
       <div className="px-6 py-5 border-b border-neutral-200">
-        <h1 className="text-sm font-semibold text-neutral-900">
+        <h1 className="text-sm font-semibold tracking-wide text-neutral-900">
           Furniture Admin
         </h1>
-        <p className="text-[11px] text-neutral-500 mt-0.5">
-          Inventory Control System
+
+        <p className="text-[11px] text-neutral-500 mt-1">
+          Control Panel
         </p>
       </div>
 
-      {/* ================= NAV ================= */}
-      <nav className="flex-1 px-3 py-4 space-y-6">
+      {/* =========================================================
+          NAVIGATION
+      ========================================================= */}
+      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-6">
 
         {NAVIGATION.map((group) => (
           <div key={group.title}>
-            <p className="text-[11px] text-neutral-400 px-3 mb-2 uppercase tracking-wider">
+            {/* GROUP TITLE */}
+            <p className="px-3 mb-2 text-[10px] uppercase tracking-widest text-neutral-400">
               {group.title}
             </p>
 
+            {/* ITEMS */}
             <div className="space-y-1">
               {group.items.map((item) => {
                 const Icon = item.icon;
@@ -100,24 +112,34 @@ export default function AdminSidebar() {
                     key={item.path}
                     onClick={() => router.push(item.path)}
                     className={`
-                      w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition relative
+                      group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition
                       ${
                         active
-                          ? "bg-neutral-100 text-neutral-900 font-medium"
+                          ? "bg-neutral-100 text-neutral-900 font-medium shadow-sm"
                           : "text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900"
                       }
                     `}
                   >
-                    {/* ACTIVE INDICATOR */}
+
+                    {/* ACTIVE BAR */}
                     <span
                       className={`
-                        absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 rounded-r-full transition
+                        absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 rounded-r-full transition
                         ${active ? "bg-neutral-900" : "bg-transparent"}
                       `}
                     />
 
-                    <Icon size={18} />
-                    <span>{item.label}</span>
+                    {/* ICON */}
+                    <Icon
+                      size={18}
+                      className={`
+                        transition
+                        ${active ? "text-neutral-900" : "text-neutral-500 group-hover:text-neutral-900"}
+                      `}
+                    />
+
+                    {/* LABEL */}
+                    <span className="truncate">{item.label}</span>
                   </button>
                 );
               })}
@@ -126,12 +148,23 @@ export default function AdminSidebar() {
         ))}
       </nav>
 
-      {/* ================= FOOTER ================= */}
-      <div className="p-3 border-t border-neutral-200">
+      {/* =========================================================
+          FOOTER / ACTIONS
+      ========================================================= */}
+      <div className="border-t border-neutral-200 p-3 space-y-2">
 
+        {/* ADMIN INFO CARD */}
+        <div className="px-3 py-2 rounded-xl bg-neutral-50 border border-neutral-100">
+          <p className="text-[11px] text-neutral-500">Logged in as</p>
+          <p className="text-sm font-medium text-neutral-800">
+            Administrator
+          </p>
+        </div>
+
+        {/* LOGOUT */}
         <button
           onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-red-600 hover:bg-red-50 transition"
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-red-600 hover:bg-red-50 transition"
         >
           <LogOut size={18} />
           Logout

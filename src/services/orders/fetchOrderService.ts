@@ -21,7 +21,10 @@ export async function getMyOrders(): Promise<Order[]> {
     .select(`
       id,
       user_id,
+
       quote_total_price,
+      final_total_price,
+      charge_status,
 
       order_status,
       payment_status,
@@ -30,17 +33,17 @@ export async function getMyOrders(): Promise<Order[]> {
       customer_name,
       phone_number,
       delivery_address,
+      pickup_location,
       delivery_notes,
       admin_notes,
 
       order_reference_code,
-      price_breakdown,
-
       created_at,
       updated_at,
 
-      order_items (
+      order_items:order_items!order_items_order_id_fkey (
         id,
+        order_id,
         furniture_id,
         selected_variant_id,
         quantity,
@@ -49,6 +52,17 @@ export async function getMyOrders(): Promise<Order[]> {
         furniture_snapshot,
         variant_snapshot,
         model_snapshot_url,
+        created_at
+      ),
+
+      order_charges:order_charges!order_charges_order_id_fkey (
+        id,
+        order_id,
+        type,
+        label,
+        amount,
+        is_additive,
+        created_by,
         created_at
       )
     `)
@@ -59,7 +73,7 @@ export async function getMyOrders(): Promise<Order[]> {
     throw new Error(error.message || "Failed to fetch orders");
   }
 
-  return (data ?? []) as Order[];
+  return (data ?? []) as unknown as Order[];
 }
 
 /**
@@ -82,7 +96,10 @@ export async function getMyOrderById(orderId: string): Promise<Order> {
     .select(`
       id,
       user_id,
+
       quote_total_price,
+      final_total_price,
+      charge_status,
 
       order_status,
       payment_status,
@@ -91,17 +108,17 @@ export async function getMyOrderById(orderId: string): Promise<Order> {
       customer_name,
       phone_number,
       delivery_address,
+      pickup_location,
       delivery_notes,
       admin_notes,
 
       order_reference_code,
-      price_breakdown,
-
       created_at,
       updated_at,
 
-      order_items (
+      order_items:order_items!order_items_order_id_fkey (
         id,
+        order_id,
         furniture_id,
         selected_variant_id,
         quantity,
@@ -110,6 +127,17 @@ export async function getMyOrderById(orderId: string): Promise<Order> {
         furniture_snapshot,
         variant_snapshot,
         model_snapshot_url,
+        created_at
+      ),
+
+      order_charges:order_charges!order_charges_order_id_fkey (
+        id,
+        order_id,
+        type,
+        label,
+        amount,
+        is_additive,
+        created_by,
         created_at
       ),
 
@@ -133,7 +161,7 @@ export async function getMyOrderById(orderId: string): Promise<Order> {
     throw new Error(error.message || "Order not found");
   }
 
-  return data as Order;
+  return data as unknown as Order;
 }
 
 /**
@@ -147,7 +175,10 @@ export async function getAdminOrders(): Promise<OrderAdmin[]> {
     .select(`
       id,
       user_id,
+
       quote_total_price,
+      final_total_price,
+      charge_status,
 
       order_status,
       payment_status,
@@ -156,24 +187,24 @@ export async function getAdminOrders(): Promise<OrderAdmin[]> {
       customer_name,
       phone_number,
       delivery_address,
+      pickup_location,
       delivery_notes,
       admin_notes,
 
       order_reference_code,
-      price_breakdown,
-
       created_at,
       updated_at,
 
-      profiles:user_id (
+      profiles:user_id!inner (
         id,
         full_name,
         created_at,
         role
       ),
 
-      order_items (
+      order_items:order_items!order_items_order_id_fkey (
         id,
+        order_id,
         furniture_id,
         selected_variant_id,
         quantity,
@@ -182,6 +213,17 @@ export async function getAdminOrders(): Promise<OrderAdmin[]> {
         furniture_snapshot,
         variant_snapshot,
         model_snapshot_url,
+        created_at
+      ),
+
+      order_charges:order_charges!order_charges_order_id_fkey (
+        id,
+        order_id,
+        type,
+        label,
+        amount,
+        is_additive,
+        created_by,
         created_at
       )
     `)
@@ -193,8 +235,10 @@ export async function getAdminOrders(): Promise<OrderAdmin[]> {
 
   return (data ?? []).map((item: any) => ({
     ...item,
-    user: item.profiles ?? null,
-  })) as OrderAdmin[];
+    user: Array.isArray(item.profiles)
+      ? item.profiles[0]
+      : item.profiles ?? null,
+  })) as unknown as OrderAdmin[];
 }
 
 /**
@@ -210,7 +254,10 @@ export async function getAdminOrderById(
     .select(`
       id,
       user_id,
+
       quote_total_price,
+      final_total_price,
+      charge_status,
 
       order_status,
       payment_status,
@@ -219,24 +266,24 @@ export async function getAdminOrderById(
       customer_name,
       phone_number,
       delivery_address,
+      pickup_location,
       delivery_notes,
       admin_notes,
 
       order_reference_code,
-      price_breakdown,
-
       created_at,
       updated_at,
 
-      profiles:user_id (
+      profiles:user_id!inner (
         id,
         full_name,
         created_at,
         role
       ),
 
-      order_items (
+      order_items:order_items!order_items_order_id_fkey (
         id,
+        order_id,
         furniture_id,
         selected_variant_id,
         quantity,
@@ -245,6 +292,17 @@ export async function getAdminOrderById(
         furniture_snapshot,
         variant_snapshot,
         model_snapshot_url,
+        created_at
+      ),
+
+      order_charges:order_charges!order_charges_order_id_fkey (
+        id,
+        order_id,
+        type,
+        label,
+        amount,
+        is_additive,
+        created_by,
         created_at
       ),
 
@@ -265,6 +323,8 @@ export async function getAdminOrderById(
 
   return {
     ...data,
-    user: data.profiles ?? null,
-  } as OrderAdmin;
+    user: Array.isArray(data.profiles)
+      ? data.profiles[0]
+      : data.profiles ?? null,
+  } as unknown as OrderAdmin;
 }

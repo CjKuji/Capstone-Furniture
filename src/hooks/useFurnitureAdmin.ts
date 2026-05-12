@@ -28,10 +28,7 @@ const TIMEOUT_MS = 15000;
 /* ========================================================= */
 
 export function useFurniture() {
-  const [data, setData] = useState<FurnitureItemAdmin[]>(
-    () => CACHE ?? []
-  );
-
+  const [data, setData] = useState<FurnitureItemAdmin[]>(() => CACHE ?? []);
   const [loading, setLoading] = useState<boolean>(() => !CACHE);
   const [mutating, setMutating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,44 +37,35 @@ export function useFurniture() {
   const requestIdRef = useRef(0);
   const didInitRef = useRef(false);
 
-  /* =========================================================
-     LIFECYCLE
-  ========================================================= */
+  /* ========================================================= */
 
   useEffect(() => {
-    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
     };
   }, []);
 
-  /* =========================================================
-     CACHE VALIDATION
-  ========================================================= */
+  /* ========================================================= */
 
   const isFresh = useCallback(() => {
     return (
       Array.isArray(CACHE) &&
-      CACHE.length >= 0 &&
       Date.now() - CACHE_TIME < CACHE_TTL
     );
   }, []);
 
-  /* =========================================================
-     TIMEOUT WRAPPER
-  ========================================================= */
+  /* ========================================================= */
 
-  const withTimeout = <T,>(promise: Promise<T>) => {
-    return Promise.race([
+  const withTimeout = <T,>(promise: Promise<T>) =>
+    Promise.race([
       promise,
       new Promise<T>((_, reject) =>
         setTimeout(() => reject(new Error("Request timeout")), TIMEOUT_MS)
       ),
     ]);
-  };
 
   /* =========================================================
-     FETCH ALL (FIXED STABILITY)
+     FETCH ALL
   ========================================================= */
 
   const fetchAll = useCallback(async (force = false) => {
@@ -85,9 +73,6 @@ export function useFurniture() {
 
     setError(null);
 
-    /* IMPORTANT:
-       If cache exists, NEVER blank UI first
-    */
     if (!force && isFresh() && CACHE) {
       setData(CACHE);
       setLoading(false);
@@ -100,12 +85,9 @@ export function useFurniture() {
       if (!INFLIGHT) {
         INFLIGHT = withTimeout(getFurniture())
           .then((res) => {
-            const result = res ?? [];
-
-            CACHE = result;
+            CACHE = res ?? [];
             CACHE_TIME = Date.now();
-
-            return result;
+            return CACHE;
           })
           .finally(() => {
             INFLIGHT = null;
@@ -118,22 +100,12 @@ export function useFurniture() {
         return result;
       }
 
-      /* 🔥 CRITICAL: only update if data actually differs */
-      setData((prev) => {
-        if (prev === result) return prev;
-        return result;
-      });
-
+      setData(result);
       return result;
-    } catch (err) {
-      if (!mountedRef.current || requestId !== requestIdRef.current) {
-        return [];
-      }
+    } catch (e) {
+      if (!mountedRef.current) return [];
 
-      setError(
-        err instanceof Error ? err.message : "Failed to load furniture"
-      );
-
+      setError(e instanceof Error ? e.message : "Failed to load furniture");
       setData([]);
       return [];
     } finally {
@@ -143,15 +115,13 @@ export function useFurniture() {
     }
   }, [isFresh]);
 
-  /* =========================================================
-     INIT (FIXED: prevents double fetch + flicker)
-  ========================================================= */
+  /* ========================================================= */
 
   useEffect(() => {
     if (didInitRef.current) return;
     didInitRef.current = true;
 
-    if (CACHE && CACHE.length > 0) {
+    if (CACHE?.length) {
       setData(CACHE);
       setLoading(false);
       return;
@@ -164,72 +134,56 @@ export function useFurniture() {
      CREATE
   ========================================================= */
 
-  const create = useCallback(
-    async (payload: FurnitureFormPayload, userId: string) => {
-      const requestId = ++requestIdRef.current;
+  const create = useCallback(async (payload: FurnitureFormPayload, userId: string) => {
+    const requestId = ++requestIdRef.current;
+    setMutating(true);
+    setError(null);
 
-      setMutating(true);
-      setError(null);
+    try {
+      const created = await createFurniture(payload, userId);
 
-      try {
-        const created = await createFurniture(payload, userId);
+      if (!mountedRef.current || requestId !== requestIdRef.current) return false;
 
-        if (!mountedRef.current || requestId !== requestIdRef.current) {
-          return true;
-        }
+      CACHE = [created, ...(CACHE ?? [])];
+      setData(CACHE);
 
-        CACHE = [created, ...(CACHE ?? [])];
-        setData(CACHE);
-
-        return true;
-      } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Failed to create furniture"
-        );
-        return false;
-      } finally {
-        setMutating(false);
-      }
-    },
-    []
-  );
+      return true;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to create furniture");
+      return false;
+    } finally {
+      setMutating(false);
+    }
+  }, []);
 
   /* =========================================================
      UPDATE
   ========================================================= */
 
-  const update = useCallback(
-    async (id: string, payload: FurnitureFormPayload) => {
-      const requestId = ++requestIdRef.current;
+  const update = useCallback(async (id: string, payload: FurnitureFormPayload) => {
+    const requestId = ++requestIdRef.current;
+    setMutating(true);
+    setError(null);
 
-      setMutating(true);
-      setError(null);
+    try {
+      const updated = await updateFurniture(id, payload);
 
-      try {
-        const updated = await updateFurniture(id, payload);
+      if (!mountedRef.current || requestId !== requestIdRef.current) return false;
 
-        if (!mountedRef.current || requestId !== requestIdRef.current) {
-          return true;
-        }
+      CACHE = (CACHE ?? []).map((i) =>
+        i.id === id ? updated : i
+      );
 
-        CACHE = (CACHE ?? []).map((item) =>
-          item.id === id ? updated : item
-        );
+      setData(CACHE);
 
-        setData(CACHE);
-
-        return true;
-      } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Failed to update furniture"
-        );
-        return false;
-      } finally {
-        setMutating(false);
-      }
-    },
-    []
-  );
+      return true;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to update furniture");
+      return false;
+    } finally {
+      setMutating(false);
+    }
+  }, []);
 
   /* =========================================================
      DELETE
@@ -237,25 +191,20 @@ export function useFurniture() {
 
   const remove = useCallback(async (id: string) => {
     const requestId = ++requestIdRef.current;
-
     setMutating(true);
     setError(null);
 
     try {
       await deleteFurniture(id);
 
-      if (!mountedRef.current || requestId !== requestIdRef.current) {
-        return true;
-      }
+      if (!mountedRef.current || requestId !== requestIdRef.current) return false;
 
       CACHE = (CACHE ?? []).filter((i) => i.id !== id);
       setData(CACHE);
 
       return true;
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to delete furniture"
-      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to delete furniture");
       return false;
     } finally {
       setMutating(false);
@@ -276,4 +225,4 @@ export function useFurniture() {
 
     refetch: () => fetchAll(true),
   };
-}
+};

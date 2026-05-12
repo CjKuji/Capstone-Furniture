@@ -20,11 +20,16 @@ export default function CustomerFurnitureCard({ item }: Props) {
   const router = useRouter();
 
   /* =========================================================
-     DATA (FROM UPDATED PUBLIC LIST API)
+     SAFE IMAGE RESOLUTION (FIXED)
   ========================================================= */
 
   const primaryImage =
-    item.thumbnail_url ?? "/placeholder.png"; // 🔥 FIXED
+    // 🔥 Try common real fields safely
+    (item as any)?.thumbnail_url ??
+    (item as any)?.primary_image ??
+    (item as any)?.image_url ??
+    (item as any)?.images?.[0]?.url ??
+    "/placeholder.png";
 
   const categoryName = item.category?.name ?? "Uncategorized";
 
@@ -37,18 +42,12 @@ export default function CustomerFurnitureCard({ item }: Props) {
         } cm`
       : "No dimensions";
 
-  /* =========================================================
-     UI
-  ========================================================= */
-
   return (
     <div
       onClick={() => router.push(`/furniture/${item.id}`)}
       className="group bg-white border border-gray-200 rounded-xl overflow-hidden hover:shadow-md hover:border-gray-300 transition-all duration-300 cursor-pointer"
     >
-      {/* =====================================================
-          IMAGE
-      ====================================================== */}
+      {/* IMAGE */}
       <div className="relative h-40 bg-gray-100 overflow-hidden">
         <img
           src={primaryImage}
@@ -58,38 +57,31 @@ export default function CustomerFurnitureCard({ item }: Props) {
 
         {/* BADGES */}
         <div className="absolute bottom-3 left-3 flex flex-wrap gap-2">
-          {/* IMAGE COUNT */}
           <div className="flex items-center gap-1 text-[10px] bg-black/75 text-white px-2 py-1 rounded-md">
             <ImageIcon size={12} />
-            {item.imageCount}
+            {(item as any).imageCount ?? 0}
           </div>
 
-          {/* VARIANT COUNT */}
           <div className="flex items-center gap-1 text-[10px] bg-white text-gray-700 px-2 py-1 rounded-md border">
             <Package size={12} />
-            {item.variantCount}
+            {(item as any).variantCount ?? 0}
           </div>
 
-          {/* MODEL STATUS */}
           <div className="flex items-center gap-1 text-[10px] bg-white text-gray-700 px-2 py-1 rounded-md border">
             <Box size={12} />
-            {item.hasModel ? "3D" : "No 3D"}
+            {(item as any).hasModel ? "3D" : "No 3D"}
           </div>
         </div>
       </div>
 
-      {/* =====================================================
-          CONTENT
-      ====================================================== */}
+      {/* CONTENT */}
       <div className="p-4 space-y-4">
-        {/* TITLE + PRICE */}
         <div className="flex justify-between items-start gap-3">
           <div className="min-w-0">
             <h3 className="text-sm font-semibold text-gray-900 truncate">
               {item.name}
             </h3>
 
-            {/* CATEGORY NAME */}
             <p className="text-xs text-gray-500 mt-0.5">
               {categoryName}
             </p>
@@ -99,7 +91,6 @@ export default function CustomerFurnitureCard({ item }: Props) {
             <p className="text-sm font-semibold text-gray-900">
               ₱{price.toLocaleString()}
             </p>
-
             <p className="text-[10px] text-gray-400">base price</p>
           </div>
         </div>
@@ -119,7 +110,6 @@ export default function CustomerFurnitureCard({ item }: Props) {
         <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
           <div className="flex items-center gap-2">
             <Ruler size={13} className="text-gray-500" />
-
             <span className="text-[11px] text-gray-600">
               {dimensionText}
             </span>

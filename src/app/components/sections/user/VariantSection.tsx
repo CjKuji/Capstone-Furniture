@@ -1,112 +1,141 @@
 "use client";
 
+import { useState } from "react";
 import type { VariantUI } from "@/types/furniture-ui";
 
 type Props = {
   variants: VariantUI[];
-  activeVariantId: string | null;
-  setActiveVariantId: (id: string | null) => void;
+
+  /**
+   * ONLY for 3D model preview
+   */
+  onApplyVariant?: (variantId: string | null) => void;
+
+  /**
+   * optional external control (controlled mode)
+   */
+  activeVariantId?: string | null;
 };
 
 export default function VariantsSection({
   variants,
+  onApplyVariant,
   activeVariantId,
-  setActiveVariantId,
 }: Props) {
+  /**
+   * =========================================================
+   * INTERNAL STATE (ONLY USED IF NOT CONTROLLED BY PARENT)
+   * =========================================================
+   */
+  const [internalActive, setInternalActive] = useState<string | null>(null);
+
+  const isControlled = activeVariantId !== undefined;
+  const currentActive = isControlled ? activeVariantId : internalActive;
+
+  /**
+   * =========================================================
+   * APPLY VARIANT (3D PREVIEW ONLY)
+   * =========================================================
+   */
+  const applyVariant = (id: string | null) => {
+    if (!isControlled) {
+      setInternalActive(id);
+    }
+
+    onApplyVariant?.(id);
+  };
+
+  /**
+   * =========================================================
+   * ACTIVE CHECK
+   * =========================================================
+   */
+  const isActive = (id: string | null) => currentActive === id;
+
+  /**
+   * =========================================================
+   * UI
+   * =========================================================
+   */
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 p-6 space-y-5">
+    <div className="bg-white rounded-2xl border border-black p-6 space-y-4">
 
       {/* HEADER */}
       <div>
-        <h3 className="text-sm font-semibold text-gray-900">
+        <h3 className="text-sm font-semibold text-black">
           Variants
         </h3>
-        <p className="text-xs text-gray-500 mt-1">
-          Apply a material to the 3D model • switch anytime
+
+        <p className="text-xs text-black mt-1">
+          Click a variant to preview it on the 3D model.
         </p>
       </div>
 
-      {/* LIST */}
-      <div className="space-y-3">
+      {/* DEFAULT OPTION */}
+      <button
+        onClick={() => applyVariant(null)}
+        className={`w-full text-left p-4 border rounded-xl transition ${
+          isActive(null)
+            ? "border-black shadow-sm"
+            : "border-black/40"
+        }`}
+      >
+        <div className="text-sm font-semibold text-black">
+          Default Furniture
+        </div>
 
+        <div className="text-xs text-black">
+          Base model (no variant texture)
+        </div>
+      </button>
+
+      {/* VARIANTS LIST */}
+      <div className="space-y-3">
         {variants
           .filter((v) => !v.isDeleted)
           .map((v) => {
-            const key = v.id ?? v.clientId;
-            const isActive = activeVariantId === key;
+            const id = v.id ?? v.clientId;
 
             return (
-              <div
-                key={key}
-                className={`w-full flex items-center gap-4 p-3 border rounded-xl transition
-                  ${isActive
-                    ? "border-[#8C593F] bg-[#FFF4EC]"
-                    : "border-gray-200 hover:bg-gray-50"
-                  }`}
+              <button
+                key={id}
+                onClick={() => applyVariant(id)}
+                className={`w-full flex items-center gap-3 p-4 border rounded-xl transition ${
+                  isActive(id)
+                    ? "border-black shadow-sm"
+                    : "border-black/40"
+                }`}
               >
-
-                {/* PREVIEW */}
-                <div className="w-12 h-12 rounded-lg overflow-hidden border bg-white">
+                {/* IMAGE */}
+                <div className="w-12 h-12 border border-black rounded-lg overflow-hidden flex-shrink-0">
                   {v.previewUrl ? (
                     <img
                       src={v.previewUrl}
-                      className="w-full h-full object-cover"
                       alt={v.name}
+                      className="w-full h-full object-cover"
                     />
                   ) : (
-                    <div className="text-[10px] text-gray-400 flex items-center justify-center h-full">
+                    <div className="flex items-center justify-center h-full text-xs text-black">
                       No Img
                     </div>
                   )}
                 </div>
 
                 {/* INFO */}
-                <div className="flex-1 text-left">
-                  <div className="text-sm font-medium text-gray-900">
+                <div className="text-left">
+                  <div className="text-sm font-semibold text-black">
                     {v.name}
                   </div>
 
-                  <div className="text-xs text-gray-500">
+                  <div className="text-xs text-black">
                     {v.priceAdjustment
-                      ? `+₱${v.priceAdjustment}`
+                      ? `+₱${Number(v.priceAdjustment).toLocaleString()}`
                       : "No price change"}
                   </div>
                 </div>
-
-                {/* ACTIONS */}
-                <div className="flex items-center gap-2">
-
-                  {/* APPLY / SWITCH */}
-                  <button
-                    type="button"
-                    onClick={() => setActiveVariantId(key)}
-                    className={`text-xs px-3 py-1 rounded-full border transition
-                      ${isActive
-                        ? "bg-[#8C593F] text-white border-[#8C593F]"
-                        : "text-[#8C593F] border-[#8C593F] hover:bg-[#FFF4EC]"
-                      }
-                    `}
-                  >
-                    {isActive ? "Applied" : "Apply"}
-                  </button>
-
-                  {/* REMOVE */}
-                  {isActive && (
-                    <button
-                      type="button"
-                      onClick={() => setActiveVariantId(null)}
-                      className="w-7 h-7 flex items-center justify-center rounded-full border border-gray-300 text-gray-500 hover:bg-gray-100"
-                      title="Remove variant"
-                    >
-                      ✕
-                    </button>
-                  )}
-
-                </div>
-              </div>
+              </button>
             );
           })}
-
       </div>
     </div>
   );

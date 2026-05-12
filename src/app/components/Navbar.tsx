@@ -1,92 +1,107 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+
+import {
+  User as UserIcon,
+  ChevronDown,
+  ShoppingBag,
+  Heart,
+} from "lucide-react";
+
 import { supabase } from "@/lib/supabase";
-import { User as UserIcon, ChevronDown, ShoppingBag, Heart } from "lucide-react";
-import type { User } from "@supabase/supabase-js";
+import { useUser } from "@/hooks/useUser";
 
 export default function Navbar() {
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(null);
-  const [role, setRole] = useState<string | null>(null);
+
+  const { user, authUser, role, loading } = useUser();
+
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // ---------------- GET CURRENT USER ----------------
-  useEffect(() => {
-    const getSessionUser = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (session?.user) setUser(session.user);
-    };
-    getSessionUser();
-
-    // Listen for auth state changes
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
-
-    return () => listener.subscription.unsubscribe();
-  }, []);
-
-  // ---------------- FETCH ROLE ----------------
-  useEffect(() => {
-    const fetchRole = async () => {
-      if (!user) return;
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .single();
-      if (!error && data) setRole(data.role);
-    };
-    fetchRole();
-  }, [user]);
-
-  // ---------------- CLOSE DROPDOWN ON OUTSIDE CLICK ----------------
+  /**
+   * =========================================================
+   * OUTSIDE CLICK CLOSE
+   * =========================================================
+   */
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownOpen && dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
         setDropdownOpen(false);
       }
     };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [dropdownOpen]);
 
-  const logout = async () => {
+    document.addEventListener("mousedown", handleClickOutside);
+    return () =>
+      document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  /**
+   * =========================================================
+   * LOGOUT
+   * =========================================================
+   */
+  const handleLogout = async () => {
+    setDropdownOpen(false);
     await supabase.auth.signOut();
-    setUser(null);
-    setRole(null);
     router.push("/auth/login");
   };
 
-  // ---------------- NAV ITEMS ----------------
+  /**
+   * =========================================================
+   * NAV ITEMS (ABOUT KEPT)
+   * =========================================================
+   */
   const navItems = [
     { label: "Home", route: "/" },
-    { label: "Catalog", route: "/catalog" },
-    { label: "About Us", route: "/about" },
+    { label: "Designs", route: "/catalog" },
+    { label: "About Us", route: "/about" }, // KEEP THIS
   ];
 
-  return (
-    <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-md shadow-md px-6 py-4 flex justify-between items-center">
-      {/* LOGO */}
-      <span
-        className="font-bold text-2xl text-[#4B3F3F] cursor-pointer hover:text-[#A16B4C] transition"
-        onClick={() => router.push("/")}
-      >
-        Furniture3D
-      </span>
+  /**
+   * =========================================================
+   * LOADING STATE
+   * =========================================================
+   */
+  if (loading) {
+    return (
+      <nav className="sticky top-0 z-50 flex items-center justify-between border-b border-[#E6D9C8] bg-[#FAF6F1]/80 px-6 py-4 backdrop-blur-md">
+        <div className="h-6 w-40 animate-pulse rounded bg-gray-200" />
+        <div className="flex gap-3">
+          <div className="h-9 w-20 animate-pulse rounded-lg bg-gray-200" />
+          <div className="h-9 w-20 animate-pulse rounded-lg bg-gray-200" />
+        </div>
+      </nav>
+    );
+  }
 
-      {/* NAV ITEMS */}
-      <ul className="hidden md:flex gap-8 text-[#4B3F3F] font-medium">
+  return (
+    <nav className="sticky top-0 z-50 flex items-center justify-between border-b border-[#E6D9C8] bg-[#FAF6F1]/90 px-6 py-4 backdrop-blur-md">
+
+      {/* =========================================================
+          BRAND
+      ========================================================= */}
+      <button
+        onClick={() => router.push("/")}
+        className="text-2xl font-bold tracking-tight text-[#3A2B22] transition hover:text-[#7A4E2D]"
+      >
+        WoodForge
+      </button>
+
+      {/* =========================================================
+          CENTER NAV
+      ========================================================= */}
+      <ul className="hidden items-center gap-10 md:flex">
         {navItems.map((item) => (
           <li key={item.label}>
             <button
-              className="hover:text-[#A16B4C] transition"
               onClick={() => router.push(item.route)}
+              className="text-sm font-medium text-[#4A3B2A] transition hover:text-[#7A4E2D]"
             >
               {item.label}
             </button>
@@ -94,84 +109,101 @@ export default function Navbar() {
         ))}
       </ul>
 
-      {/* RIGHT SIDE */}
-      <div className="flex items-center gap-4">
-        {user ? (
+      {/* =========================================================
+          RIGHT ACTIONS
+      ========================================================= */}
+      <div className="flex items-center gap-3">
+
+        {/* ORDERS */}
+        {authUser && (
+          <button
+            title="Your orders"
+            onClick={() => router.push("/orders")}
+            className="rounded-full p-2 transition hover:bg-[#F3E2D2]"
+          >
+            <ShoppingBag className="h-5 w-5 text-[#4A3B2A]" />
+          </button>
+        )}
+
+        {/* =========================================================
+            USER MENU
+        ========================================================= */}
+        {authUser ? (
+          <div className="relative" ref={dropdownRef}>
+            <button
+              onClick={() => setDropdownOpen((p) => !p)}
+              className="flex items-center gap-2 rounded-full bg-[#7A4E2D] px-3 py-2 text-white shadow-sm transition hover:bg-[#663D22]"
+            >
+              <UserIcon className="h-5 w-5" />
+              <ChevronDown className="h-4 w-4" />
+            </button>
+
+            {dropdownOpen && (
+              <div className="absolute right-0 mt-2 w-60 overflow-hidden rounded-2xl border border-[#E6D9C8] bg-white shadow-xl">
+
+                {/* USER INFO */}
+                <div className="border-b px-4 py-3">
+                  <p className="truncate text-sm font-medium text-[#3A2B22]">
+                    {authUser?.email || "Guest"}
+                  </p>
+
+                  {role && (
+                    <p className="text-xs text-gray-500 capitalize">
+                      {role}
+                    </p>
+                  )}
+                </div>
+
+                {/* PROFILE */}
+                <button
+                  onClick={() => {
+                    setDropdownOpen(false);
+                    router.push("/profile");
+                  }}
+                  className="block w-full px-4 py-3 text-left text-sm hover:bg-[#F3E2D2]"
+                >
+                  Profile
+                </button>
+
+                {/* ADMIN */}
+                {(role === "admin" || role === "super_admin") && (
+                  <button
+                    onClick={() => {
+                      setDropdownOpen(false);
+                      router.push("/admin");
+                    }}
+                    className="block w-full px-4 py-3 text-left text-sm hover:bg-[#F3E2D2]"
+                  >
+                    Admin Dashboard
+                  </button>
+                )}
+
+                {/* LOGOUT */}
+                <button
+                  onClick={handleLogout}
+                  className="block w-full px-4 py-3 text-left text-sm text-red-600 hover:bg-red-50"
+                >
+                  Logout
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
           <>
             <button
-              title="Saved furniture"
-              onClick={() => router.push("/saved")}
-              className="p-2 rounded-full hover:bg-[#FFF0E0] transition"
-            >
-              <Heart className="w-5 h-5 text-[#4B3F3F]" />
-            </button>
-
-            <button
-              title="Your orders"
-              onClick={() => router.push("/orders")}
-              className="p-2 rounded-full hover:bg-[#FFF0E0] transition"
-            >
-              <ShoppingBag className="w-5 h-5 text-[#4B3F3F]" />
-            </button>
-
-            {/* USER DROPDOWN */}
-            <div className="relative" ref={dropdownRef}>
-              <button
-                aria-label="User menu"
-                onClick={() => setDropdownOpen(!dropdownOpen)}
-                className="flex items-center gap-2 p-2 rounded-full bg-[#A16B4C] text-white hover:bg-[#8C593F] transition"
-              >
-                <UserIcon className="w-5 h-5" />
-                <ChevronDown className="w-4 h-4" />
-              </button>
-
-              {dropdownOpen && (
-                <div className="absolute right-0 mt-2 w-56 bg-white shadow-lg rounded-md border overflow-hidden">
-                  <div className="px-4 py-3 text-sm text-gray-600 border-b">
-                    {user.email}
-                  </div>
-
-                  <button
-                    onClick={() => router.push("/profile")}
-                    className="block w-full text-left px-4 py-2 hover:bg-[#FFF0E0] transition"
-                  >
-                    Profile
-                  </button>
-
-                  {role === "admin" && (
-                    <button
-                      onClick={() => router.push("/admin")}
-                      className="block w-full text-left px-4 py-2 hover:bg-[#FFF0E0] transition"
-                    >
-                      Admin Dashboard
-                    </button>
-                  )}
-
-                  <button
-                    onClick={logout}
-                    className="block w-full text-left px-4 py-2 hover:bg-red-50 text-red-600 transition"
-                  >
-                    Logout
-                  </button>
-                </div>
-              )}
-            </div>
-          </>
-        ) : (
-          <div className="flex gap-4">
-            <button
               onClick={() => router.push("/auth/login")}
-              className="px-4 py-2 bg-[#A16B4C] text-white rounded hover:bg-[#8C593F] transition"
+              className="rounded-xl bg-[#7A4E2D] px-4 py-2 text-sm text-white hover:bg-[#663D22]"
             >
               Login
             </button>
+
             <button
               onClick={() => router.push("/auth/register")}
-              className="px-4 py-2 bg-[#FFDAB9] text-[#4B3F3F] rounded hover:bg-[#FFC79A] transition"
+              className="rounded-xl border border-[#7A4E2D] px-4 py-2 text-sm text-[#7A4E2D] hover:bg-[#7A4E2D] hover:text-white"
             >
               Register
             </button>
-          </div>
+          </>
         )}
       </div>
     </nav>
