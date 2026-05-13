@@ -37,22 +37,23 @@ function Model({
 
   const clonedScene = useMemo(() => scene.clone(true), [scene]);
 
-  const scale = useMemo(() => {
-    if (!dimensions) return 1;
-    return computeRealScale(clonedScene, dimensions);
-  }, [clonedScene, dimensions]);
-
-  const offset = useMemo(() => {
+  const { scale, offset } = useMemo(() => {
+    const s = dimensions ? computeRealScale(clonedScene, dimensions) : 1;
     const box = new THREE.Box3().setFromObject(clonedScene);
     const center = new THREE.Vector3();
     box.getCenter(center);
 
+    // Offset must be in world space (parent space), so multiply by scale:
+    // world_pos = local_coord * scale + offset → we want bottom at y=0, center at x=z=0
     return {
-      x: -center.x,
-      y: -box.min.y,
-      z: -center.z,
+      scale: s,
+      offset: {
+        x: -center.x * s,
+        y: -box.min.y * s,
+        z: -center.z * s,
+      },
     };
-  }, [clonedScene]);
+  }, [clonedScene, dimensions]);
 
   return (
     <group position={[offset.x, offset.y, offset.z]} scale={scale}>
@@ -74,7 +75,7 @@ export default function Furniture3DViewer({
 }) {
   if (!modelUrl) {
     return (
-      <div className="h-[600px] flex items-center justify-center text-black">
+      <div className="flex justify-center items-center h-[600px] text-black">
         No model available
       </div>
     );
@@ -116,18 +117,18 @@ export default function Furniture3DViewer({
   };
 
   return (
-    <div className="relative h-[600px] w-full overflow-hidden rounded-xl bg-white border">
+    <div className="relative bg-white border rounded-xl w-full h-[600px] overflow-hidden">
 
       {/* AR BUTTON */}
       <button
         onClick={enterAR}
-        className="absolute right-4 top-4 z-10 rounded-xl bg-black px-4 py-2 text-xs font-medium text-white"
+        className="top-4 right-4 z-10 absolute bg-black px-4 py-2 rounded-xl font-medium text-white text-xs"
       >
         Enter AR
       </button>
 
       {/* 3D CANVAS */}
-      <Canvas camera={{ position: [3, 2, 4], fov: 50 }}>
+      <Canvas camera={{ position: [1.5, 1.2, 3], fov: 45 }}>
         <ambientLight intensity={0.5} />
         <directionalLight position={[5, 8, 5]} intensity={1} />
 
@@ -150,7 +151,7 @@ export default function Furniture3DViewer({
           <Model url={modelUrl} dimensions={dimensions} />
         </Suspense>
 
-        <OrbitControls />
+        <OrbitControls target={[0, 0.4, 0]} enableDamping dampingFactor={0.08} />
       </Canvas>
     </div>
   );
