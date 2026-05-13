@@ -37,7 +37,22 @@ function Model({
 }) {
   const { scene } = useGLTF(url);
 
-  const clonedScene = useMemo(() => scene.clone(true), [scene]);
+  const clonedScene = useMemo(() => {
+    const clone = scene.clone(true);
+    // Clone each material individually so mutations never bleed into the
+    // useGLTF global cache — shared materials are the root cause of the
+    // "old texture persists on re-visit" bug.
+    clone.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      if (Array.isArray(mesh.material)) {
+        mesh.material = mesh.material.map((m) => m.clone());
+      } else {
+        mesh.material = mesh.material.clone();
+      }
+    });
+    return clone;
+  }, [scene]);
 
   const { scale, offset } = useMemo(() => {
     const s = dimensions ? computeRealScale(clonedScene, dimensions) : 1;
@@ -55,19 +70,18 @@ function Model({
     };
   }, [clonedScene, dimensions]);
 
-  // Save original material maps so we can restore on "Default Finish"
+  // Capture original maps once per mount (from the freshly-cloned, isolated materials)
   const originalMaps = useRef<Map<string, THREE.Texture | null>>(new Map());
 
   useEffect(() => {
+    originalMaps.current.clear();
     clonedScene.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
       if (!mesh.isMesh) return;
       const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
       materials.forEach((mat, i) => {
         const key = `${mesh.uuid}_${i}`;
-        if (!originalMaps.current.has(key)) {
-          originalMaps.current.set(key, (mat as THREE.MeshStandardMaterial).map ?? null);
-        }
+        originalMaps.current.set(key, (mat as THREE.MeshStandardMaterial).map ?? null);
       });
     });
   }, [clonedScene]);
