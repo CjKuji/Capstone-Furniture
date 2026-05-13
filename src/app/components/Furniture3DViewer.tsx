@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useEffect, useRef, Suspense } from "react";
+import React, { useMemo, useEffect, useRef, Suspense, useState } from "react";
 import * as THREE from "three";
 import { Canvas } from "@react-three/fiber";
 import {
@@ -11,6 +11,8 @@ import {
 } from "@react-three/drei";
 
 import { computeRealScale } from "@/lib/3D/nomarlizeFurnitureModel";
+import ARModal from "./ARModal";
+import { Scan } from "lucide-react";
 
 /* =========================================================
    TYPES
@@ -151,53 +153,28 @@ export default function Furniture3DViewer({
   }
 
   /* =========================================================
-     AR HANDLER (SIMPLIFIED + SAFE)
+     AR STATE
   ========================================================= */
 
-  const enterAR = () => {
-    if (typeof window === "undefined") return;
-
-    const ua = navigator.userAgent;
-
-    const isIOS = /iPhone|iPad|iPod/i.test(ua);
-    const isAndroid = /Android/i.test(ua);
-
-    // iOS AR Quick Look (requires .usdz)
-    if (isIOS) {
-      const link = document.createElement("a");
-      link.href = modelUrl;
-      link.rel = "ar";
-      link.click();
-      return;
-    }
-
-    // Android Scene Viewer
-    if (isAndroid) {
-      const intent = `intent://arvr.google.com/scene-viewer/1.0?file=${encodeURIComponent(
-        modelUrl
-      )}&mode=ar_only#Intent;scheme=https;package=com.google.ar.core;action=android.intent.action.VIEW;end;`;
-
-      window.location.href = intent;
-      return;
-    }
-
-    // fallback
-    window.open(modelUrl, "_blank");
-  };
+  const [arOpen, setArOpen] = useState(false);
 
   return (
-    <div className="relative bg-white border rounded-xl w-full h-[600px] overflow-hidden">
+    <>
+      <ARModal open={arOpen} onClose={() => setArOpen(false)} modelUrl={modelUrl} />
 
-      {/* AR BUTTON */}
-      <button
-        onClick={enterAR}
-        className="top-4 right-4 z-10 absolute bg-black px-4 py-2 rounded-xl font-medium text-white text-xs"
-      >
-        Enter AR
-      </button>
+      <div className="relative bg-white border rounded-xl w-full h-[600px] overflow-hidden">
 
-      {/* 3D CANVAS */}
-      <Canvas camera={{ position: [1.5, 1.2, 3], fov: 45 }}>
+        {/* AR BUTTON */}
+        <button
+          onClick={() => setArOpen(true)}
+          className="top-4 right-4 z-10 absolute flex items-center gap-1.5 bg-[#D4A97A] hover:bg-[#C4976A] px-4 py-2 rounded-xl font-semibold text-[#1C1209] text-xs transition"
+        >
+          <Scan className="w-3.5 h-3.5" />
+          View in AR
+        </button>
+
+        {/* 3D CANVAS */}
+        <Canvas camera={{ position: [1.5, 1.2, 3], fov: 45 }}>
         <ambientLight intensity={0.5} />
         <directionalLight position={[5, 8, 5]} intensity={1} />
 
@@ -222,6 +199,7 @@ export default function Furniture3DViewer({
 
         <OrbitControls target={[0, 0.4, 0]} enableDamping dampingFactor={0.08} />
       </Canvas>
-    </div>
+      </div>
+    </>
   );
 }

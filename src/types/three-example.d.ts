@@ -16,3 +16,27 @@ declare module "three/examples/jsm/loaders/GLTFLoader" {
     ): void;
   }
 }
+
+// JSX type declarations for @google/model-viewer custom element
+declare namespace JSX {
+  interface IntrinsicElements {
+    "model-viewer": React.DetailedHTMLProps<
+      React.HTMLAttributes<HTMLElement>,
+      HTMLElement
+    > & {
+      src?: string;
+      alt?: string;
+      ar?: boolean | "";
+      "ar-modes"?: string;
+      "ar-scale"?: string;
+      "ar-placement"?: string;
+      "camera-controls"?: boolean | "";
+      "auto-rotate"?: boolean | "";
+      "environment-image"?: string;
+      exposure?: string;
+      poster?: string;
+      loading?: string;
+      reveal?: string;
+    };
+  }
+}
