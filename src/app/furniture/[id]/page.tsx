@@ -12,6 +12,8 @@ import BasicInfoSection from "@/app/components/sections/user/BasicInfoSection";
 import AssetsSection from "@/app/components/sections/user/AssetsSection";
 import VariantsSection from "@/app/components/sections/user/VariantSection";
 import PlaceOrderModal from "@/app/components/PlaceOrderModal";
+import Reveal from "@/app/components/Reveal";
+import PageTransition from "@/app/components/PageTransition";
 
 export default function FurnitureDetailPage() {
   const router = useRouter();
@@ -157,6 +159,7 @@ export default function FurnitureDetailPage() {
     ?? null;
 
   return (
+    <PageTransition>
     <div className="flex flex-col bg-[#0F0A06] min-h-screen text-white">
       <Navbar />
 
@@ -257,6 +260,7 @@ export default function FurnitureDetailPage() {
         <div className="flex flex-col gap-4 lg:w-[390px] xl:w-[440px] shrink-0">
 
           {/* name + price */}
+          <Reveal delay={0.05}>
           <div className="space-y-1">
             <h1 className="font-bold text-white text-2xl leading-tight">{safeFurniture.name}</h1>
             <div className="flex items-baseline gap-2 pt-1">
@@ -266,8 +270,10 @@ export default function FurnitureDetailPage() {
               <span className="text-white/30 text-xs">starting price</span>
             </div>
           </div>
+          </Reveal>
 
           {/* about */}
+          <Reveal delay={0.12}>
           <div className="bg-white/[0.03] p-5 border border-white/5 rounded-2xl">
             <BasicInfoSection
               state={{
@@ -287,9 +293,11 @@ export default function FurnitureDetailPage() {
               ]}
             />
           </div>
+          </Reveal>
 
           {/* variants */}
           {variants.length > 0 && (
+            <Reveal delay={0.2}>
             <div className="bg-white/[0.03] p-5 border border-white/5 rounded-2xl">
               <VariantsSection
                 variants={variants}
@@ -297,15 +305,18 @@ export default function FurnitureDetailPage() {
                 onApplyVariant={setPreviewVariantId}
               />
             </div>
+            </Reveal>
           )}
 
           {/* CTA */}
+          <Reveal delay={0.28}>
           <button
             onClick={() => setOpenOrderModal(true)}
             className="bg-[#D4A97A] hover:bg-[#C4976A] shadow-lg mt-auto py-4 rounded-full w-full font-bold text-[#1C1209] text-sm active:scale-[0.99] transition-all"
           >
             Customize & Order
           </button>
+          </Reveal>
         </div>
       </div>
 
@@ -316,5 +327,6 @@ export default function FurnitureDetailPage() {
         furniture={safeFurniture}
       />
     </div>
+    </PageTransition>
   );
 }

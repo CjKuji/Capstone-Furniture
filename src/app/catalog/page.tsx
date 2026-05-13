@@ -5,6 +5,8 @@ import { Search, SlidersHorizontal, X, Box, Sparkles } from "lucide-react";
 
 import Navbar from "@/app/components/Navbar";
 import CustomerFurnitureCard from "@/app/components/CustomerCard";
+import Reveal from "@/app/components/Reveal";
+import PageTransition from "@/app/components/PageTransition";
 import { useFurniturePublicList } from "@/hooks/useFurniture";
 
 export default function CatalogPage() {
@@ -52,12 +54,14 @@ export default function CatalogPage() {
   };
 
   return (
+    <PageTransition>
     <div className="bg-[#0F0A06] min-h-screen font-sans text-white">
       <Navbar />
 
       {/* ── PAGE HEADER ─────────────────────────────────── */}
       <section className="px-4 sm:px-6 py-12 border-white/5 border-b">
         <div className="mx-auto max-w-7xl">
+          <Reveal>
           <p className="mb-2 font-semibold text-[#D4A97A] text-xs uppercase tracking-widest">
             WoodForge Studio
           </p>
@@ -78,6 +82,7 @@ export default function CatalogPage() {
               </span>
             </div>
           </div>
+          </Reveal>
         </div>
       </section>
 
@@ -219,8 +224,10 @@ export default function CatalogPage() {
                   </div>
                 </div>
               ))
-            : filtered.map((item) => (
-                <CustomerFurnitureCard key={item.id} item={item} />
+            : filtered.map((item, idx) => (
+                <Reveal key={item.id} delay={Math.min(idx, 7) * 0.06} from="bottom">
+                  <CustomerFurnitureCard item={item} />
+                </Reveal>
               ))}
         </div>
 
@@ -242,5 +249,6 @@ export default function CatalogPage() {
         )}
       </section>
     </div>
+    </PageTransition>
   );
 }

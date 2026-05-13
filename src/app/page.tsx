@@ -14,6 +14,8 @@ import {
 
 import Navbar from "@/app/components/Navbar";
 import CustomerFurnitureCard from "@/app/components/CustomerCard";
+import Reveal from "@/app/components/Reveal";
+import PageTransition from "@/app/components/PageTransition";
 import { useFurniturePublicList } from "@/hooks/useFurniture";
 
 export default function HomePage() {
@@ -31,6 +33,7 @@ export default function HomePage() {
 
   // Do NOT block the full page render — only the cards section shows loading/error states
   return (
+    <PageTransition>
     <div className="bg-[#0F0A06] min-h-screen font-sans text-white">
       <Navbar />
 
@@ -45,23 +48,30 @@ export default function HomePage() {
         </div>
 
         {/* AI badge */}
+        <Reveal delay={0.05}>
         <div className="inline-flex items-center gap-2 bg-[#D4A97A]/10 mb-6 px-4 py-1.5 border border-[#D4A97A]/30 rounded-full font-medium text-[#D4A97A] text-xs uppercase tracking-widest">
           <Cpu className="w-3.5 h-3.5" />
           AI-Powered Custom Furniture
         </div>
+        </Reveal>
 
         {/* headline */}
+        <Reveal delay={0.15}>
         <h1 className="mx-auto max-w-4xl font-bold text-5xl sm:text-6xl lg:text-7xl leading-[1.1] tracking-tight">
           Furniture Built
           <span className="block text-[#D4A97A]">Around Your Vision</span>
         </h1>
+        </Reveal>
 
+        <Reveal delay={0.25}>
         <p className="mx-auto mt-6 max-w-2xl text-white/50 text-base sm:text-lg leading-relaxed">
           Every piece is crafted to order — browse designs, customize finishes, preview
           in 3D or AR, then collaborate with our production team until it's perfect.
         </p>
+        </Reveal>
 
         {/* CTAs */}
+        <Reveal delay={0.35}>
         <div className="flex flex-wrap justify-center items-center gap-4 mt-10">
           <button
             onClick={() => router.push("/catalog")}
@@ -77,8 +87,10 @@ export default function HomePage() {
             How It Works
           </button>
         </div>
+        </Reveal>
 
         {/* trust pills */}
+        <Reveal delay={0.45}>
         <div className="flex flex-wrap justify-center items-center gap-3 mt-12">
           {[
             "3D & AR Preview",
@@ -95,6 +107,7 @@ export default function HomePage() {
             </span>
           ))}
         </div>
+        </Reveal>
 
         {/* scroll cue */}
         <div className="bottom-8 left-1/2 absolute -translate-x-1/2 animate-bounce">
@@ -114,11 +127,13 @@ export default function HomePage() {
             ["3D + AR", "Live Preview"],
             ["Custom", "Wood & Finishes"],
             ["Direct", "Craftsman Chat"],
-          ].map(([val, label]) => (
-            <div key={label}>
+          ].map(([val, label], i) => (
+            <Reveal key={label} delay={i * 0.08} from="bottom">
+            <div>
               <p className="font-bold text-[#D4A97A] text-3xl">{val}</p>
               <p className="mt-1 text-white/40 text-sm">{label}</p>
             </div>
+            </Reveal>
           ))}
         </div>
       </section>
@@ -128,6 +143,7 @@ export default function HomePage() {
       ═══════════════════════════════════════════════════════════ */}
       <section className="px-4 sm:px-6 py-24">
         <div className="mx-auto max-w-7xl">
+          <Reveal>
           <div className="mb-4 font-semibold text-[#D4A97A] text-xs uppercase tracking-widest">
             Featured Designs
           </div>
@@ -145,6 +161,7 @@ export default function HomePage() {
               <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
             </button>
           </div>
+          </Reveal>
 
           {isError && (
             <div className="flex justify-between items-center gap-4 bg-red-500/10 mb-6 px-5 py-4 border border-red-500/20 rounded-xl text-red-400 text-sm">
@@ -173,7 +190,9 @@ export default function HomePage() {
                     </div>
                   </div>
                 ) : (
+                  <Reveal key={(item as any).id} delay={idx * 0.07}>
                   <CustomerFurnitureCard key={(item as any).id} item={item} />
+                  </Reveal>
                 )
             )}
           </div>
@@ -185,6 +204,7 @@ export default function HomePage() {
       ═══════════════════════════════════════════════════════════ */}
       <section className="px-4 sm:px-6 py-24">
         <div className="mx-auto max-w-7xl">
+          <Reveal>
           <div className="bg-gradient-to-br from-[#1C1209] to-[#0F0A06] border border-white/5 rounded-3xl overflow-hidden">
             <div className="grid md:grid-cols-2">
               {/* left text */}
@@ -263,6 +283,7 @@ export default function HomePage() {
               </div>
             </div>
           </div>
+          </Reveal>
         </div>
       </section>
 
@@ -271,6 +292,7 @@ export default function HomePage() {
       ═══════════════════════════════════════════════════════════ */}
       <section className="px-4 sm:px-6 py-24">
         <div className="mx-auto max-w-7xl">
+          <Reveal>
           <div className="mb-4 font-semibold text-[#D4A97A] text-xs uppercase tracking-widest">
             Our Process
           </div>
@@ -278,6 +300,7 @@ export default function HomePage() {
             From Idea to{" "}
             <span className="text-white/40">Doorstep</span>
           </h2>
+          </Reveal>
 
           <div className="gap-6 grid sm:grid-cols-2 lg:grid-cols-4 mt-12">
             {[
@@ -305,9 +328,9 @@ export default function HomePage() {
                 title: "Receive Your Piece",
                 desc: "We build it, you approve it. Pickup or delivery — your choice.",
               },
-            ].map(({ step, icon, title, desc }) => (
+            ].map(({ step, icon, title, desc }, i) => (
+              <Reveal key={step} delay={i * 0.1} from="bottom">
               <div
-                key={step}
                 className="group relative bg-white/[0.03] hover:bg-white/[0.05] p-6 border border-white/5 hover:border-[#D4A97A]/20 rounded-2xl overflow-hidden transition"
               >
                 <div className="flex justify-between items-center mb-4">
@@ -321,6 +344,7 @@ export default function HomePage() {
                 <h3 className="font-semibold text-base">{title}</h3>
                 <p className="mt-2 text-white/40 text-sm leading-relaxed">{desc}</p>
               </div>
+              </Reveal>
             ))}
           </div>
         </div>
@@ -330,6 +354,7 @@ export default function HomePage() {
           CTA BANNER
       ═══════════════════════════════════════════════════════════ */}
       <section className="px-4 sm:px-6 py-24">
+        <Reveal from="bottom">
         <div className="bg-[#D4A97A] mx-auto px-8 py-16 rounded-3xl max-w-4xl overflow-hidden text-center">
           <h2 className="font-bold text-[#1C1209] text-3xl sm:text-4xl">
             Ready to Build Your Perfect Piece?
@@ -353,6 +378,7 @@ export default function HomePage() {
             </button>
           </div>
         </div>
+        </Reveal>
       </section>
 
       {/* ═══════════════════════════════════════════════════════════
@@ -411,5 +437,6 @@ export default function HomePage() {
         </div>
       </footer>
     </div>
+    </PageTransition>
   );
 }

@@ -20,6 +20,7 @@
     "@supabase/supabase-js": "^2.103.3",
     "@tanstack/react-query": "^5.100.5",
     "aframe": "^1.7.1",
+    "framer-motion": "^12.38.0",
     "lucide-react": "^0.577.0",
     "next": "^16.1.6",
     "pg": "^8.20.0",
