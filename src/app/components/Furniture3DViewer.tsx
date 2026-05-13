@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, Suspense } from "react";
+import React, { useMemo, useEffect, useRef, Suspense } from "react";
 import * as THREE from "three";
 import { Canvas } from "@react-three/fiber";
 import {
@@ -28,9 +28,11 @@ type Dimensions = {
 
 function Model({
   url,
+  textureUrl,
   dimensions,
 }: {
   url: string;
+  textureUrl?: string | null;
   dimensions?: Dimensions;
 }) {
   const { scene } = useGLTF(url);
@@ -43,8 +45,6 @@ function Model({
     const center = new THREE.Vector3();
     box.getCenter(center);
 
-    // Offset must be in world space (parent space), so multiply by scale:
-    // world_pos = local_coord * scale + offset → we want bottom at y=0, center at x=z=0
     return {
       scale: s,
       offset: {
@@ -54,6 +54,59 @@ function Model({
       },
     };
   }, [clonedScene, dimensions]);
+
+  // Save original material maps so we can restore on "Default Finish"
+  const originalMaps = useRef<Map<string, THREE.Texture | null>>(new Map());
+
+  useEffect(() => {
+    clonedScene.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      materials.forEach((mat, i) => {
+        const key = `${mesh.uuid}_${i}`;
+        if (!originalMaps.current.has(key)) {
+          originalMaps.current.set(key, (mat as THREE.MeshStandardMaterial).map ?? null);
+        }
+      });
+    });
+  }, [clonedScene]);
+
+  useEffect(() => {
+    if (!textureUrl) {
+      // Restore original maps
+      clonedScene.traverse((obj) => {
+        const mesh = obj as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        materials.forEach((mat, i) => {
+          const key = `${mesh.uuid}_${i}`;
+          const orig = originalMaps.current.get(key) ?? null;
+          (mat as THREE.MeshStandardMaterial).map = orig;
+          (mat as THREE.MeshStandardMaterial).needsUpdate = true;
+        });
+      });
+      return;
+    }
+
+    const loader = new THREE.TextureLoader();
+    loader.load(textureUrl, (texture) => {
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+      texture.repeat.set(3, 3);
+
+      clonedScene.traverse((obj) => {
+        const mesh = obj as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        materials.forEach((mat) => {
+          (mat as THREE.MeshStandardMaterial).map = texture;
+          (mat as THREE.MeshStandardMaterial).needsUpdate = true;
+        });
+      });
+    });
+  }, [textureUrl, clonedScene]);
 
   return (
     <group position={[offset.x, offset.y, offset.z]} scale={scale}>
@@ -68,9 +121,11 @@ function Model({
 
 export default function Furniture3DViewer({
   modelUrl,
+  selectedVariantTextureUrl,
   dimensions,
 }: {
   modelUrl: string;
+  selectedVariantTextureUrl?: string | null;
   dimensions?: Dimensions;
 }) {
   if (!modelUrl) {
@@ -148,7 +203,7 @@ export default function Furniture3DViewer({
             </Html>
           }
         >
-          <Model url={modelUrl} dimensions={dimensions} />
+          <Model url={modelUrl} textureUrl={selectedVariantTextureUrl} dimensions={dimensions} />
         </Suspense>
 
         <OrbitControls target={[0, 0.4, 0]} enableDamping dampingFactor={0.08} />
