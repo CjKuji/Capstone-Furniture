@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:sync": "npx supabase gen types typescript --project-id havfynxlaoaieomuomzy > src/types/supabase.ts"
   },
   "dependencies": {
     "@ar-js-org/ar.js": "^3.4.8",
@@ -38,6 +39,7 @@
     "@types/three": "^0.182.0",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
+    "shx": "^0.4.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
