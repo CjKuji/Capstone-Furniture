@@ -23,65 +23,44 @@ export default function BasicInfoSection({ state, categories }: Props) {
     "Uncategorized";
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
 
-      {/* TITLE */}
-      <div>
-        <h3 className="text-sm font-semibold text-[#3A2B22]">
-          Product Details
-        </h3>
-        <p className="text-xs text-[#7A6A5A] mt-1">
-          Core information about this design
-        </p>
-      </div>
-
-      {/* NAME */}
-      <div>
-        <label className="text-xs text-[#7A6A5A]">Name</label>
-        <div className="mt-1 text-sm font-medium">
-          {state.name}
-        </div>
-      </div>
+      <p className="font-semibold text-[#D4A97A] text-xs uppercase tracking-widest">About this piece</p>
 
       {/* DESCRIPTION */}
-      <div>
-        <label className="text-xs text-[#7A6A5A]">Description</label>
-        <p className="mt-1 text-sm leading-relaxed text-[#4B3F3F]">
-          {state.description || "No description provided."}
+      {state.description ? (
+        <p className="text-white/60 text-sm leading-relaxed">
+          {state.description}
         </p>
-      </div>
+      ) : (
+        <p className="text-white/25 text-sm italic">No description provided.</p>
+      )}
 
       {/* META GRID */}
-      <div className="grid grid-cols-2 gap-4 pt-2">
-
-        <div>
-          <label className="text-xs text-[#7A6A5A]">Category</label>
-          <div className="mt-1 text-sm">{categoryName}</div>
+      <div className="gap-3 grid grid-cols-2 pt-1">
+        <div className="bg-white/[0.04] px-4 py-3 border border-white/5 rounded-xl">
+          <p className="mb-1 text-[10px] text-white/30 uppercase tracking-widest">Category</p>
+          <p className="font-medium text-white text-sm capitalize">{categoryName}</p>
         </div>
-
-        <div>
-          <label className="text-xs text-[#7A6A5A]">Base Price</label>
-          <div className="mt-1 text-sm font-semibold text-[#7A4E2D]">
-            ₱{Number(state.basePrice ?? 0).toLocaleString()}
-          </div>
+        <div className="bg-white/[0.04] px-4 py-3 border border-white/5 rounded-xl">
+          <p className="mb-1 text-[10px] text-white/30 uppercase tracking-widest">Base Price</p>
+          <p className="font-semibold text-[#D4A97A] text-sm">₱{Number(state.basePrice ?? 0).toLocaleString()}</p>
         </div>
-
       </div>
 
       {/* DIMENSIONS */}
-      <div>
-        <label className="text-xs text-[#7A6A5A]">
-          Dimensions (cm)
-        </label>
-
-        <div className="mt-2 flex gap-4 text-sm">
-          <span>{state.widthCm ?? "—"} W</span>
-          <span>×</span>
-          <span>{state.depthCm ?? "—"} D</span>
-          <span>×</span>
-          <span>{state.heightCm ?? "—"} H</span>
+      {(state.widthCm || state.depthCm || state.heightCm) && (
+        <div className="bg-white/[0.04] px-4 py-3 border border-white/5 rounded-xl">
+          <p className="mb-2 text-[10px] text-white/30 uppercase tracking-widest">Dimensions (cm)</p>
+          <div className="flex items-center gap-3 text-white/70 text-sm">
+            <span><span className="mr-1 text-white/30 text-xs">W</span>{state.widthCm ?? "—"}</span>
+            <span className="text-white/20">×</span>
+            <span><span className="mr-1 text-white/30 text-xs">D</span>{state.depthCm ?? "—"}</span>
+            <span className="text-white/20">×</span>
+            <span><span className="mr-1 text-white/30 text-xs">H</span>{state.heightCm ?? "—"}</span>
+          </div>
         </div>
-      </div>
+      )}
 
     </div>
   );

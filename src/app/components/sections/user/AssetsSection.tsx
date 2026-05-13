@@ -9,46 +9,31 @@ type Props = {
 export default function AssetsSection({ state }: Props) {
   const images = state.images?.filter((i) => !i.isDeleted) ?? [];
 
+  if (images.length === 0) return null;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      <p className="font-semibold text-[#D4A97A] text-xs uppercase tracking-widest">Gallery</p>
 
-      {/* TITLE */}
-      <div>
-        <h3 className="text-sm font-semibold text-[#3A2B22]">
-          Images
-        </h3>
-        <p className="text-xs text-[#7A6A5A] mt-1">
-          Product visual references
-        </p>
+      <div className="gap-2 grid grid-cols-3">
+        {images.map((img) => (
+          <div
+            key={img.id ?? img.clientId}
+            className="relative bg-white/[0.03] border border-white/5 rounded-xl aspect-square overflow-hidden"
+          >
+            <img
+              src={img.url}
+              alt=""
+              className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
+            />
+            {img.isPrimary && (
+              <div className="top-2 left-2 absolute bg-[#D4A97A]/20 px-2 py-0.5 border border-[#D4A97A]/30 rounded-full font-medium text-[#D4A97A] text-[9px]">
+                Main
+              </div>
+            )}
+          </div>
+        ))}
       </div>
-
-      {images.length === 0 ? (
-        <div className="text-sm text-[#9A8A7A]">
-          No images available
-        </div>
-      ) : (
-        <div className="grid grid-cols-3 gap-3">
-
-          {images.map((img) => (
-            <div
-              key={img.id ?? img.clientId}
-              className="relative overflow-hidden rounded-xl bg-white border border-[#E8D7C8]"
-            >
-              <img
-                src={img.url}
-                className="h-24 w-full object-cover"
-              />
-
-              {img.isPrimary && (
-                <div className="absolute top-2 left-2 text-[10px] bg-black/70 text-white px-2 py-1 rounded">
-                  Main
-                </div>
-              )}
-            </div>
-          ))}
-
-        </div>
-      )}
     </div>
   );
 }

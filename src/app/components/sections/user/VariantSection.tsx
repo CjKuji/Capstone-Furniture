@@ -25,82 +25,66 @@ export default function VariantsSection({
   };
 
   return (
-    <div className="space-y-6">
-
-      {/* TITLE */}
-      <div>
-        <h3 className="text-sm font-semibold text-[#3A2B22]">
-          Variants
-        </h3>
-        <p className="text-xs text-[#7A6A5A] mt-1">
-          Preview different materials and finishes
-        </p>
-      </div>
+    <div className="space-y-4">
+      <p className="font-semibold text-[#D4A97A] text-xs uppercase tracking-widest">Finishes & Variants</p>
 
       {/* DEFAULT */}
       <button
         onClick={() => setVariant(null)}
-        className={`w-full text-left p-4 rounded-xl border transition ${
+        className={`w-full text-left flex items-center gap-3 p-3 rounded-xl border transition ${
           active === null
-            ? "border-[#7A4E2D] bg-[#F5E8DA]"
-            : "border-[#E8D7C8] bg-white"
+            ? "border-[#D4A97A]/40 bg-[#D4A97A]/5"
+            : "border-white/5 bg-white/[0.03] hover:border-white/10"
         }`}
       >
-        <div className="text-sm font-medium">
-          Default Finish
+        <div className="flex justify-center items-center bg-white/5 border border-white/10 rounded-lg w-11 h-11 shrink-0">
+          <span className="text-[10px] text-white/30">DEF</span>
         </div>
-        <div className="text-xs text-[#7A6A5A]">
-          Base material
+        <div className="text-left">
+          <div className="font-medium text-white text-sm">Default Finish</div>
+          <div className="text-white/30 text-xs">Base material, no adjustment</div>
         </div>
+        {active === null && (
+          <div className="bg-[#D4A97A] ml-auto rounded-full w-2 h-2 shrink-0" />
+        )}
       </button>
 
       {/* VARIANTS */}
-      <div className="space-y-3">
-
+      <div className="space-y-2">
         {variants
           .filter((v) => !v.isDeleted)
           .map((v) => {
             const id = v.id ?? v.clientId;
-
             const isActive = active === id;
 
             return (
               <button
                 key={id}
                 onClick={() => setVariant(id)}
-                className={`w-full flex items-center gap-3 p-4 rounded-xl border transition ${
+                className={`w-full flex items-center gap-3 p-3 rounded-xl border transition ${
                   isActive
-                    ? "border-[#7A4E2D] bg-[#F5E8DA]"
-                    : "border-[#E8D7C8] bg-white"
+                    ? "border-[#D4A97A]/40 bg-[#D4A97A]/5"
+                    : "border-white/5 bg-white/[0.03] hover:border-white/10"
                 }`}
               >
-
-                {/* IMAGE */}
-                <div className="w-12 h-12 rounded-lg overflow-hidden border border-[#E8D7C8] bg-white">
+                <div className="bg-white/5 border border-white/10 rounded-lg w-11 h-11 overflow-hidden shrink-0">
                   {v.previewUrl ? (
-                    <img
-                      src={v.previewUrl}
-                      className="w-full h-full object-cover"
-                    />
+                    <img src={v.previewUrl} alt={v.name} className="w-full h-full object-cover" />
                   ) : (
-                    <div className="text-[10px] flex items-center justify-center h-full text-[#9A8A7A]">
-                      No image
-                    </div>
+                    <div className="flex justify-center items-center h-full text-[9px] text-white/20">N/A</div>
                   )}
                 </div>
-
-                {/* TEXT */}
-                <div>
-                  <div className="text-sm font-medium">
-                    {v.name}
-                  </div>
-                  <div className="text-xs text-[#7A6A5A]">
+                <div className="text-left">
+                  <div className="font-medium text-white text-sm">{v.name}</div>
+                  <div className="text-white/30 text-xs">
                     {v.priceAdjustment
                       ? `+₱${Number(v.priceAdjustment).toLocaleString()}`
-                      : "No price change"}
+                      : "No price adjustment"}
                   </div>
                 </div>
-
+                {isActive && (
+                  <div className="bg-[#D4A97A] ml-auto rounded-full w-2 h-2 shrink-0" />
+                )}
               </button>
             );
           })}
