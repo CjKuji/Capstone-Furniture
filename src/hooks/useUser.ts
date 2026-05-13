@@ -82,7 +82,10 @@ export function useUser() {
 
   const loadUser = useCallback(async () => {
     try {
-      setLoading(true);
+      // Don't flash loading skeleton if we already have cached data
+      if (!cachedProfile) {
+        setLoading(true);
+      }
 
       const {
         data: { session },

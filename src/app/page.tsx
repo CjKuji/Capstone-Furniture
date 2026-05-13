@@ -27,41 +27,9 @@ export default function HomePage() {
     refetch,
   } = useFurniturePublicList();
 
-  /* =========================================================
-     LOADING
-  ========================================================= */
-  if (isLoading) {
-    return (
-      <div className="flex justify-center items-center bg-[#FAF6F1] h-screen font-medium text-[#3A2B22]">
-        Loading handcrafted designs...
-      </div>
-    );
-  }
-
-  /* =========================================================
-     ERROR
-  ========================================================= */
-  if (isError) {
-    return (
-      <div className="flex flex-col justify-center items-center gap-4 bg-[#FAF6F1] h-screen text-red-600">
-        <p className="font-semibold">Unable to load designs</p>
-
-        <p className="opacity-70 text-sm">
-          {error instanceof Error ? error.message : "Something went wrong"}
-        </p>
-
-        <button
-          onClick={() => refetch()}
-          className="bg-[#2F241C] hover:bg-[#3A2B22] px-5 py-2 rounded-xl text-white transition"
-        >
-          Retry
-        </button>
-      </div>
-    );
-  }
-
   const items = furniture ?? [];
 
+  // Do NOT block the full page render — only the cards section shows loading/error states
   return (
     <div className="bg-[#0F0A06] min-h-screen font-sans text-white">
       <Navbar />
@@ -178,12 +146,22 @@ export default function HomePage() {
             </button>
           </div>
 
+          {isError && (
+            <div className="flex justify-between items-center gap-4 bg-red-500/10 mb-6 px-5 py-4 border border-red-500/20 rounded-xl text-red-400 text-sm">
+              <span>Failed to load designs. {error instanceof Error ? error.message : ""}</span>
+              <button
+                onClick={() => refetch()}
+                className="bg-red-500/20 hover:bg-red-500/30 px-3 py-1 rounded-full text-xs transition shrink-0"
+              >
+                Retry
+              </button>
+            </div>
+          )}
+
           <div className="gap-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 mt-10">
-            {(items.length === 0 ? Array.from({ length: 6 }) : items.slice(0, 6)).map(
+            {(isLoading ? Array.from({ length: 6 }) : items.slice(0, 6)).map(
               (item, idx) =>
-                item ? (
-                  <CustomerFurnitureCard key={(item as any).id} item={item} />
-                ) : (
+                isLoading || !item ? (
                   <div
                     key={idx}
                     className="bg-white/[0.03] border border-white/5 rounded-2xl overflow-hidden"
@@ -194,6 +172,8 @@ export default function HomePage() {
                       <div className="bg-white/5 rounded-full w-1/2 h-3 animate-pulse" />
                     </div>
                   </div>
+                ) : (
+                  <CustomerFurnitureCard key={(item as any).id} item={item} />
                 )
             )}
           </div>

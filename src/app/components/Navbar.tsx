@@ -16,7 +16,7 @@ const NAV_ITEMS = [
 export default function Navbar() {
   const router = useRouter();
   const pathname = usePathname();
-  const { authUser, role, loading } = useUser();
+  const { authUser, role } = useUser();
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -62,20 +62,6 @@ export default function Navbar() {
     : "?";
 
   const cartCount = 0;
-
-  if (loading) {
-    return (
-      <header className="top-0 z-50 sticky bg-[#1C1209]/95 backdrop-blur-md w-full h-16">
-        <div className="flex justify-between items-center mx-auto px-4 sm:px-6 max-w-7xl h-full">
-          <div className="bg-white/10 rounded-full w-32 h-5 animate-pulse" />
-          <div className="flex gap-3">
-            <div className="bg-white/10 rounded-full w-8 h-8 animate-pulse" />
-            <div className="bg-white/10 rounded-full w-8 h-8 animate-pulse" />
-          </div>
-        </div>
-      </header>
-    );
-  }
 
   return (
     <>
