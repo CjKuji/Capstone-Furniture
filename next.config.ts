@@ -20,6 +20,7 @@ const nextConfig: NextConfig = {
 
   allowedDevOrigins: [
     "drivable-equipment-dart.ngrok-free.dev",
+    "192.168.0.118",
   ],
 
   /**
