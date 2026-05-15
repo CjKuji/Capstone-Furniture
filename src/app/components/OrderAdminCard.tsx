@@ -210,70 +210,72 @@ export default function OrderCard({
   /* =========================================================
      UI
   ========================================================= */
-
-  return (
+return (
   <>
-    <div className="group overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm transition hover:shadow-lg">
+    {/* ================= CARD ================= */}
+    <div
+      className="
+        group overflow-hidden rounded-2xl
+        border border-white/5
+        bg-white/[0.03]
+        hover:bg-white/[0.06]
+        hover:border-[#D4A97A]/20
+        transition-all duration-300
+        shadow-sm hover:shadow-[0_8px_32px_rgba(0,0,0,0.4)]
+        flex flex-col
+      "
+    >
 
       {/* ================= HEADER ================= */}
-      <div className="space-y-4 border-b border-black/10 p-5 bg-gradient-to-b from-white to-[#FAF7F2]">
+      <div className="p-5 border-b border-white/5 bg-gradient-to-b from-[#1C1209]/40 to-transparent">
 
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-white group-hover:text-[#D4A97A] transition-colors">
+              {order.order_reference_code ?? "Pending Order"}
+            </h2>
 
-          {/* STATUS */}
-          <span
-            className={`rounded-full px-3 py-1 text-xs font-semibold tracking-wide ${statusUI.color}`}
-          >
-            {statusUI.label}
-          </span>
-
-          {/* DATE */}
-          <span className="text-xs font-medium text-black/70">
-            {new Date(order.created_at).toLocaleString()}
-          </span>
-        </div>
-
-        {/* ORDER ID */}
-        <div>
-          <h2 className="text-sm font-semibold text-black">
-            {order.order_reference_code ?? "Pending Order"}
-          </h2>
-
-          <p className="mt-1 text-xs font-medium text-black/70">
-            {totalPieces} item(s)
-          </p>
-        </div>
-
-        {/* ================= FINANCIAL STRIP ================= */}
-        <div className="grid grid-cols-3 gap-3">
-
-          <div className="rounded-xl border border-black/10 bg-white p-3">
-            <p className="text-[10px] font-semibold text-black">
-              TOTAL
+            <p className="text-xs text-white/40 mt-1">
+              {totalPieces} item{totalPieces !== 1 ? "s" : ""}
             </p>
-            <p className="mt-1 text-sm font-bold text-black">
+          </div>
+
+          <div className="text-right space-y-2">
+            <span
+              className={`
+                px-3 py-1 rounded-full text-[10px] font-semibold tracking-wide border backdrop-blur-sm
+                ${statusUI.color}
+              `}
+            >
+              {statusUI.label}
+            </span>
+
+            <p className="text-[10px] text-white/30">
+              {new Date(order.created_at).toLocaleString()}
+            </p>
+          </div>
+        </div>
+
+        {/* ================= FINANCIAL SUMMARY ================= */}
+        <div className="grid grid-cols-3 gap-3 mt-5">
+
+          <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
+            <p className="text-[10px] text-white/30">TOTAL</p>
+            <p className="mt-1 text-sm font-semibold text-white">
               ₱{finalTotal.toLocaleString()}
             </p>
           </div>
 
-          <div className="rounded-xl border border-black/10 bg-white p-3">
-            <p className="text-[10px] font-semibold text-black">
-              PAID
-            </p>
-            <p className="mt-1 text-sm font-bold text-green-600">
+          <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
+            <p className="text-[10px] text-white/30">PAID</p>
+            <p className="mt-1 text-sm font-semibold text-green-400">
               {paymentsLoading ? "..." : `₱${totalPaid.toLocaleString()}`}
             </p>
           </div>
 
-          <div className="rounded-xl border border-black/10 bg-white p-3">
-            <p className="text-[10px] font-semibold text-black">
-              BALANCE
-            </p>
-            <p
-              className={`mt-1 text-sm font-bold ${
-                remaining > 0 ? "text-red-600" : "text-green-600"
-              }`}
-            >
+          <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
+            <p className="text-[10px] text-white/30">BALANCE</p>
+            <p className={`mt-1 text-sm font-semibold ${remaining > 0 ? "text-red-400" : "text-green-400"}`}>
               ₱{remaining.toLocaleString()}
             </p>
           </div>
@@ -281,71 +283,51 @@ export default function OrderCard({
         </div>
       </div>
 
-      {/* ================= MESSAGE ================= */}
-      <div className="px-5 pt-4">
-        <div className="rounded-xl border border-black/10 bg-[#FAF7F2] p-3 text-xs font-medium text-black">
+      {/* ================= BODY ================= */}
+      <div className="flex-1 px-5 py-4 space-y-4">
+
+        {/* MESSAGE */}
+        <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3 text-xs text-white/60">
           {orderMessage || "No customer message"}
         </div>
-      </div>
 
-      {/* ================= CUSTOMER INFO ================= */}
-      <div className="grid gap-3 px-5 py-4 text-xs">
+        {/* CUSTOMER INFO */}
+        <div className="grid gap-2 text-xs">
 
-        <div className="flex justify-between">
-          <span className="font-medium text-black">Customer</span>
-          <span className="font-semibold text-black">
-            {order.customer_name || "-"}
-          </span>
+          <InfoRow label="Customer" value={order.customer_name || "-"} />
+          <InfoRow label="Phone" value={order.phone_number || "-"} />
+          <InfoRow label="Method" value={order.delivery_method} />
+
+          <div className="flex justify-between">
+            <span className="text-white/40">
+              {isPickup ? "Pickup" : "Address"}
+            </span>
+
+            <span className="text-right text-white font-medium max-w-[65%]">
+              {isPickup ? order.pickup_location || "-" : order.delivery_address || "-"}
+            </span>
+          </div>
         </div>
 
-        <div className="flex justify-between">
-          <span className="font-medium text-black">Phone</span>
-          <span className="font-semibold text-black">
-            {order.phone_number || "-"}
-          </span>
-        </div>
-
-        <div className="flex justify-between">
-          <span className="font-medium text-black">Method</span>
-          <span className="font-semibold text-black capitalize">
-            {order.delivery_method}
-          </span>
-        </div>
-
-        <div className="flex justify-between gap-4">
-          <span className="font-medium text-black">
-            {isPickup ? "Pickup" : "Address"}
-          </span>
-
-          <span className="max-w-[65%] text-right font-semibold text-black">
-            {isPickup
-              ? order.pickup_location || "-"
-              : order.delivery_address || "-"}
-          </span>
-        </div>
-
-      </div>
-
-      {/* ================= CHARGES ================= */}
-      <div className="px-5 pb-4">
-
-        <div className="flex items-center justify-between rounded-xl border border-black/10 bg-white p-3">
+        {/* CHARGES */}
+        <div className="flex items-center justify-between rounded-xl border border-white/5 bg-white/[0.02] p-3">
 
           <div>
-            <p className="text-[10px] font-semibold text-black">
-              CHARGES
-            </p>
+            <p className="text-[10px] text-white/30">CHARGES</p>
 
-            <div
-              className={`mt-1 inline-flex rounded-full px-2 py-1 text-xs font-semibold ${chargeUI.color}`}
-            >
+            <div className={`mt-1 inline-flex px-2 py-1 rounded-full text-[10px] font-semibold border ${chargeUI.color}`}>
               {chargeUI.label} • {safeCharges.length}
             </div>
           </div>
 
           <button
             onClick={() => setOpenViewCharges(true)}
-            className="rounded-lg border border-black/20 px-3 py-1 text-xs font-medium text-black hover:bg-black hover:text-white transition"
+            className="
+              px-3 py-1 rounded-lg text-xs font-medium
+              border border-white/10 text-white/60
+              hover:bg-[#D4A97A] hover:text-[#1C1209]
+              transition
+            "
           >
             View
           </button>
@@ -355,8 +337,9 @@ export default function OrderCard({
       </div>
 
       {/* ================= ACTIONS ================= */}
-      <div className="border-t border-black/10 bg-white px-5 py-4">
+      <div className="border-t border-white/5 px-5 py-4 space-y-3">
 
+        {/* PRIMARY ACTIONS */}
         <OrderActionBar
           order={order}
           totalPaid={totalPaid}
@@ -365,39 +348,50 @@ export default function OrderCard({
           onOpenFinalize={() => setOpenFinalizeCharges(true)}
         />
 
-        <div className="mt-4 grid grid-cols-3 gap-2">
+        {/* SECONDARY ACTIONS */}
+        <div className="grid grid-cols-2 gap-2">
 
           <button
             onClick={() => setOpenDetail(true)}
-            className="rounded-xl border border-black/20 bg-white py-2 text-sm font-medium text-black hover:bg-black hover:text-white transition"
+            className="
+              rounded-xl border border-white/10
+              bg-white/[0.02] py-2 text-xs font-medium text-white/60
+              hover:border-[#D4A97A]/30 hover:text-[#D4A97A]
+              transition
+            "
           >
-            Details
+            View Details
           </button>
 
           <button
             onClick={() => setOpenChat(true)}
-            className="rounded-xl bg-black py-2 text-sm font-medium text-white hover:opacity-90 transition"
+            className="
+              rounded-xl bg-[#D4A97A] py-2 text-xs font-semibold text-[#1C1209]
+              hover:opacity-90 transition
+            "
           >
             Chat {unreadCount > 0 && `(${unreadCount})`}
           </button>
 
-          {canReviewCancel && (
-            <button
-              onClick={() => setOpenCancel(true)}
-              className="rounded-xl bg-red-600 py-2 text-sm font-semibold text-white hover:bg-red-700 transition"
-            >
-              Cancel
-            </button>
-          )}
-
         </div>
 
-      </div>
+        {/* DANGER ACTION */}
+        {canReviewCancel && (
+          <button
+            onClick={() => setOpenCancel(true)}
+            className="
+              w-full rounded-xl bg-red-500/10 py-2 text-xs font-semibold text-red-400
+              hover:bg-red-500/20 transition
+            "
+          >
+            Cancel Order
+          </button>
+        )}
 
+      </div>
     </div>
 
     {/* ================= MODALS ================= */}
-
     <OrderFullDetailModal
       open={openDetail}
       onClose={() => setOpenDetail(false)}
@@ -442,4 +436,15 @@ export default function OrderCard({
     />
   </>
 );
+
+/* ================= SMALL HELPER ================= */
+
+function InfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between">
+      <span className="text-white/40">{label}</span>
+      <span className="text-white font-medium">{value}</span>
+    </div>
+  );
+}
 }

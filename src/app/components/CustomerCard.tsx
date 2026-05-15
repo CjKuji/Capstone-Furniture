@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Box, Layers, ArrowRight, Scan } from "lucide-react";
+import { Box, Layers, ArrowRight, Scan, ImageIcon } from "lucide-react";
 
 import type { FurniturePublicListItem } from "@/types/furniture-public";
 
@@ -12,25 +12,33 @@ interface Props {
 export default function CustomerFurnitureCard({ item }: Props) {
   const router = useRouter();
 
-  const primaryImage =
-    (item as any)?.thumbnail_url ??
-    (item as any)?.primary_image ??
-    (item as any)?.image_url ??
-    (item as any)?.images?.[0]?.url ??
-    null;
+  /* ========================
+     IMAGE LOGIC (FROM SERVICE)
+  ======================== */
+
+  const primaryImage = item.thumbnail_url ?? null;
+  const imagesCount = (item as any).imageCount ?? 0;
+
+  /* ========================
+     META
+  ======================== */
 
   const categoryName = item.category?.name ?? "Uncategorized";
   const price = item.base_price ?? 0;
-  const hasModel = !!(item as any).hasModel;
-  const variantCount = (item as any).variantCount ?? 0;
+
+  const hasModel = Boolean((item as any).hasModel);
+
+  const variantCount =
+    (item as any).variantCount ?? (item as any)?.variants?.length ?? 0;
 
   return (
     <div
       onClick={() => router.push(`/furniture/${item.id}`)}
       className="group relative flex flex-col bg-white/[0.03] hover:bg-white/[0.06] hover:shadow-[0_8px_32px_rgba(0,0,0,0.4)] border border-white/5 hover:border-[#D4A97A]/20 rounded-2xl overflow-hidden transition-all duration-300 cursor-pointer"
     >
-      {/* IMAGE */}
+      {/* ================= IMAGE ================= */}
       <div className="relative bg-white/5 h-56 overflow-hidden">
+
         {primaryImage ? (
           <img
             src={primaryImage}
@@ -46,23 +54,36 @@ export default function CustomerFurnitureCard({ item }: Props) {
         {/* gradient */}
         <div className="absolute inset-0 bg-gradient-to-t from-[#0F0A06]/80 via-transparent to-transparent" />
 
-        {/* top: category pill */}
-        <div className="top-3 left-3 absolute">
-          <span className="bg-black/50 backdrop-blur-sm px-2.5 py-1 border border-white/10 rounded-full font-medium text-[10px] text-white/60 capitalize">
+        {/* ================= CATEGORY ================= */}
+        <div className="absolute top-3 left-3">
+          <span className="bg-black/70 backdrop-blur-md border border-white/20 px-2.5 py-1 rounded-full font-medium text-[10px] text-white/80 capitalize shadow-lg">
             {categoryName}
           </span>
         </div>
 
-        {/* top-right: feature badges */}
-        <div className="top-3 right-3 absolute flex flex-col items-end gap-1.5">
-          {hasModel && (
-            <span className="flex items-center gap-1 bg-[#D4A97A]/20 backdrop-blur-sm px-2 py-0.5 border border-[#D4A97A]/20 rounded-full font-medium text-[#D4A97A] text-[10px]">
-              <Box className="w-2.5 h-2.5" /> 3D
+        {/* ================= BADGES ================= */}
+        <div className="absolute top-3 right-3 flex flex-col items-end gap-1.5">
+
+          {/* 3D */}
+      {hasModel && (
+  <span className="flex items-center gap-1 bg-black/70 backdrop-blur-md px-2 py-0.5 border border-white/15 rounded-full font-medium text-[#D4A97A] text-[10px] shadow-sm">
+    <Box className="w-2.5 h-2.5" /> 3D
+  </span>
+)}
+
+          {/* FINISHES */}
+          {variantCount > 0 && (
+            <span className="flex items-center gap-1 bg-black/70 backdrop-blur-md border border-white/20 px-2 py-0.5 rounded-full text-[10px] text-white/80 shadow-lg">
+              <Layers className="w-2.5 h-2.5" />
+              {variantCount} finish{variantCount !== 1 ? "es" : ""}
             </span>
           )}
-          {variantCount > 0 && (
-            <span className="flex items-center gap-1 bg-white/10 backdrop-blur-sm px-2 py-0.5 rounded-full text-[10px] text-white/50">
-              <Layers className="w-2.5 h-2.5" /> {variantCount} finish{variantCount !== 1 ? "es" : ""}
+
+          {/* IMAGES */}
+          {imagesCount > 0 && (
+            <span className="flex items-center gap-1 bg-black/70 backdrop-blur-md border border-white/20 px-2 py-0.5 rounded-full text-[10px] text-white/80 shadow-lg">
+              <ImageIcon className="w-2.5 h-2.5" />
+              {imagesCount} image{imagesCount !== 1 ? "s" : ""}
             </span>
           )}
         </div>
@@ -76,20 +97,23 @@ export default function CustomerFurnitureCard({ item }: Props) {
         </div>
       </div>
 
-      {/* CONTENT */}
+      {/* ================= CONTENT ================= */}
       <div className="flex flex-col flex-1 gap-3 p-5">
+
         {/* name + price */}
         <div className="flex justify-between items-start gap-3">
           <div className="min-w-0">
             <h3 className="font-semibold text-white group-hover:text-[#D4A97A] text-sm truncate transition-colors">
               {item.name}
             </h3>
+
             {item.description && (
               <p className="mt-1 text-white/30 text-xs line-clamp-2 leading-relaxed">
                 {item.description}
               </p>
             )}
           </div>
+
           <div className="text-right shrink-0">
             <p className="font-semibold text-white text-sm">
               ₱{price.toLocaleString()}
@@ -101,7 +125,8 @@ export default function CustomerFurnitureCard({ item }: Props) {
         {/* dimensions */}
         {(item.width_cm || item.depth_cm || item.height_cm) && (
           <p className="text-[11px] text-white/20">
-            {item.width_cm ?? "–"} × {item.depth_cm ?? "–"} × {item.height_cm ?? "–"} cm
+            {item.width_cm ?? "–"} × {item.depth_cm ?? "–"} ×{" "}
+            {item.height_cm ?? "–"} cm
           </p>
         )}
 

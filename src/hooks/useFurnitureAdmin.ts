@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 import {
   getFurniture,
@@ -15,214 +15,116 @@ import type {
 } from "@/types/furniture";
 
 /* =========================================================
-   GLOBAL CACHE
+   QUERY KEY
 ========================================================= */
 
-let CACHE: FurnitureItemAdmin[] | null = null;
-let CACHE_TIME = 0;
-let INFLIGHT: Promise<FurnitureItemAdmin[]> | null = null;
+const FURNITURE_KEY = ["furniture"] as const;
 
-const CACHE_TTL = 1000 * 60 * 2;
-const TIMEOUT_MS = 15000;
-
-/* ========================================================= */
+/* =========================================================
+   HOOK
+========================================================= */
 
 export function useFurniture() {
-  const [data, setData] = useState<FurnitureItemAdmin[]>(() => CACHE ?? []);
-  const [loading, setLoading] = useState<boolean>(() => !CACHE);
-  const [mutating, setMutating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const mountedRef = useRef(true);
-  const requestIdRef = useRef(0);
-  const didInitRef = useRef(false);
-
-  /* ========================================================= */
-
-  useEffect(() => {
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
-
-  /* ========================================================= */
-
-  const isFresh = useCallback(() => {
-    return (
-      Array.isArray(CACHE) &&
-      Date.now() - CACHE_TIME < CACHE_TTL
-    );
-  }, []);
-
-  /* ========================================================= */
-
-  const withTimeout = <T,>(promise: Promise<T>) =>
-    Promise.race([
-      promise,
-      new Promise<T>((_, reject) =>
-        setTimeout(() => reject(new Error("Request timeout")), TIMEOUT_MS)
-      ),
-    ]);
+  const queryClient = useQueryClient();
 
   /* =========================================================
-     FETCH ALL
+     FETCH (READ)
   ========================================================= */
 
-  const fetchAll = useCallback(async (force = false) => {
-    const requestId = ++requestIdRef.current;
-
-    setError(null);
-
-    if (!force && isFresh() && CACHE) {
-      setData(CACHE);
-      setLoading(false);
-      return CACHE;
-    }
-
-    setLoading(true);
-
-    try {
-      if (!INFLIGHT) {
-        INFLIGHT = withTimeout(getFurniture())
-          .then((res) => {
-            CACHE = res ?? [];
-            CACHE_TIME = Date.now();
-            return CACHE;
-          })
-          .finally(() => {
-            INFLIGHT = null;
-          });
-      }
-
-      const result = await INFLIGHT;
-
-      if (!mountedRef.current || requestId !== requestIdRef.current) {
-        return result;
-      }
-
-      setData(result);
-      return result;
-    } catch (e) {
-      if (!mountedRef.current) return [];
-
-      setError(e instanceof Error ? e.message : "Failed to load furniture");
-      setData([]);
-      return [];
-    } finally {
-      if (mountedRef.current && requestId === requestIdRef.current) {
-        setLoading(false);
-      }
-    }
-  }, [isFresh]);
-
-  /* ========================================================= */
-
-  useEffect(() => {
-    if (didInitRef.current) return;
-    didInitRef.current = true;
-
-    if (CACHE?.length) {
-      setData(CACHE);
-      setLoading(false);
-      return;
-    }
-
-    fetchAll(true);
-  }, [fetchAll]);
+  const {
+    data = [],
+    isLoading,
+    isFetching,
+    error,
+    refetch,
+  } = useQuery<FurnitureItemAdmin[]>({
+    queryKey: FURNITURE_KEY,
+    queryFn: async () => {
+      const res = await getFurniture();
+      return res ?? [];
+    },
+    staleTime: 1000 * 60 * 2, // 2 minutes cache (replaces your TTL)
+    refetchOnWindowFocus: true,
+  });
 
   /* =========================================================
      CREATE
   ========================================================= */
 
-  const create = useCallback(async (payload: FurnitureFormPayload, userId: string) => {
-    const requestId = ++requestIdRef.current;
-    setMutating(true);
-    setError(null);
+  const createMutation = useMutation({
+    mutationFn: async ({
+      payload,
+      userId,
+    }: {
+      payload: FurnitureFormPayload;
+      userId: string;
+    }) => createFurniture(payload, userId),
 
-    try {
-      const created = await createFurniture(payload, userId);
-
-      if (!mountedRef.current || requestId !== requestIdRef.current) return false;
-
-      CACHE = [created, ...(CACHE ?? [])];
-      setData(CACHE);
-
-      return true;
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to create furniture");
-      return false;
-    } finally {
-      setMutating(false);
-    }
-  }, []);
+    onSuccess: (newItem) => {
+      queryClient.setQueryData<FurnitureItemAdmin[]>(
+        FURNITURE_KEY,
+        (old = []) => [newItem, ...old]
+      );
+    },
+  });
 
   /* =========================================================
      UPDATE
   ========================================================= */
 
-  const update = useCallback(async (id: string, payload: FurnitureFormPayload) => {
-    const requestId = ++requestIdRef.current;
-    setMutating(true);
-    setError(null);
+  const updateMutation = useMutation({
+    mutationFn: async ({
+      id,
+      payload,
+    }: {
+      id: string;
+      payload: FurnitureFormPayload;
+    }) => updateFurniture(id, payload),
 
-    try {
-      const updated = await updateFurniture(id, payload);
-
-      if (!mountedRef.current || requestId !== requestIdRef.current) return false;
-
-      CACHE = (CACHE ?? []).map((i) =>
-        i.id === id ? updated : i
+    onSuccess: (updated) => {
+      queryClient.setQueryData<FurnitureItemAdmin[]>(
+        FURNITURE_KEY,
+        (old = []) =>
+          old.map((item) =>
+            item.id === updated.id ? updated : item
+          )
       );
-
-      setData(CACHE);
-
-      return true;
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to update furniture");
-      return false;
-    } finally {
-      setMutating(false);
-    }
-  }, []);
+    },
+  });
 
   /* =========================================================
      DELETE
   ========================================================= */
 
-  const remove = useCallback(async (id: string) => {
-    const requestId = ++requestIdRef.current;
-    setMutating(true);
-    setError(null);
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => deleteFurniture(id),
 
-    try {
-      await deleteFurniture(id);
+    onSuccess: (_, id) => {
+      queryClient.setQueryData<FurnitureItemAdmin[]>(
+        FURNITURE_KEY,
+        (old = []) => old.filter((item) => item.id !== id)
+      );
+    },
+  });
 
-      if (!mountedRef.current || requestId !== requestIdRef.current) return false;
-
-      CACHE = (CACHE ?? []).filter((i) => i.id !== id);
-      setData(CACHE);
-
-      return true;
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to delete furniture");
-      return false;
-    } finally {
-      setMutating(false);
-    }
-  }, []);
-
-  /* ========================================================= */
+  /* =========================================================
+     RETURN API (CLEAN)
+  ========================================================= */
 
   return {
+    /* data */
     data,
-    loading,
-    mutating,
-    error,
+    loading: isLoading,
+    fetching: isFetching,
+    error: error ? (error as Error).message : null,
 
-    create,
-    update,
-    remove,
+    /* actions */
+    create: createMutation.mutateAsync,
+    update: updateMutation.mutateAsync,
+    remove: deleteMutation.mutateAsync,
 
-    refetch: () => fetchAll(true),
+    /* manual refresh */
+    refetch: () =>
+      queryClient.invalidateQueries({ queryKey: FURNITURE_KEY }),
   };
-};
+}

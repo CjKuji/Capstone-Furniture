@@ -12,32 +12,32 @@ type Props = {
   onOpenFinalize: () => void;
 };
 
-/**
- * =========================================================
- * BUTTON STYLE SYSTEM (CONSISTENT ADMIN DESIGN)
- * =========================================================
- */
+/* =========================================================
+   DESIGN SYSTEM (MATCHES YOUR DARK UI)
+========================================================= */
 
 const base =
-  "flex-1 rounded-xl py-2 text-sm font-semibold transition border";
+  "flex-1 rounded-xl py-2 text-xs font-semibold transition border backdrop-blur-sm";
 
+/* PRIMARY ACTION (gold accent) */
 const primary =
-  "bg-black text-white border-black hover:opacity-90";
+  "bg-[#D4A97A] text-[#1C1209] border-[#D4A97A] hover:opacity-90";
 
+/* DARK PRIMARY (workflow actions) */
+const dark =
+  "bg-white/[0.04] text-white border-white/10 hover:border-[#D4A97A]/30 hover:text-[#D4A97A]";
+
+/* SUCCESS (soft green, not neon) */
 const success =
-  "bg-green-600 text-white border-green-600 hover:bg-green-700";
+  "bg-green-500/10 text-green-300 border-green-500/20 hover:bg-green-500/20";
 
+/* DANGER (soft red) */
 const danger =
-  "bg-red-600 text-white border-red-600 hover:bg-red-700";
+  "bg-red-500/10 text-red-300 border-red-500/20 hover:bg-red-500/20";
 
+/* WARNING (amber system tone) */
 const warning =
-  "bg-yellow-500 text-black border-yellow-500 hover:bg-yellow-600";
-
-const info =
-  "bg-blue-600 text-white border-blue-600 hover:bg-blue-700";
-
-const neutral =
-  "bg-white text-black border-black/20 hover:bg-black hover:text-white";
+  "bg-yellow-500/10 text-yellow-300 border-yellow-500/20 hover:bg-yellow-500/20";
 
 export default function OrderActionBar({
   order,
@@ -49,14 +49,11 @@ export default function OrderActionBar({
   const flow = useOrderFlow();
   const p = useOrderPermissions(order, totalPaid, finalTotal);
 
-  /**
-   * =========================================================
-   * SAFE ACTIONS
-   * =========================================================
-   */
+  /* ================= SAFE ACTIONS ================= */
+
   const safe = {
     accept: () => {
-      if (!adminId) return console.error("Missing adminId");
+      if (!adminId) return;
       flow.accept(order.id, adminId);
     },
 
@@ -68,32 +65,21 @@ export default function OrderActionBar({
 
   const hideFinalizePricing = order.charge_status === "accepted";
 
-  /**
-   * =========================================================
-   * ACTION PRIORITY (IMPORTANT UX RULE)
-   * =========================================================
-   * 1. Primary (next required step)
-   * 2. Secondary (review / finalize)
-   * 3. Progress pipeline (production flow)
-   */
-
   return (
     <div className="space-y-2">
 
       {/* ================= PRIMARY ROW ================= */}
       <div className="flex gap-2">
 
-        {/* ACCEPT */}
         {p.canAccept && (
-          <button onClick={safe.accept} className={`${base} ${info}`}>
+          <button onClick={safe.accept} className={`${base} ${primary}`}>
             Accept Order
           </button>
         )}
 
-        {/* COMPLETE */}
         {p.canComplete && (
           <button onClick={safe.complete} className={`${base} ${success}`}>
-            Mark Complete
+            Complete
           </button>
         )}
 
@@ -102,30 +88,25 @@ export default function OrderActionBar({
       {/* ================= SECONDARY ROW ================= */}
       <div className="flex gap-2">
 
-        {/* FINALIZE */}
         {p.canFinalizeCharges && !hideFinalizePricing && (
-          <button
-            onClick={onOpenFinalize}
-            className={`${base} ${neutral}`}
-          >
+          <button onClick={onOpenFinalize} className={`${base} ${dark}`}>
             Finalize Pricing
           </button>
         )}
 
-        {/* CANCEL REVIEW */}
         {p.canReviewCancel && (
           <button className={`${base} ${danger}`}>
-            Review Cancellation
+            Review Cancel
           </button>
         )}
 
       </div>
 
-      {/* ================= PRODUCTION PIPELINE ================= */}
+      {/* ================= PIPELINE ================= */}
       <div className="flex flex-wrap gap-2">
 
         {p.canStartProduction && (
-          <button onClick={safe.start} className={`${base} ${primary}`}>
+          <button onClick={safe.start} className={`${base} ${dark}`}>
             Start Production
           </button>
         )}
@@ -137,8 +118,8 @@ export default function OrderActionBar({
         )}
 
         {p.canDispatch && (
-          <button onClick={safe.ship} className={`${base} ${info}`}>
-            Dispatch / Ship
+          <button onClick={safe.ship} className={`${base} ${primary}`}>
+            Dispatch
           </button>
         )}
 

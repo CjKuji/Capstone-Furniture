@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo, useRef } from "react";
-import { Plus } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Plus, Search, Box } from "lucide-react";
 
 import FurnitureCard from "@/app/components/FurnitureCardAdmin";
 import Furniture3DViewer from "@/app/components/Furniture3DViewer";
@@ -18,27 +18,25 @@ import { useFurnitureViewer } from "@/hooks/useFurnitureViewer";
 import { getCategories } from "@/services/furnitureService";
 import { useUser } from "@/hooks/useUser";
 
-/* ========================================================= */
-
-const DEBUG = true;
-
-const log = (...args: any[]) => {
-  if (DEBUG) console.log("🟦 [ADMIN FURNITURE]", ...args);
-};
-
-const err = (...args: any[]) => {
-  console.error("🟥 [ADMIN FURNITURE ERROR]", ...args);
-};
-
-/* ========================================================= */
-
 export default function AdminFurniture() {
-  const { user, loading: userLoading } = useUser();
+  const { user } = useUser();
   const userId = user?.id ?? null;
 
-  const isMounted = useRef(true);
+  const { viewer, openViewer } = useFurnitureViewer();
+
+  const {
+    data: furniture = [],
+    loading,
+    mutating,
+    create,
+    update,
+    remove,
+  } = useFurniture();
+
+  /* ================= STATE ================= */
 
   const [categories, setCategories] = useState<FurnitureCategory[]>([]);
+  const [search, setSearch] = useState("");
 
   const [modalState, setModalState] = useState<{
     isOpen: boolean;
@@ -50,64 +48,28 @@ export default function AdminFurniture() {
     item: null,
   });
 
-  const [search, setSearch] = useState("");
-
-  const { viewer, openViewer } = useFurnitureViewer();
-
-  const {
-    data: furniture,
-    mutating,
-    create,
-    update,
-    remove,
-  } = useFurniture();
-
-  /* ========================================================= */
+  /* ================= CATEGORIES ================= */
 
   useEffect(() => {
-    isMounted.current = true;
-    return () => {
-      isMounted.current = false;
-    };
-  }, []);
-
-  /* =========================================================
-     CATEGORIES
-  ========================================================= */
-
-  useEffect(() => {
-    let active = true;
-
-    (async () => {
+    const loadCategories = async () => {
       try {
-        log("FETCH_CATEGORIES_START");
-
         const result = await getCategories();
-
-        if (!active || !isMounted.current) return;
-
         setCategories(result ?? []);
-
-        log("FETCH_CATEGORIES_SUCCESS", result);
-      } catch (e) {
-        err("FETCH_CATEGORIES_FAILED", e);
+      } catch (err) {
+        console.error("CATEGORY_FETCH_ERROR", err);
       }
-    })();
-
-    return () => {
-      active = false;
     };
+
+    loadCategories();
   }, []);
 
-  /* ========================================================= */
-
-  const list = useMemo(() => furniture ?? [], [furniture]);
+  /* ================= FILTER ================= */
 
   const filteredFurniture = useMemo(() => {
     const keyword = search.trim().toLowerCase();
-    if (!keyword) return list;
+    if (!keyword) return furniture;
 
-    return list.filter((item) => {
+    return furniture.filter((item) => {
       const name = item.name?.toLowerCase() ?? "";
       const description = item.description?.toLowerCase() ?? "";
       const category = item.category?.name?.toLowerCase() ?? "";
@@ -118,98 +80,66 @@ export default function AdminFurniture() {
         category.includes(keyword)
       );
     });
-  }, [list, search]);
+  }, [furniture, search]);
 
-  /* ========================================================= */
+  /* ================= ACTIONS ================= */
 
   const handleDelete = useCallback(
     async (id: string) => {
       if (!confirm("Delete this furniture item?")) return;
-
-      try {
-        await remove(id);
-        log("DELETE_SUCCESS", id);
-      } catch (e) {
-        err("DELETE_FAILED", e);
-      }
+      await remove(id);
     },
     [remove]
   );
 
-  /* ========================================================= */
-
   const handleView = useCallback(
     (item: FurnitureItemAdmin) => {
-      if (!item?.model_url) return;
+      if (!item.model_url) return;
 
       openViewer({
         modelUrl: item.model_url,
         variants: item.variants ?? [],
       });
-
-      log("VIEW_OPENED", item.id);
     },
     [openViewer]
   );
 
-  /* =========================================================
-     SAVE
-  ========================================================= */
-
   const handleSave = useCallback(
     async (id: string | null, form: FurnitureFormPayload) => {
-      log("SAVE_START", {
-        id,
-        mode: modalState.mode,
-        userId,
-        userLoading,
-      });
-
-      if (!userId) {
-        err("SAVE_BLOCKED_NO_USER");
-        return;
-      }
+      if (!userId) return;
 
       try {
         if (modalState.mode === "create") {
-          await create(form, userId);
-          log("CREATE_SUCCESS");
+          await create({ payload: form, userId });
         } else {
-          if (!id) {
-            err("UPDATE_BLOCKED_NO_ID");
-            return;
-          }
-
-          await update(id, form);
-          log("UPDATE_SUCCESS", id);
+          if (!id) return;
+          await update({ id, payload: form });
         }
-
-        if (!isMounted.current) return;
 
         setModalState({
           isOpen: false,
           mode: "create",
           item: null,
         });
-
-        log("MODAL_CLOSED_AFTER_SAVE");
-      } catch (e) {
-        err("SAVE_FAILED", e);
+      } catch (err) {
+        console.error("SAVE_ERROR", err);
       }
     },
-    [create, update, modalState.mode, userId, userLoading]
+    [create, update, modalState.mode, userId]
   );
 
-  /* ========================================================= */
+  /* ================= UI ================= */
 
   return (
-    <main className="flex-1 p-8 space-y-6">
+    <main className="min-h-screen bg-[#0F0A06] text-white p-6 space-y-6">
 
       {/* HEADER */}
-      <div className="flex items-end justify-between">
+      <div className="flex items-end justify-between border-b border-white/5 pb-4">
         <div>
-          <h1 className="text-xl font-semibold">Furniture Inventory</h1>
-          <p className="text-sm text-neutral-500 mt-1">
+          <h1 className="text-2xl font-semibold tracking-tight">
+            Furniture Inventory
+          </h1>
+          <p className="text-sm text-white/40">
             Manage AR-ready furniture assets
           </p>
         </div>
@@ -223,7 +153,7 @@ export default function AdminFurniture() {
               item: null,
             })
           }
-          className="flex items-center gap-2 bg-neutral-900 text-white px-4 py-2 rounded-lg text-sm hover:bg-black transition disabled:opacity-50"
+          className="flex items-center gap-2 bg-[#D4A97A] text-[#1C1209] px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition disabled:opacity-50"
         >
           <Plus size={16} />
           Add Furniture
@@ -231,36 +161,61 @@ export default function AdminFurniture() {
       </div>
 
       {/* SEARCH */}
-      <div className="flex items-center justify-between gap-4 border border-neutral-200 bg-white rounded-xl p-3">
+      <div className="flex items-center gap-3 bg-white/[0.04] border border-white/10 rounded-xl px-4 py-3">
+        <Search className="w-4 h-4 text-white/30" />
+
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search furniture..."
-          className="flex-1 text-sm outline-none px-2 bg-transparent"
+          className="flex-1 bg-transparent outline-none text-sm text-white placeholder:text-white/25"
         />
 
-        <div className="text-xs text-neutral-500">
+        <span className="text-xs text-white/30">
           {filteredFurniture.length} items
-        </div>
+        </span>
       </div>
 
+      {/* LOADING */}
+      {loading && (
+        <div className="text-sm text-white/40">
+          Loading furniture...
+        </div>
+      )}
+
       {/* GRID */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
-        {filteredFurniture.map((item) => (
-      <FurnitureCard
-  key={item.id}
-  item={item}
-  onEdit={() =>
-    setModalState({
-      isOpen: true,
-      mode: "edit",
-      item,
-    })
-  }
-  onDelete={() => handleDelete(item.id)}
-/>
-        ))}
-      </div>
+      {!loading && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
+          {filteredFurniture.map((item) => (
+            <FurnitureCard
+              key={item.id}
+              item={item}
+              onEdit={() =>
+                setModalState({
+                  isOpen: true,
+                  mode: "edit",
+                  item,
+                })
+              }
+              onDelete={() => handleDelete(item.id)}
+              onView={() => handleView(item)}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* EMPTY STATE */}
+      {!loading && filteredFurniture.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-24 text-center">
+          <Box className="w-10 h-10 text-white/20 mb-3" />
+          <p className="text-white/40 text-sm">
+            No furniture found
+          </p>
+          <p className="text-white/20 text-xs mt-1">
+            Try adjusting your search
+          </p>
+        </div>
+      )}
 
       {/* MODAL */}
       {modalState.isOpen && (
@@ -268,6 +223,7 @@ export default function AdminFurniture() {
           isOpen={modalState.isOpen}
           mode={modalState.mode}
           item={modalState.item}
+          categories={categories}
           onClose={() =>
             setModalState({
               isOpen: false,
@@ -276,18 +232,17 @@ export default function AdminFurniture() {
             })
           }
           onSave={handleSave}
-          categories={categories}
         />
       )}
 
-      {/* LOADING */}
+      {/* MUTATION STATUS */}
       {mutating && (
-        <div className="fixed bottom-4 right-4 bg-black text-white text-xs px-4 py-2 rounded-lg">
+        <div className="fixed bottom-4 right-4 bg-black/90 border border-white/10 text-white text-xs px-4 py-2 rounded-lg">
           Saving changes...
         </div>
       )}
 
-      {/* VIEWER */}
+      {/* 3D VIEWER */}
       {viewer && (
         <Furniture3DViewer
           modelUrl={viewer.modelUrl}

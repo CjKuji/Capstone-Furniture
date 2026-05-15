@@ -10,7 +10,9 @@ import {
   Globe,
   LucideIcon,
 } from "lucide-react";
+
 import { supabase } from "@/lib/supabase";
+import { useUser } from "@/hooks/useUser";
 
 /* =========================================================
    TYPES
@@ -62,6 +64,7 @@ const NAVIGATION: NavGroup[] = [
 export default function AdminSidebar() {
   const router = useRouter();
   const pathname = usePathname();
+  const { authUser, role } = useUser();
 
   const isActive = (item: NavItem) => {
     if (item.exact) return pathname === item.path;
@@ -73,19 +76,23 @@ export default function AdminSidebar() {
     router.push("/auth/login");
   };
 
+  const initials = authUser?.email
+    ? authUser.email.slice(0, 2).toUpperCase()
+    : "AD";
+
   return (
-    <aside className="h-screen w-64 border-r border-neutral-200 bg-white flex flex-col sticky top-0">
+    <aside className="h-screen w-64 bg-[#1C1209] border-r border-white/10 flex flex-col sticky top-0">
 
       {/* =========================================================
           BRAND HEADER
       ========================================================= */}
-      <div className="px-6 py-5 border-b border-neutral-200">
-        <h1 className="text-sm font-semibold tracking-wide text-neutral-900">
-          Furniture Admin
+      <div className="px-6 py-5 border-b border-white/10">
+        <h1 className="text-[#D4A97A] font-bold tracking-widest text-sm">
+          WOODFORGE
         </h1>
 
-        <p className="text-[11px] text-neutral-500 mt-1">
-          Control Panel
+        <p className="text-white/40 text-[11px] mt-1">
+          Admin Control Panel
         </p>
       </div>
 
@@ -96,12 +103,10 @@ export default function AdminSidebar() {
 
         {NAVIGATION.map((group) => (
           <div key={group.title}>
-            {/* GROUP TITLE */}
-            <p className="px-3 mb-2 text-[10px] uppercase tracking-widest text-neutral-400">
+            <p className="px-3 mb-2 text-[10px] uppercase tracking-widest text-white/30">
               {group.title}
             </p>
 
-            {/* ITEMS */}
             <div className="space-y-1">
               {group.items.map((item) => {
                 const Icon = item.icon;
@@ -111,31 +116,27 @@ export default function AdminSidebar() {
                   <button
                     key={item.path}
                     onClick={() => router.push(item.path)}
-                    className={`
-                      group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition
+                    className={`group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition
                       ${
                         active
-                          ? "bg-neutral-100 text-neutral-900 font-medium shadow-sm"
-                          : "text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900"
-                      }
-                    `}
+                          ? "bg-white/5 text-white shadow-[0_0_0_1px_rgba(212,169,122,0.25)]"
+                          : "text-white/60 hover:text-white hover:bg-white/5"
+                      }`}
                   >
-
-                    {/* ACTIVE BAR */}
+                    {/* ACTIVE INDICATOR BAR */}
                     <span
-                      className={`
-                        absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 rounded-r-full transition
-                        ${active ? "bg-neutral-900" : "bg-transparent"}
-                      `}
+                      className={`absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 rounded-r-full transition
+                        ${active ? "bg-[#D4A97A]" : "bg-transparent"}`}
                     />
 
                     {/* ICON */}
                     <Icon
                       size={18}
-                      className={`
-                        transition
-                        ${active ? "text-neutral-900" : "text-neutral-500 group-hover:text-neutral-900"}
-                      `}
+                      className={`transition ${
+                        active
+                          ? "text-[#D4A97A]"
+                          : "text-white/40 group-hover:text-white"
+                      }`}
                     />
 
                     {/* LABEL */}
@@ -149,27 +150,34 @@ export default function AdminSidebar() {
       </nav>
 
       {/* =========================================================
-          FOOTER / ACTIONS
+          FOOTER
       ========================================================= */}
-      <div className="border-t border-neutral-200 p-3 space-y-2">
+      <div className="border-t border-white/10 p-3 space-y-3">
 
-        {/* ADMIN INFO CARD */}
-        <div className="px-3 py-2 rounded-xl bg-neutral-50 border border-neutral-100">
-          <p className="text-[11px] text-neutral-500">Logged in as</p>
-          <p className="text-sm font-medium text-neutral-800">
-            Administrator
-          </p>
+        {/* USER CARD */}
+        <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-white/5 border border-white/10">
+          <div className="w-8 h-8 rounded-full bg-[#D4A97A] text-[#1C1209] flex items-center justify-center font-bold text-xs">
+            {initials}
+          </div>
+
+          <div className="min-w-0">
+            <p className="text-white text-sm truncate">
+              {authUser?.email ?? "Admin"}
+            </p>
+            <p className="text-[#D4A97A] text-[11px] capitalize">
+              {role ?? "admin"}
+            </p>
+          </div>
         </div>
 
         {/* LOGOUT */}
         <button
           onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-red-600 hover:bg-red-50 transition"
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-red-400 hover:text-red-300 hover:bg-red-950/20 transition"
         >
           <LogOut size={18} />
           Logout
         </button>
-
       </div>
     </aside>
   );

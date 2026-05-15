@@ -17,7 +17,7 @@ interface Stats {
 }
 
 /* =========================================================
-   SIMPLE MEMORY CACHE
+   SIMPLE CACHE
 ========================================================= */
 
 let dashboardCache: Stats | null = null;
@@ -32,19 +32,10 @@ const CACHE_TTL = 1000 * 60 * 2;
 export default function AdminDashboard() {
   const { user } = useUser();
 
-  /* =========================================================
-     SAFE EMAIL EXTRACTION (FIX)
-  ========================================================= */
-
-  // 🔥 FIX: handle Supabase/Auth shape safely
   const email =
     (user as any)?.email ??
     (user as any)?.profile?.email ??
     null;
-
-  /* =========================================================
-     STATE
-  ========================================================= */
 
   const [stats, setStats] = useState<Stats>(
     dashboardCache ?? {
@@ -58,13 +49,13 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(!dashboardCache);
 
   /* =========================================================
-     LOAD DASHBOARD
+     LOAD
   ========================================================= */
 
   useEffect(() => {
     let mounted = true;
 
-    const loadDashboard = async () => {
+    const load = async () => {
       const now = Date.now();
 
       const hasFreshCache =
@@ -80,22 +71,21 @@ export default function AdminDashboard() {
       if (!dashboardCache) setLoading(true);
 
       try {
-        const dashboardStats = await getAdminStats();
-
+        const data = await getAdminStats();
         if (!mounted) return;
 
-        setStats(dashboardStats);
+        setStats(data);
 
-        dashboardCache = dashboardStats;
+        dashboardCache = data;
         dashboardCacheTime = Date.now();
-      } catch (error) {
-        console.error("Failed to load dashboard stats:", error);
+      } catch (err) {
+        console.error("DASHBOARD_ERROR", err);
       } finally {
         if (mounted) setLoading(false);
       }
     };
 
-    loadDashboard();
+    load();
 
     return () => {
       mounted = false;
@@ -107,25 +97,23 @@ export default function AdminDashboard() {
   ========================================================= */
 
   return (
-    <main className="flex-1 p-10 space-y-8">
+    <main className="min-h-screen bg-[#0F0A06] text-white p-6 space-y-6">
 
       {/* HEADER */}
-      <div className="flex items-end justify-between">
+      <div className="flex items-end justify-between border-b border-white/5 pb-4">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">
+          <h1 className="text-2xl font-semibold tracking-tight">
             Admin Overview
           </h1>
 
-          <p className="text-sm text-neutral-500 mt-1">
-            {email
-              ? `Signed in as ${email}`
-              : "System control center"}
+          <p className="text-sm text-white/40 mt-1">
+            {email ? `Signed in as ${email}` : "System control center"}
           </p>
         </div>
 
-        <div className="text-xs text-neutral-500">
+        <div className="text-xs text-white/30">
           Live system status:{" "}
-          <span className="text-emerald-600">Operational</span>
+          <span className="text-emerald-400">Operational</span>
         </div>
       </div>
 
@@ -135,51 +123,66 @@ export default function AdminDashboard() {
           {Array.from({ length: 4 }).map((_, i) => (
             <div
               key={i}
-              className="h-24 rounded-xl bg-neutral-200 animate-pulse"
+              className="h-24 rounded-xl bg-white/5 border border-white/10 animate-pulse"
             />
           ))}
         </div>
       ) : (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+
           <KpiCard label="Furniture Items" value={stats.totalFurniture} />
+
           <KpiCard
             label="Published"
             value={stats.publishedFurniture}
             tone="success"
           />
+
           <KpiCard label="Users" value={stats.totalUsers} />
+
           <KpiCard
             label="Saved Configs"
             value={stats.savedConfigs}
             tone="muted"
           />
+
         </div>
       )}
 
       {/* PANELS */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 border rounded-xl bg-white p-5">
-          <h2 className="text-sm font-semibold">System Activity</h2>
-          <div className="mt-4 text-sm text-neutral-500">
+
+        {/* ACTIVITY */}
+        <div className="lg:col-span-2 bg-white/[0.03] border border-white/10 rounded-2xl p-5">
+          <h2 className="text-sm font-semibold text-white">
+            System Activity
+          </h2>
+
+          <div className="mt-4 text-sm text-white/40">
             Activity feed placeholder
           </div>
         </div>
 
-        <div className="border rounded-xl bg-white p-5">
-          <h2 className="text-sm font-semibold">Quick Actions</h2>
+        {/* QUICK ACTIONS */}
+        <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-5">
+          <h2 className="text-sm font-semibold text-white">
+            Quick Actions
+          </h2>
 
           <div className="mt-4 space-y-2 text-sm">
-            <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-neutral-100">
+
+            <button className="w-full text-left px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 transition">
               + Add Furniture
             </button>
 
-            <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-neutral-100">
+            <button className="w-full text-left px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 transition">
               View Orders
             </button>
 
-            <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-neutral-100">
+            <button className="w-full text-left px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/70 transition">
               Manage Users
             </button>
+
           </div>
         </div>
       </div>
@@ -201,14 +204,14 @@ function KpiCard({
   tone?: "default" | "success" | "muted";
 }) {
   const toneStyles = {
-    default: "text-neutral-900",
-    success: "text-emerald-600",
-    muted: "text-neutral-500",
+    default: "text-white",
+    success: "text-emerald-400",
+    muted: "text-white/50",
   };
 
   return (
-    <div className="rounded-xl border bg-white p-5">
-      <p className="text-xs text-neutral-500">{label}</p>
+    <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-5">
+      <p className="text-xs text-white/40">{label}</p>
 
       <p className={`text-2xl font-semibold mt-2 ${toneStyles[tone]}`}>
         {value}
