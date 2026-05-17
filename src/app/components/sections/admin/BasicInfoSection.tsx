@@ -14,93 +14,87 @@ type BasicInfoState = {
   heightCm: number | null;
 };
 
-/* ========================================================= */
-
 type Props = {
   state: BasicInfoState;
-
-  setField: <K extends keyof BasicInfoState>(
-    key: K,
-    value: BasicInfoState[K]
-  ) => void;
-
+  setField: <K extends keyof BasicInfoState>(key: K, value: BasicInfoState[K]) => void;
   categories: FurnitureCategory[];
 };
 
 /* ========================================================= */
 
-export default function BasicInfoSection({
-  state,
-  setField,
-  categories,
-}: Props) {
-  const {
-    name,
-    description,
-    categoryId,
-    basePrice,
-    widthCm,
-    depthCm,
-    heightCm,
-  } = state;
+const inputClass = `
+  w-full mt-1.5 rounded-xl px-4 py-2.5 text-sm outline-none transition
+  bg-white/[0.04] border border-white/10 text-white placeholder:text-white/20
+  focus:border-[#D4A97A]/50 focus:bg-white/[0.06]
+`.trim();
+
+const labelClass = "text-xs font-medium text-white/40 tracking-wide uppercase";
+
+/* ========================================================= */
+
+export default function BasicInfoSection({ state, setField, categories }: Props) {
+  const { name, description, categoryId, basePrice, widthCm, depthCm, heightCm } = state;
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 p-6 space-y-5">
-
+    <div
+      className="rounded-2xl p-5 space-y-5"
+      style={{
+        background: "rgba(255,255,255,0.03)",
+        border: "1px solid rgba(255,255,255,0.07)",
+      }}
+    >
       {/* HEADER */}
-      <div>
-        <h3 className="text-sm font-semibold text-gray-900">
-          Basic Information
-        </h3>
-        <p className="text-xs text-gray-500 mt-1">
-          Core product details and pricing
-        </p>
+      <div className="flex items-center gap-3 pb-1">
+        <div
+          className="w-1 h-5 rounded-full"
+          style={{ background: "#D4A97A" }}
+        />
+        <div>
+          <h3 className="text-sm font-semibold text-white">Basic Information</h3>
+          <p className="text-xs mt-0.5" style={{ color: "rgba(212,169,122,0.5)" }}>
+            Core product details and pricing
+          </p>
+        </div>
       </div>
 
       <div className="space-y-4">
 
         {/* NAME */}
         <div>
-          <label className="text-xs font-medium text-gray-600">
-            Furniture Name
-          </label>
+          <label className={labelClass}>Furniture Name</label>
           <input
             value={name}
             onChange={(e) => setField("name", e.target.value)}
-            placeholder="Premium Sofa"
-            className="w-full mt-2 rounded-xl border border-gray-200 px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+            placeholder="e.g. Premium Sofa"
+            className={inputClass}
           />
         </div>
 
         {/* DESCRIPTION */}
         <div>
-          <label className="text-xs font-medium text-gray-600">
-            Description
-          </label>
+          <label className={labelClass}>Description</label>
           <textarea
             value={description}
             onChange={(e) => setField("description", e.target.value)}
-            rows={4}
+            rows={3}
             placeholder="Short description of the furniture..."
-            className="w-full mt-2 rounded-xl border border-gray-200 px-4 py-3 text-sm resize-none focus:ring-2 focus:ring-indigo-500 outline-none"
+            className={`${inputClass} resize-none`}
           />
         </div>
 
         {/* CATEGORY + PRICE */}
         <div className="grid grid-cols-2 gap-4">
-
           <div>
-            <label className="text-xs font-medium text-gray-600">
-              Category
-            </label>
+            <label className={labelClass}>Category</label>
             <select
               value={categoryId}
               onChange={(e) => setField("categoryId", e.target.value)}
-              className="w-full mt-2 rounded-xl border border-gray-200 px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+              className={`${inputClass} appearance-none cursor-pointer`}
+              style={{ colorScheme: "dark" }}
             >
-              <option value="">Select category</option>
+              <option value="" className="bg-[#1A1008]">Select category</option>
               {categories.map((c) => (
-                <option key={c.id} value={c.id}>
+                <option key={c.id} value={c.id} className="bg-[#1A1008]">
                   {c.name}
                 </option>
               ))}
@@ -108,72 +102,41 @@ export default function BasicInfoSection({
           </div>
 
           <div>
-            <label className="text-xs font-medium text-gray-600">
-              Base Price
-            </label>
+            <label className={labelClass}>Base Price</label>
             <input
               type="number"
               value={basePrice ?? ""}
               onChange={(e) =>
-                setField(
-                  "basePrice",
-                  e.target.value === "" ? null : Number(e.target.value)
-                )
+                setField("basePrice", e.target.value === "" ? null : Number(e.target.value))
               }
               placeholder="0.00"
-              className="w-full mt-2 rounded-xl border border-gray-200 px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+              className={inputClass}
             />
           </div>
-
         </div>
 
         {/* DIMENSIONS */}
         <div>
-          <label className="text-xs font-medium text-gray-600">
-            Dimensions (W × D × H cm)
-          </label>
-
-          <div className="grid grid-cols-3 gap-3 mt-2">
-
-            <input
-              type="number"
-              value={widthCm ?? ""}
-              onChange={(e) =>
-                setField(
-                  "widthCm",
-                  e.target.value === "" ? null : Number(e.target.value)
-                )
-              }
-              placeholder="Width"
-              className="rounded-xl border border-gray-200 px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-            />
-
-            <input
-              type="number"
-              value={depthCm ?? ""}
-              onChange={(e) =>
-                setField(
-                  "depthCm",
-                  e.target.value === "" ? null : Number(e.target.value)
-                )
-              }
-              placeholder="Depth"
-              className="rounded-xl border border-gray-200 px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-            />
-
-            <input
-              type="number"
-              value={heightCm ?? ""}
-              onChange={(e) =>
-                setField(
-                  "heightCm",
-                  e.target.value === "" ? null : Number(e.target.value)
-                )
-              }
-              placeholder="Height"
-              className="rounded-xl border border-gray-200 px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-            />
-
+          <label className={labelClass}>Dimensions — W × D × H (cm)</label>
+          <div className="grid grid-cols-3 gap-3 mt-1.5">
+            {(
+              [
+                { key: "widthCm", value: widthCm, placeholder: "Width" },
+                { key: "depthCm", value: depthCm, placeholder: "Depth" },
+                { key: "heightCm", value: heightCm, placeholder: "Height" },
+              ] as const
+            ).map(({ key, value, placeholder }) => (
+              <input
+                key={key}
+                type="number"
+                value={value ?? ""}
+                onChange={(e) =>
+                  setField(key, e.target.value === "" ? null : Number(e.target.value))
+                }
+                placeholder={placeholder}
+                className={inputClass}
+              />
+            ))}
           </div>
         </div>
 

@@ -13,27 +13,57 @@ export default function AssetsSection({ state }: Props) {
 
   return (
     <div className="space-y-4">
-      <p className="font-semibold text-[#D4A97A] text-xs uppercase tracking-widest">Gallery</p>
 
-      <div className="gap-2 grid grid-cols-3">
+      {/* HEADER */}
+      <div className="flex items-center gap-3">
+        <div className="w-1 h-4 rounded-full" style={{ background: "#D4A97A" }} />
+        <p className="text-xs font-semibold text-white/40 uppercase tracking-widest">
+          Gallery
+        </p>
+      </div>
+
+      {/* GRID */}
+      <div className="grid grid-cols-3 gap-2">
         {images.map((img) => (
           <div
             key={img.id ?? img.clientId}
-            className="relative bg-white/[0.03] border border-white/5 rounded-xl aspect-square overflow-hidden"
+            className="relative group aspect-square rounded-xl overflow-hidden"
+            style={{
+              background: "rgba(255,255,255,0.03)",
+              border: img.isPrimary
+                ? "1.5px solid rgba(212,169,122,0.4)"
+                : "1px solid rgba(255,255,255,0.06)",
+            }}
           >
             <img
               src={img.url}
               alt=""
-              className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
+              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
             />
+
+            {/* PRIMARY BADGE */}
             {img.isPrimary && (
-              <div className="top-2 left-2 absolute bg-[#D4A97A]/20 px-2 py-0.5 border border-[#D4A97A]/30 rounded-full font-medium text-[#D4A97A] text-[9px]">
+              <div
+                className="absolute top-2 left-2 px-2 py-0.5 rounded-full text-[9px] font-semibold"
+                style={{
+                  background: "rgba(212,169,122,0.2)",
+                  border: "1px solid rgba(212,169,122,0.35)",
+                  color: "#D4A97A",
+                }}
+              >
                 Main
               </div>
             )}
+
+            {/* HOVER OVERLAY */}
+            <div
+              className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+              style={{ background: "rgba(212,169,122,0.06)" }}
+            />
           </div>
         ))}
       </div>
+
     </div>
   );
 }

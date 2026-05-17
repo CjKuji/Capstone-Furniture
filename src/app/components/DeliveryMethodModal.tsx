@@ -4,13 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import type { DeliveryMethod } from "@/types/enums";
 
-/**
- * =========================================================
- * TYPES
- * =========================================================
- */
+/* ── TYPES ── */
 
-type SelectedItem = {
+export type SelectedItem = {
   furniture_id: string;
   variant_id: string | null;
   quantity: number;
@@ -18,14 +14,144 @@ type SelectedItem = {
   unit_price: number;
 };
 
-type DeliveryData = {
+export type DeliveryData = {
   delivery_method: DeliveryMethod;
   phone_number: string | null;
   delivery_address: string | null;
   pickup_location: string | null;
 };
 
-type Props = {
+export type DeliveryStepState = {
+  method: DeliveryMethod;
+  phone: string;
+  address: string;
+};
+
+/* ── CONSTANTS ── */
+
+export const STORE_PICKUP = "BL Sash Factory, 92 Upper Kalaklan, Olongapo City";
+
+/* ── SHARED FIELD STYLES ── */
+
+const inputCls = `
+  w-full rounded-2xl border border-[#2A1F14] bg-[#160F08]
+  px-4 py-3 text-[13px] text-white/80
+  placeholder:text-white/20
+  focus:outline-none focus:border-[#D4A97A]/40
+  transition-colors
+`;
+
+const labelCls = "text-[10px] font-black uppercase tracking-[0.14em] text-white/30";
+
+/* ══════════════════════════════════════════════════════════════
+   DELIVERY STEP — inline panel, no portal, no backdrop
+   Used inside PlaceOrderModal wizard
+══════════════════════════════════════════════════════════════ */
+
+type DeliveryStepProps = {
+  state: DeliveryStepState;
+  onChange: (next: DeliveryStepState) => void;
+};
+
+export function DeliveryStep({ state, onChange }: DeliveryStepProps) {
+  const { method, phone, address } = state;
+  const isDelivery = method === "delivery";
+
+  function set(patch: Partial<DeliveryStepState>) {
+    onChange({ ...state, ...patch });
+  }
+
+  return (
+    <div className="p-5 space-y-4">
+      <p className="text-[10px] font-black uppercase tracking-[0.14em] text-white/25 pb-1">
+        How Should We Deliver?
+      </p>
+
+      {/* Method toggle */}
+      <div className="grid grid-cols-2 gap-2">
+        {(["pickup", "delivery"] as const).map((m) => (
+          <button
+            key={m}
+            onClick={() => set({ method: m })}
+            className={`
+              py-3 rounded-2xl border text-[12px] font-black uppercase tracking-[0.12em] transition-all
+              ${method === m
+                ? "border-[#D4A97A]/40 bg-[#D4A97A]/[0.08] text-[#D4A97A]"
+                : "border-[#2A1F14] bg-[#160F08] text-white/35 hover:text-white/60"}
+            `}
+          >
+            {m === "pickup" ? "Store Pickup" : "Deliver to Me"}
+          </button>
+        ))}
+      </div>
+
+      {/* Phone */}
+      <div className="space-y-1.5">
+        <label className={labelCls}>Phone Number</label>
+        <input
+          className={inputCls}
+          placeholder="09xx xxx xxxx"
+          value={phone}
+          onChange={(e) => set({ phone: e.target.value })}
+        />
+      </div>
+
+      {/* Address */}
+      {isDelivery && (
+        <div className="space-y-1.5">
+          <label className={labelCls}>Delivery Address</label>
+          <textarea
+            className={`${inputCls} min-h-[100px] resize-none`}
+            placeholder="House No, Street, Barangay, City, Province"
+            value={address}
+            onChange={(e) => set({ address: e.target.value })}
+          />
+        </div>
+      )}
+
+      {/* Pickup location */}
+      {!isDelivery && (
+        <div className="rounded-2xl border border-[#2A1F14] bg-[#160F08] p-4">
+          <p className="text-[10px] font-black uppercase tracking-[0.14em] text-white/25 mb-1.5">
+            Pickup Location
+          </p>
+          <p className="text-[13px] text-white/55 leading-relaxed">{STORE_PICKUP}</p>
+        </div>
+      )}
+
+      {/* Draft hint */}
+      <div className="rounded-2xl border border-[#2A1F14] bg-[#160F08] px-4 py-3">
+        <p className="text-[11px] text-[#7A5C3A] leading-relaxed">
+          ✦ &nbsp;This is a draft — you can still edit everything before confirming.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/* ── HELPER: build DeliveryData from step state ── */
+export function buildDeliveryData(state: DeliveryStepState): DeliveryData {
+  return {
+    delivery_method: state.method,
+    phone_number: state.phone.trim() || null,
+    delivery_address: state.method === "delivery" ? state.address.trim() || null : null,
+    pickup_location: state.method === "pickup" ? STORE_PICKUP : null,
+  };
+}
+
+/* ── HELPER: validate step ── */
+export function isDeliveryStepValid(state: DeliveryStepState): boolean {
+  const phoneValid = state.phone.trim().length >= 10;
+  const addressValid = state.method !== "delivery" || state.address.trim().length >= 10;
+  return phoneValid && addressValid;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   STANDALONE MODAL — wraps DeliveryStep in its own portal shell
+   Used independently when needed outside the wizard
+══════════════════════════════════════════════════════════════ */
+
+type DeliveryMethodModalProps = {
   open: boolean;
   onClose: () => void;
   items: SelectedItem[];
@@ -33,86 +159,34 @@ type Props = {
   initialValue?: DeliveryData | null;
 };
 
-/**
- * =========================================================
- * COMPONENT
- * =========================================================
- */
-
 export default function DeliveryMethodModal({
   open,
   onClose,
   items,
   onSave,
   initialValue = null,
-}: Props) {
-  const STORE_PICKUP =
-    "BL Sash Factory, 92 Upper Kalaklan, Olongapo City";
-
-  const [method, setMethod] = useState<DeliveryMethod>("pickup");
-
-  const [form, setForm] = useState({
-    phone_number: "",
-    delivery_address: "",
+}: DeliveryMethodModalProps) {
+  const [state, setState] = useState<DeliveryStepState>({
+    method: "pickup",
+    phone: "",
+    address: "",
   });
 
-  const isDelivery = method === "delivery";
-
-  /**
-   * =========================================================
-   * HYDRATION
-   * =========================================================
-   */
   useEffect(() => {
     if (!open) return;
-
-    if (initialValue) {
-      setMethod(initialValue.delivery_method);
-
-      setForm({
-        phone_number: initialValue.phone_number ?? "",
-        delivery_address: initialValue.delivery_address ?? "",
-      });
-    } else {
-      setMethod("pickup");
-      setForm({
-        phone_number: "",
-        delivery_address: "",
-      });
-    }
+    setState({
+      method: initialValue?.delivery_method ?? "pickup",
+      phone: initialValue?.phone_number ?? "",
+      address: initialValue?.delivery_address ?? "",
+    });
   }, [open, initialValue]);
 
-  /**
-   * =========================================================
-   * PAYLOAD
-   * =========================================================
-   */
-  const payload: DeliveryData = useMemo(() => {
-    return {
-      delivery_method: method,
-      phone_number: form.phone_number.trim() || null,
-      delivery_address: isDelivery
-        ? form.delivery_address.trim() || null
-        : null,
-      pickup_location: isDelivery ? null : STORE_PICKUP,
-    };
-  }, [method, form.phone_number, form.delivery_address, isDelivery]);
+  const payload = useMemo(() => buildDeliveryData(state), [state]);
 
-  /**
-   * =========================================================
-   * SAVE
-   * =========================================================
-   */
   function handleSave() {
     if (!items?.length) return;
-
-    const phoneValid = form.phone_number.trim().length >= 10;
-    const addressValid =
-      !isDelivery || form.delivery_address.trim().length >= 10;
-
-    if (!phoneValid || !addressValid) return;
+    if (!isDeliveryStepValid(state)) return;
     if (typeof onSave !== "function") return;
-
     onSave(payload);
     onClose();
   }
@@ -120,143 +194,94 @@ export default function DeliveryMethodModal({
   if (!open) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
 
-      {/* BACKDROP */}
-      <div
-        className="absolute inset-0 bg-black/80"
-        onClick={onClose}
-      />
-
-      {/* MODAL */}
-      <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl border border-black p-6 space-y-6">
-
-        {/* HEADER */}
-        <div>
-          <h2 className="text-2xl font-bold text-black">
-            Delivery Method
-          </h2>
-          <p className="text-sm text-black font-medium mt-1">
-            Choose how your order will be delivered
-          </p>
-        </div>
-
-        {/* TOGGLE */}
-        <div className="grid grid-cols-2 gap-3">
-          <button
-            onClick={() => setMethod("pickup")}
-            className={`py-3 rounded-xl border font-semibold transition ${
-              method === "pickup"
-                ? "bg-black text-white border-black"
-                : "bg-white text-black border-black hover:bg-black hover:text-white"
-            }`}
-          >
-            Pickup
-          </button>
-
-          <button
-            onClick={() => setMethod("delivery")}
-            className={`py-3 rounded-xl border font-semibold transition ${
-              method === "delivery"
-                ? "bg-black text-white border-black"
-                : "bg-white text-black border-black hover:bg-black hover:text-white"
-            }`}
-          >
-            Delivery
-          </button>
-        </div>
-
-        {/* PHONE */}
-        <div>
-          <label className="text-sm font-bold text-black">
-            Phone Number
-          </label>
-
-          <input
-            className="w-full mt-2 px-4 py-3 border border-black rounded-xl text-sm text-black placeholder-black/60"
-            placeholder="09xx xxx xxxx"
-            value={form.phone_number}
-            onChange={(e) =>
-              setForm((p) => ({
-                ...p,
-                phone_number: e.target.value,
-              }))
-            }
-          />
-        </div>
-
-        {/* ADDRESS */}
-        {isDelivery && (
-          <div>
-            <label className="text-sm font-bold text-black">
-              Delivery Address
-            </label>
-
-            <textarea
-              className="w-full mt-2 px-4 py-3 border border-black rounded-xl text-sm text-black min-h-[110px]"
-              placeholder="House No, Street, Barangay, City, Province"
-              value={form.delivery_address}
-              onChange={(e) =>
-                setForm((p) => ({
-                  ...p,
-                  delivery_address: e.target.value,
-                }))
-              }
-            />
+      <div className="
+        relative w-full max-w-md
+        rounded-3xl bg-[#0B0704]
+        border border-[#2A1F14]
+        shadow-[0_32px_80px_rgba(0,0,0,0.8)]
+        overflow-hidden
+      ">
+        {/* Header */}
+        <div className="flex items-start justify-between border-b border-[#2A1F14] px-5 py-4 bg-[#0E0B06]/60">
+          <div className="space-y-0.5">
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/25">
+              Configuration
+            </p>
+            <h2 className="text-sm font-semibold text-white/85">Delivery Method</h2>
           </div>
-        )}
-
-        {/* PICKUP */}
-        {!isDelivery && (
-          <div className="rounded-xl border border-black p-4">
-            <div className="font-bold text-black">
-              Pickup Location
-            </div>
-            <div className="text-black font-medium mt-1">
-              {STORE_PICKUP}
-            </div>
-          </div>
-        )}
-
-        {/* ITEMS */}
-        <div className="rounded-xl border border-black p-4 space-y-2">
-          <div className="font-bold text-black">
-            Order Items
-          </div>
-
-          {items.map((i, idx) => (
-            <div
-              key={idx}
-              className="flex justify-between text-sm text-black font-medium"
-            >
-              <span className="truncate pr-3">{i.label}</span>
-              <span>x{i.quantity}</span>
-            </div>
-          ))}
-        </div>
-
-        {/* TIP */}
-        <div className="text-sm font-medium text-black border border-black p-3 rounded-xl">
-          💡 This is only a draft — you can still edit everything before placing order.
-        </div>
-
-        {/* ACTIONS */}
-        <div className="flex gap-3">
           <button
             onClick={onClose}
-            className="flex-1 py-3 rounded-xl border border-black font-semibold text-black hover:bg-black hover:text-white"
+            className="
+              flex h-8 w-8 items-center justify-center
+              rounded-full border border-[#2A1F14] bg-white/[0.03]
+              text-white/35 text-xs
+              hover:bg-white/[0.07] hover:text-white/60 hover:border-[#D4A97A]/20
+              transition-all
+            "
           >
-            Cancel
-          </button>
-
-          <button
-            onClick={handleSave}
-            className="flex-1 py-3 rounded-xl bg-black text-white font-semibold hover:opacity-90"
-          >
-            Save
+            ✕
           </button>
         </div>
 
+        {/* Body — reuse the step panel */}
+        <div className="max-h-[70vh] overflow-y-auto scrollbar-thin scrollbar-thumb-[#2A1F14]">
+          <DeliveryStep state={state} onChange={setState} />
+
+          {/* Order items summary */}
+          {items.length > 0 && (
+            <div className="px-5 pb-5">
+              <div className="rounded-2xl border border-[#2A1F14] bg-[#160F08] divide-y divide-[#2A1F14] overflow-hidden">
+                <div className="px-4 py-2.5">
+                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-white/25">
+                    Order Items
+                  </p>
+                </div>
+                {items.map((item, idx) => (
+                  <div key={idx} className="flex items-center justify-between px-4 py-3">
+                    <span className="text-[13px] text-white/60 truncate pr-3">{item.label}</span>
+                    <span className="text-[12px] font-semibold text-[#D4A97A]/70 flex-shrink-0">
+                      ×{item.quantity}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="border-t border-[#2A1F14] bg-[#0E0B06]/60 px-5 py-4">
+          <div className="flex gap-3">
+            <button
+              onClick={onClose}
+              className="
+                flex-1 rounded-2xl border border-[#2A1F14] bg-white/[0.02]
+                py-3 text-[11px] font-black uppercase tracking-[0.14em] text-white/30
+                hover:bg-white/[0.05] hover:text-white/50
+                transition-all
+              "
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              className="
+                flex-[2] rounded-2xl py-3
+                text-[11px] font-black uppercase tracking-[0.14em]
+                bg-gradient-to-r from-[#C49A6C] via-[#D4A97A] to-[#E8C98A]
+                text-[#0E0A06]
+                shadow-[0_2px_8px_rgba(212,169,122,0.25)]
+                hover:brightness-105 hover:shadow-[0_4px_16px_rgba(212,169,122,0.35)]
+                transition-all
+              "
+            >
+              Save Method ✦
+            </button>
+          </div>
+        </div>
       </div>
     </div>,
     document.body

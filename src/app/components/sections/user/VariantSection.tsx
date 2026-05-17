@@ -3,11 +3,15 @@
 import { useState } from "react";
 import type { VariantUI } from "@/types/furniture-ui";
 
+/* ========================================================= */
+
 type Props = {
   variants: VariantUI[];
   onApplyVariant?: (variantId: string | null) => void;
   activeVariantId?: string | null;
 };
+
+/* ========================================================= */
 
 export default function VariantsSection({
   variants,
@@ -24,71 +28,112 @@ export default function VariantsSection({
     onApplyVariant?.(id);
   };
 
+  const visibleVariants = variants.filter((v) => !v.isDeleted);
+
+  /* ================= SHARED ROW STYLES ================= */
+
+  const rowBase = `
+    w-full flex items-center gap-3 p-3 rounded-xl text-left transition-all duration-200
+  `.trim();
+
+  const rowActive = `border border-[#D4A97A]/35 bg-[#D4A97A]/[0.06]`;
+  const rowIdle   = `border border-white/[0.06] bg-white/[0.03] hover:border-white/10 hover:bg-white/[0.05]`;
+
+  /* ================= THUMBNAIL WRAPPER ================= */
+
+  const thumbBase = `
+    w-11 h-11 shrink-0 rounded-lg overflow-hidden flex items-center justify-center
+  `.trim();
+
   return (
     <div className="space-y-4">
-      <p className="font-semibold text-[#D4A97A] text-xs uppercase tracking-widest">Finishes & Variants</p>
 
-      {/* DEFAULT */}
+      {/* HEADER */}
+      <div className="flex items-center gap-3">
+        <div className="w-1 h-4 rounded-full" style={{ background: "#D4A97A" }} />
+        <p className="text-xs font-semibold text-white/40 uppercase tracking-widest">
+          Finishes &amp; Variants
+        </p>
+      </div>
+
+      {/* DEFAULT FINISH */}
       <button
         onClick={() => setVariant(null)}
-        className={`w-full text-left flex items-center gap-3 p-3 rounded-xl border transition ${
-          active === null
-            ? "border-[#D4A97A]/40 bg-[#D4A97A]/5"
-            : "border-white/5 bg-white/[0.03] hover:border-white/10"
-        }`}
+        className={`${rowBase} ${active === null ? rowActive : rowIdle}`}
       >
-        <div className="flex justify-center items-center bg-white/5 border border-white/10 rounded-lg w-11 h-11 shrink-0">
-          <span className="text-[10px] text-white/30">DEF</span>
+        {/* THUMB */}
+        <div
+          className={thumbBase}
+          style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}
+        >
+          <span className="text-[9px] font-semibold text-white/25 tracking-widest">DEF</span>
         </div>
-        <div className="text-left">
-          <div className="font-medium text-white text-sm">Default Finish</div>
-          <div className="text-white/30 text-xs">Base material, no adjustment</div>
+
+        {/* LABEL */}
+        <div className="flex-1 text-left">
+          <p className="text-sm font-medium text-white">Default Finish</p>
+          <p className="text-xs text-white/30 mt-0.5">Base material · no adjustment</p>
         </div>
+
+        {/* ACTIVE DOT */}
         {active === null && (
-          <div className="bg-[#D4A97A] ml-auto rounded-full w-2 h-2 shrink-0" />
+          <div
+            className="shrink-0 w-2 h-2 rounded-full ml-auto"
+            style={{ background: "#D4A97A" }}
+          />
         )}
       </button>
 
-      {/* VARIANTS */}
+      {/* VARIANT LIST */}
       <div className="space-y-2">
-        {variants
-          .filter((v) => !v.isDeleted)
-          .map((v) => {
-            const id = v.id ?? v.clientId;
-            const isActive = active === id;
+        {visibleVariants.map((v) => {
+          const id = v.id ?? v.clientId;
+          const isActive = active === id;
 
-            return (
-              <button
-                key={id}
-                onClick={() => setVariant(id)}
-                className={`w-full flex items-center gap-3 p-3 rounded-xl border transition ${
-                  isActive
-                    ? "border-[#D4A97A]/40 bg-[#D4A97A]/5"
-                    : "border-white/5 bg-white/[0.03] hover:border-white/10"
-                }`}
+          return (
+            <button
+              key={id}
+              onClick={() => setVariant(id)}
+              className={`${rowBase} ${isActive ? rowActive : rowIdle}`}
+            >
+              {/* THUMB */}
+              <div
+                className={thumbBase}
+                style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}
               >
-                <div className="bg-white/5 border border-white/10 rounded-lg w-11 h-11 overflow-hidden shrink-0">
-                  {v.previewUrl ? (
-                    <img src={v.previewUrl} alt={v.name} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="flex justify-center items-center h-full text-[9px] text-white/20">N/A</div>
-                  )}
-                </div>
-                <div className="text-left">
-                  <div className="font-medium text-white text-sm">{v.name}</div>
-                  <div className="text-white/30 text-xs">
-                    {v.priceAdjustment
-                      ? `+₱${Number(v.priceAdjustment).toLocaleString()}`
-                      : "No price adjustment"}
-                  </div>
-                </div>
-                {isActive && (
-                  <div className="bg-[#D4A97A] ml-auto rounded-full w-2 h-2 shrink-0" />
+                {v.previewUrl ? (
+                  <img
+                    src={v.previewUrl}
+                    alt={v.name}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <span className="text-[9px] text-white/20">N/A</span>
                 )}
-              </button>
-            );
-          })}
+              </div>
+
+              {/* LABEL */}
+              <div className="flex-1 text-left">
+                <p className="text-sm font-medium text-white">{v.name}</p>
+                <p className="text-xs text-white/30 mt-0.5">
+                  {v.priceAdjustment
+                    ? `+₱${Number(v.priceAdjustment).toLocaleString()}`
+                    : "No price adjustment"}
+                </p>
+              </div>
+
+              {/* ACTIVE DOT */}
+              {isActive && (
+                <div
+                  className="shrink-0 w-2 h-2 rounded-full ml-auto"
+                  style={{ background: "#D4A97A" }}
+                />
+              )}
+            </button>
+          );
+        })}
       </div>
+
     </div>
   );
 }

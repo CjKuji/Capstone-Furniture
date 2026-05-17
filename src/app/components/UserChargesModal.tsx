@@ -1,9 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-
 import type { Order } from "@/types/order";
-
 import { useChargeDecision } from "@/hooks/useChargeDecision";
 
 type Props = {
@@ -14,499 +12,206 @@ type Props = {
   userId: string;
 };
 
-export default function UserChargesModal({
-  open,
-  onClose,
-  charges,
-  order,
-  userId,
-}: Props) {
-  const {
-    acceptCharges,
-    rejectCharges,
-    isAccepting,
-    isRejecting,
-  } = useChargeDecision();
+export default function UserChargesModal({ open, onClose, charges, order, userId }: Props) {
+  const { acceptCharges, rejectCharges, isAccepting, isRejecting } = useChargeDecision();
+  const [error, setError] = useState<string | null>(null);
+  const [confirmReject, setConfirmReject] = useState(false);
 
-  const [error, setError] =
-    useState<string | null>(null);
-
-  const [confirmReject, setConfirmReject] =
-    useState(false);
-
-  /**
-   * =========================================================
-   * ESC CLOSE
-   * =========================================================
-   */
+  /* ── ESC CLOSE ── */
   useEffect(() => {
     if (!open) return;
-
-    const handleKey = (
-      e: KeyboardEvent
-    ) => {
+    const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        if (confirmReject) {
-          setConfirmReject(false);
-          return;
-        }
-
+        if (confirmReject) { setConfirmReject(false); return; }
         onClose();
       }
     };
-
-    window.addEventListener(
-      "keydown",
-      handleKey
-    );
-
-    return () => {
-      window.removeEventListener(
-        "keydown",
-        handleKey
-      );
-    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
   }, [open, onClose, confirmReject]);
 
-  /**
-   * =========================================================
-   * SCROLL LOCK
-   * =========================================================
-   */
+  /* ── SCROLL LOCK ── */
   useEffect(() => {
     if (!open) return;
-
-    const prevOverflow =
-      document.body.style.overflow;
-
-    document.body.style.overflow =
-      "hidden";
-
-    return () => {
-      document.body.style.overflow =
-        prevOverflow;
-    };
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
   }, [open]);
 
-  /**
-   * =========================================================
-   * CALCULATIONS
-   * =========================================================
-   */
+  /* ── CALCULATIONS ── */
   const subtotal = useMemo(() => {
-    return (
-      order.order_items?.reduce(
-        (sum, item) =>
-          sum +
-          Number(item.total_price ?? 0),
-        0
-      ) ?? 0
-    );
+    return order.order_items?.reduce((sum, item) => sum + Number(item.total_price ?? 0), 0) ?? 0;
   }, [order.order_items]);
 
   const chargesTotal = useMemo(() => {
-    return (charges ?? []).reduce(
-      (sum, charge) => {
-        const amount = Number(
-          charge.amount ?? 0
-        );
-
-        return charge.is_additive
-          ? sum + amount
-          : sum - amount;
-      },
-      0
-    );
+    return (charges ?? []).reduce((sum, charge) => {
+      const amount = Number(charge.amount ?? 0);
+      return charge.is_additive ? sum + amount : sum - amount;
+    }, 0);
   }, [charges]);
 
-  const previewTotal =
-    subtotal + chargesTotal;
+  const previewTotal = subtotal + chargesTotal;
 
-  /**
-   * =========================================================
-   * STATES
-   * =========================================================
-   */
-  const hasCharges =
-    charges.length > 0;
+  /* ── STATES ── */
+  const hasCharges = charges.length > 0;
+  const isAccepted = order.charge_status === "accepted";
+  const isRejected = order.charge_status === "rejected";
+  const isPending = order.charge_status === "pending";
+  const showActions = hasCharges && isPending;
 
-  const isAccepted =
-    order.charge_status ===
-    "accepted";
-
-  const isRejected =
-    order.charge_status ===
-    "rejected";
-
-  const isPending =
-    order.charge_status ===
-    "pending";
-
-  const showActions =
-    hasCharges && isPending;
-
-  /**
-   * =========================================================
-   * ACTIONS
-   * =========================================================
-   */
+  /* ── ACTIONS ── */
   const handleAccept = async () => {
     try {
       setError(null);
-
-      await acceptCharges({
-        orderId: order.id,
-        userId,
-      });
-
+      await acceptCharges({ orderId: order.id, userId });
       onClose();
     } catch (err: any) {
-      setError(
-        err?.message ||
-          "Failed to accept charges"
-      );
+      setError(err?.message || "Failed to accept charges");
     }
   };
 
   const handleReject = async () => {
     try {
       setError(null);
-
-      await rejectCharges({
-        orderId: order.id,
-        userId,
-      });
-
+      await rejectCharges({ orderId: order.id, userId });
       setConfirmReject(false);
-
       onClose();
     } catch (err: any) {
-      setError(
-        err?.message ||
-          "Failed to reject charges"
-      );
+      setError(err?.message || "Failed to reject charges");
     }
   };
 
-  /**
-   * =========================================================
-   * CLOSE
-   * =========================================================
-   */
   if (!open) return null;
 
   return (
     <div
-      className="
-        fixed inset-0 z-[99999]
-        flex items-center justify-center
-        bg-black/60 backdrop-blur-sm
-        p-4
-      "
+      className="fixed inset-0 z-[99999] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-0 sm:p-4"
       onClick={onClose}
     >
-      {/* =====================================================
-          MODAL
-      ===================================================== */}
       <div
-        onClick={(e) =>
-          e.stopPropagation()
-        }
+        onClick={(e) => e.stopPropagation()}
         className="
-          relative
-          w-full max-w-2xl
-          overflow-hidden
-          rounded-[30px]
-          border border-[#E8D9CC]
-          bg-[#FAF6F1]
-          shadow-[0_25px_80px_rgba(0,0,0,0.18)]
+          relative w-full sm:max-w-xl
+          flex flex-col
+          max-h-[92vh] sm:max-h-[85vh]
+          rounded-t-3xl sm:rounded-2xl overflow-hidden
+          border-t border-x sm:border border-[#2A1F14]
+          bg-[#0E0A06]
+          shadow-[0_-8px_60px_rgba(0,0,0,0.8)] sm:shadow-[0_8px_60px_rgba(0,0,0,0.8)]
         "
       >
-        {/* =================================================
-            HEADER
-        ================================================= */}
-        <div
-          className="
-            border-b border-[#E8D9CC]
-            bg-white
-            px-6 py-5
-          "
-        >
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p
-                className="
-                  text-[11px]
-                  uppercase tracking-[0.18em]
-                  text-[#8C593F]
-                "
-              >
-                Additional Pricing
-              </p>
+        {/* TOP ACCENT */}
+        <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-[#D4A97A]/60 to-transparent flex-shrink-0" />
 
-              <h2
-                className="
-                  mt-1
-                  text-2xl font-semibold
-                  text-[#2B1D16]
-                "
-              >
-                Review Additional Charges
-              </h2>
+        {/* DRAG HANDLE (mobile) */}
+        <div className="flex justify-center pt-3 pb-1 sm:hidden flex-shrink-0">
+          <div className="h-1 w-10 rounded-full bg-white/15" />
+        </div>
 
-              <p
-                className="
-                  mt-2
-                  text-sm text-[#7B6A5F]
-                "
-              >
-                Order #
-                {order.order_reference_code ||
-                  order.id}
-              </p>
-            </div>
+        {/* ── HEADER ── */}
+        <div className="flex-shrink-0 flex items-start justify-between gap-4 px-5 pt-4 sm:pt-5 pb-4 border-b border-[#2A1F14]">
+          <div>
+            <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#7A5C3A]">
+              Additional Pricing
+            </p>
+            <h2 className="mt-0.5 text-[17px] font-bold text-white leading-tight">
+              Review Charges
+            </h2>
+            <p className="mt-1 text-[11px] text-white/35">
+              Order #{order.order_reference_code || order.id}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="
+              flex-shrink-0 flex h-8 w-8 items-center justify-center
+              rounded-full border border-[#2A1F14] bg-white/[0.03]
+              text-white/40 hover:text-white/70 hover:bg-white/[0.07]
+              transition-all text-sm
+            "
+          >
+            ✕
+          </button>
+        </div>
 
-            <button
-              onClick={onClose}
-              className="
-                flex h-10 w-10
-                items-center justify-center
-                rounded-full
-                border border-[#E8D9CC]
-                bg-[#FAF6F1]
-                text-[#6B584B]
-                transition
-                hover:bg-[#F3E7DD]
-              "
-            >
-              ✕
-            </button>
+        {/* ── SUMMARY STRIP ── */}
+        <div className="flex-shrink-0 mx-5 mt-4">
+          <div className="grid grid-cols-3 divide-x divide-[#2A1F14] rounded-xl border border-[#2A1F14] bg-[#0B0704] overflow-hidden">
+            <FinStat label="Subtotal" value={`₱${subtotal.toLocaleString()}`} color="text-white/70" />
+            <FinStat
+              label="Charges"
+              value={`${chargesTotal >= 0 ? "+" : ""}₱${chargesTotal.toLocaleString()}`}
+              color={chargesTotal >= 0 ? "text-emerald-400" : "text-rose-400"}
+            />
+            <FinStat
+              label={isAccepted ? "Final" : "Est. Total"}
+              value={`₱${previewTotal.toLocaleString()}`}
+              color="text-[#E8C98A]"
+            />
           </div>
         </div>
 
-        {/* =================================================
-            CONTENT
-        ================================================= */}
-        <div
-          className="
-            max-h-[72vh]
-            overflow-y-auto
-            p-6
-            space-y-6
-          "
-        >
+        {/* ── SCROLLABLE CONTENT ── */}
+        <div className="flex-1 overflow-y-auto px-5 pt-4 pb-2 space-y-3 min-h-0">
+
           {/* ERROR */}
           {error && (
-            <div
-              className="
-                rounded-2xl
-                border border-red-200
-                bg-red-50
-                px-4 py-3
-                text-sm text-red-600
-              "
-            >
+            <div className="rounded-xl border border-rose-500/20 bg-rose-500/[0.07] px-4 py-3 text-[11px] text-rose-400">
               {error}
             </div>
           )}
 
-          {/* =============================================
-              SUMMARY
-          ============================================= */}
-          <div
-            className="
-              rounded-3xl
-              border border-[#E8D9CC]
-              bg-white
-              p-5
-            "
-          >
-            <div className="mb-5">
-              <h3
-                className="
-                  text-sm font-semibold
-                  text-[#2B1D16]
-                "
-              >
-                Price Summary
-              </h3>
-
-              <p
-                className="
-                  mt-1
-                  text-xs text-[#8C593F]
-                "
-              >
-                Review the updated pricing
-                before continuing
-              </p>
+          {/* STATUS BANNERS */}
+          {isAccepted && (
+            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.06] px-4 py-3">
+              <p className="text-[11px] font-black uppercase tracking-[0.14em] text-emerald-400">Charges Confirmed</p>
+              <p className="mt-0.5 text-[10px] text-white/40">These charges are now included in the final order price.</p>
             </div>
+          )}
 
-            <div className="space-y-4">
-              <SummaryRow
-                label="Current Subtotal"
-                value={`₱${subtotal.toLocaleString()}`}
-              />
-
-              <SummaryRow
-                label="Additional Charges"
-                value={`₱${Math.abs(
-                  chargesTotal
-                ).toLocaleString()}`}
-                positive={chargesTotal >= 0}
-              />
-
-              <div
-                className="
-                  border-t border-dashed
-                  border-[#E8D9CC]
-                  pt-4
-                "
-              >
-                <SummaryRow
-                  label={
-                    isAccepted
-                      ? "Final Total"
-                      : "Estimated Total"
-                  }
-                  value={`₱${previewTotal.toLocaleString()}`}
-                  large
-                />
-              </div>
+          {isRejected && (
+            <div className="rounded-xl border border-rose-500/20 bg-rose-500/[0.06] px-4 py-3">
+              <p className="text-[11px] font-black uppercase tracking-[0.14em] text-rose-400">Charges Rejected</p>
+              <p className="mt-0.5 text-[10px] text-white/40">Admin has been notified. Use the chat to discuss revisions.</p>
             </div>
-          </div>
+          )}
 
-          {/* =============================================
-              CHARGES LIST
-          ============================================= */}
-          <div
-            className="
-              rounded-3xl
-              border border-[#E8D9CC]
-              bg-white
-              overflow-hidden
-            "
-          >
-            <div
-              className="
-                border-b border-[#F0E4D8]
-                px-5 py-4
-              "
-            >
-              <h3
-                className="
-                  text-sm font-semibold
-                  text-[#2B1D16]
-                "
-              >
-                Charges Breakdown
-              </h3>
-
-              <p
-                className="
-                  mt-1
-                  text-xs text-[#8C593F]
-                "
-              >
-                Detailed adjustments added
-                to your order
-              </p>
+          {/* CHARGES LIST */}
+          <div className="rounded-xl border border-[#2A1F14] bg-[#0B0704] overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[#2A1F14]">
+              <p className="text-[9px] font-black uppercase tracking-[0.2em] text-white/25">Charges Breakdown</p>
+              <span className="text-[9px] font-black text-[#7A5C3A]">{charges.length} item{charges.length !== 1 ? "s" : ""}</span>
             </div>
 
             {!hasCharges ? (
-              <div className="p-5">
-                <div
-                  className="
-                    rounded-2xl
-                    border border-dashed
-                    border-[#E8D9CC]
-                    bg-[#FAF6F1]
-                    p-6
-                    text-center
-                  "
-                >
-                  <p
-                    className="
-                      text-sm font-medium
-                      text-[#2B1D16]
-                    "
-                  >
-                    No Additional Charges
-                  </p>
-
-                  <p
-                    className="
-                      mt-1
-                      text-xs text-[#7B6A5F]
-                    "
-                  >
-                    Your order currently has
-                    no extra pricing changes.
-                  </p>
-                </div>
+              <div className="flex flex-col items-center justify-center py-8">
+                <p className="text-[11px] font-bold text-white/25 uppercase tracking-[0.15em]">No Charges</p>
+                <p className="mt-1 text-[10px] text-white/20">Your order has no additional pricing changes.</p>
               </div>
             ) : (
-              <div className="divide-y divide-[#F4E8DC]">
+              <div className="divide-y divide-[#1A1106]">
                 {charges.map((charge) => {
-                  const amount = Number(
-                    charge.amount ?? 0
-                  );
-
-                  const isAdditive =
-                    charge.is_additive;
-
+                  const amount = Number(charge.amount ?? 0);
+                  const isAdditive = charge.is_additive;
                   return (
-                    <div
-                      key={charge.id}
-                      className="
-                        flex items-start justify-between
-                        gap-4
-                        px-5 py-4
-                      "
-                    >
-                      <div className="flex-1">
-                        <div
-                          className="
-                            text-sm font-medium
-                            text-[#2B1D16]
-                          "
-                        >
-                          {charge.label ||
-                            charge.type}
-                        </div>
-
+                    <div key={charge.id} className="flex items-start justify-between gap-4 px-4 py-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[12px] font-semibold text-white/80 truncate">
+                          {charge.label || charge.type}
+                        </p>
                         {charge.description && (
-                          <p
-                            className="
-                              mt-1
-                              text-xs text-[#7B6A5F]
-                            "
-                          >
-                            {
-                              charge.description
-                            }
-                          </p>
+                          <p className="mt-0.5 text-[10px] text-white/35">{charge.description}</p>
                         )}
                       </div>
-
-                      <div
-                        className={`
-                          rounded-xl px-3 py-2
-                          text-sm font-semibold
-
-                          ${
-                            isAdditive
-                              ? "bg-green-50 text-green-700"
-                              : "bg-red-50 text-red-600"
-                          }
-                        `}
-                      >
-                        {isAdditive
-                          ? "+"
-                          : "-"}
-                        ₱
-                        {amount.toLocaleString()}
-                      </div>
+                      <span className={`
+                        flex-shrink-0 rounded-lg px-2.5 py-1
+                        text-[11px] font-black border
+                        ${isAdditive
+                          ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                          : "bg-rose-500/10 text-rose-400 border-rose-500/20"}
+                      `}>
+                        {isAdditive ? "+" : "−"}₱{amount.toLocaleString()}
+                      </span>
                     </div>
                   );
                 })}
@@ -514,164 +219,58 @@ export default function UserChargesModal({
             )}
           </div>
 
-          {/* =============================================
-              STATUS
-          ============================================= */}
-          {isAccepted && (
-            <div
-              className="
-                rounded-2xl
-                border border-green-200
-                bg-green-50
-                px-5 py-4
-              "
-            >
-              <p
-                className="
-                  text-sm font-semibold
-                  text-green-700
-                "
-              >
-                Charges Confirmed
-              </p>
-
-              <p
-                className="
-                  mt-1
-                  text-xs text-green-600
-                "
-              >
-                These additional charges
-                were accepted and are now
-                included in the final order
-                price.
-              </p>
-            </div>
-          )}
-
-          {isRejected && (
-            <div
-              className="
-                rounded-2xl
-                border border-red-200
-                bg-red-50
-                px-5 py-4
-              "
-            >
-              <p
-                className="
-                  text-sm font-semibold
-                  text-red-700
-                "
-              >
-                Charges Rejected
-              </p>
-
-              <p
-                className="
-                  mt-1
-                  text-xs text-red-600
-                "
-              >
-                The admin has been notified.
-                Continue the discussion in
-                chat if revisions are needed.
-              </p>
-            </div>
-          )}
-
+          {/* No action needed note */}
           {!hasCharges && (
-            <div
-              className="
-                rounded-2xl
-                border border-[#E8D9CC]
-                bg-white
-                px-5 py-4
-              "
-            >
-              <p
-                className="
-                  text-sm text-[#6B584B]
-                "
-              >
-                No customer action is needed
-                at this time.
-              </p>
+            <div className="rounded-xl border border-[#2A1F14] bg-[#0B0704] px-4 py-3">
+              <p className="text-[11px] text-white/35 italic">No customer action is needed at this time.</p>
             </div>
           )}
         </div>
 
-        {/* =================================================
-            FOOTER
-        ================================================= */}
-        <div
-          className="
-            border-t border-[#E8D9CC]
-            bg-white
-            p-5
-          "
-        >
+        {/* ── FOOTER ── */}
+        <div className="flex-shrink-0 border-t border-[#2A1F14] bg-[#0B0704] px-5 py-4">
           {showActions ? (
-            <div className="flex gap-3">
-              {/* REJECT */}
+            <div className="flex gap-2">
               <button
-                onClick={() =>
-                  setConfirmReject(true)
-                }
-                disabled={
-                  isAccepting ||
-                  isRejecting
-                }
+                onClick={() => setConfirmReject(true)}
+                disabled={isAccepting || isRejecting}
                 className="
-                  flex-1 rounded-2xl
-                  border border-red-200
-                  bg-red-50
-                  py-3
-                  text-sm font-semibold
-                  text-red-600
-                  transition
-                  hover:bg-red-100
-                  disabled:opacity-50
+                  h-10 flex-1 rounded-xl
+                  border border-rose-500/25 bg-rose-500/[0.06]
+                  text-[10px] font-black uppercase tracking-[0.1em] text-rose-400/80
+                  hover:bg-rose-500/[0.12] hover:text-rose-400
+                  disabled:opacity-40
+                  transition-all
                 "
               >
-                Reject Charges
+                Reject
               </button>
-
-              {/* ACCEPT */}
               <button
                 onClick={handleAccept}
-                disabled={
-                  isAccepting ||
-                  isRejecting
-                }
+                disabled={isAccepting || isRejecting}
                 className="
-                  flex-1 rounded-2xl
-                  bg-[#8C593F]
-                  py-3
-                  text-sm font-semibold
-                  text-white
-                  shadow-sm
-                  transition
-                  hover:bg-[#73452C]
-                  disabled:opacity-50
+                  h-10 flex-[2] rounded-xl
+                  bg-gradient-to-r from-[#C49A6C] via-[#D4A97A] to-[#E8C98A]
+                  text-[10px] font-black uppercase tracking-[0.12em] text-[#0E0A06]
+                  shadow-[0_2px_12px_rgba(212,169,122,0.3)]
+                  hover:shadow-[0_4px_20px_rgba(212,169,122,0.45)]
+                  hover:brightness-105
+                  disabled:opacity-50 disabled:cursor-not-allowed
+                  transition-all
                 "
               >
-                {isAccepting
-                  ? "Accepting..."
-                  : "Accept Charges"}
+                {isAccepting ? "Accepting…" : "Accept Charges"}
               </button>
             </div>
           ) : (
             <button
               onClick={onClose}
               className="
-                w-full rounded-2xl
-                bg-[#2B1D16]
-                py-3
-                text-sm font-semibold
-                text-white
-                transition
-                hover:opacity-95
+                h-10 w-full rounded-xl
+                border border-[#2A1F14] bg-white/[0.03]
+                text-[10px] font-black uppercase tracking-[0.12em] text-white/60
+                hover:bg-white/[0.06] hover:text-white/80
+                transition-all
               "
             >
               Close
@@ -679,99 +278,50 @@ export default function UserChargesModal({
           )}
         </div>
 
-        {/* =================================================
-            REJECT CONFIRM
-        ================================================= */}
+        {/* ── REJECT CONFIRM OVERLAY ── */}
         {confirmReject && (
-          <div
-            className="
-              absolute inset-0 z-50
-              flex items-center justify-center
-              bg-black/50
-              p-4
-            "
-          >
-            <div
-              className="
-                w-full max-w-md
-                rounded-[28px]
-                border border-[#E8D9CC]
-                bg-white
-                p-6
-                shadow-2xl
-              "
-            >
-              <div className="text-center">
-                <div
-                  className="
-                    mx-auto
-                    flex h-14 w-14
-                    items-center justify-center
-                    rounded-full
-                    bg-red-50
-                    text-2xl
-                  "
-                >
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-5">
+            <div className="
+              w-full max-w-sm rounded-2xl overflow-hidden
+              border border-[#2A1F14] bg-[#0E0A06]
+              shadow-[0_8px_40px_rgba(0,0,0,0.8)]
+            ">
+              <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-rose-500/50 to-transparent" />
+              <div className="p-6 text-center">
+                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border border-rose-500/20 bg-rose-500/[0.08] text-rose-400 text-xl font-black">
                   !
                 </div>
-
-                <h3
-                  className="
-                    mt-4
-                    text-xl font-semibold
-                    text-[#2B1D16]
-                  "
-                >
-                  Reject Additional Charges?
-                </h3>
-
-                <p
-                  className="
-                    mt-2
-                    text-sm text-[#7B6A5F]
-                  "
-                >
-                  The admin will be notified
-                  and can revise the pricing
-                  through the order chat.
+                <h3 className="mt-4 text-[15px] font-bold text-white">Reject Additional Charges?</h3>
+                <p className="mt-2 text-[11px] text-white/40 leading-relaxed">
+                  The admin will be notified and can revise the pricing through the order chat.
                 </p>
               </div>
-
-              <div className="mt-6 flex gap-3">
+              <div className="flex gap-2 px-5 pb-5">
                 <button
-                  onClick={() =>
-                    setConfirmReject(false)
-                  }
+                  onClick={() => setConfirmReject(false)}
                   className="
-                    flex-1 rounded-2xl
-                    border border-[#E8D9CC]
-                    py-3
-                    text-sm font-medium
-                    text-[#4B3A30]
-                    transition
-                    hover:bg-[#FAF6F1]
+                    h-10 flex-1 rounded-xl
+                    border border-[#2A1F14] bg-white/[0.03]
+                    text-[10px] font-black uppercase tracking-[0.1em] text-white/50
+                    hover:bg-white/[0.06] hover:text-white/70
+                    transition-all
                   "
                 >
                   Cancel
                 </button>
-
                 <button
                   onClick={handleReject}
                   disabled={isRejecting}
                   className="
-                    flex-1 rounded-2xl
-                    bg-red-600
-                    py-3
-                    text-sm font-semibold
-                    text-white
-                    transition
-                    hover:bg-red-700
-                    disabled:opacity-50
+                    h-10 flex-[2] rounded-xl
+                    border border-rose-500/25 bg-rose-500/[0.08]
+                    text-[10px] font-black uppercase tracking-[0.1em] text-rose-400
+                    hover:bg-rose-500/[0.15] hover:text-rose-300
+                    disabled:opacity-50 disabled:cursor-not-allowed
+                    transition-all
                   "
                 >
-                  {isRejecting
-                    ? "Rejecting..."
-                    : "Confirm Reject"}
+                  {isRejecting ? "Rejecting…" : "Confirm Reject"}
                 </button>
               </div>
             </div>
@@ -782,52 +332,12 @@ export default function UserChargesModal({
   );
 }
 
-/* =========================================================
-   SUMMARY ROW
-========================================================= */
-
-type SummaryRowProps = {
-  label: string;
-  value: string;
-  positive?: boolean;
-  large?: boolean;
-};
-
-function SummaryRow({
-  label,
-  value,
-  positive,
-  large,
-}: SummaryRowProps) {
+/* ── SUB-COMPONENTS ── */
+function FinStat({ label, value, color = "text-white" }: { label: string; value: string; color?: string }) {
   return (
-    <div className="flex items-center justify-between gap-4">
-      <span
-        className="
-          text-sm text-[#6B5B52]
-        "
-      >
-        {label}
-      </span>
-
-      <span
-        className={`
-          ${
-            large
-              ? "text-2xl font-bold"
-              : "text-sm font-semibold"
-          }
-
-          ${
-            positive === undefined
-              ? "text-[#2B1D16]"
-              : positive
-                ? "text-green-700"
-                : "text-red-600"
-          }
-        `}
-      >
-        {value}
-      </span>
+    <div className="flex flex-col items-center justify-center py-2.5 px-1">
+      <p className="text-[8px] font-black uppercase tracking-[0.18em] text-white/20 mb-0.5">{label}</p>
+      <p className={`text-[12px] font-bold tabular-nums ${color}`}>{value}</p>
     </div>
   );
 }

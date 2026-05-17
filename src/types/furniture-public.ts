@@ -64,6 +64,8 @@ export type FurniturePublicListItem = {
 
   category: FurnitureCategoryPublic | null;
 
+  thumbnail_url: string | null;
+
   imageCount: number;
   variantCount: number;
   hasModel: boolean;

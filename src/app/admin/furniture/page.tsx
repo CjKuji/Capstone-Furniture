@@ -27,7 +27,6 @@ export default function AdminFurniture() {
   const {
     data: furniture = [],
     loading,
-    mutating,
     create,
     update,
     remove,
@@ -37,6 +36,7 @@ export default function AdminFurniture() {
 
   const [categories, setCategories] = useState<FurnitureCategory[]>([]);
   const [search, setSearch] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const [modalState, setModalState] = useState<{
     isOpen: boolean;
@@ -95,7 +95,6 @@ export default function AdminFurniture() {
   const handleView = useCallback(
     (item: FurnitureItemAdmin) => {
       if (!item.model_url) return;
-
       openViewer({
         modelUrl: item.model_url,
         variants: item.variants ?? [],
@@ -107,7 +106,7 @@ export default function AdminFurniture() {
   const handleSave = useCallback(
     async (id: string | null, form: FurnitureFormPayload) => {
       if (!userId) return;
-
+      setSaving(true);
       try {
         if (modalState.mode === "create") {
           await create({ payload: form, userId });
@@ -115,14 +114,11 @@ export default function AdminFurniture() {
           if (!id) return;
           await update({ id, payload: form });
         }
-
-        setModalState({
-          isOpen: false,
-          mode: "create",
-          item: null,
-        });
+        setModalState({ isOpen: false, mode: "create", item: null });
       } catch (err) {
         console.error("SAVE_ERROR", err);
+      } finally {
+        setSaving(false);
       }
     },
     [create, update, modalState.mode, userId]
@@ -147,11 +143,7 @@ export default function AdminFurniture() {
         <button
           disabled={!userId}
           onClick={() =>
-            setModalState({
-              isOpen: true,
-              mode: "create",
-              item: null,
-            })
+            setModalState({ isOpen: true, mode: "create", item: null })
           }
           className="flex items-center gap-2 bg-[#D4A97A] text-[#1C1209] px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition disabled:opacity-50"
         >
@@ -163,14 +155,12 @@ export default function AdminFurniture() {
       {/* SEARCH */}
       <div className="flex items-center gap-3 bg-white/[0.04] border border-white/10 rounded-xl px-4 py-3">
         <Search className="w-4 h-4 text-white/30" />
-
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search furniture..."
           className="flex-1 bg-transparent outline-none text-sm text-white placeholder:text-white/25"
         />
-
         <span className="text-xs text-white/30">
           {filteredFurniture.length} items
         </span>
@@ -178,9 +168,7 @@ export default function AdminFurniture() {
 
       {/* LOADING */}
       {loading && (
-        <div className="text-sm text-white/40">
-          Loading furniture...
-        </div>
+        <div className="text-sm text-white/40">Loading furniture...</div>
       )}
 
       {/* GRID */}
@@ -191,11 +179,7 @@ export default function AdminFurniture() {
               key={item.id}
               item={item}
               onEdit={() =>
-                setModalState({
-                  isOpen: true,
-                  mode: "edit",
-                  item,
-                })
+                setModalState({ isOpen: true, mode: "edit", item })
               }
               onDelete={() => handleDelete(item.id)}
               onView={() => handleView(item)}
@@ -208,9 +192,7 @@ export default function AdminFurniture() {
       {!loading && filteredFurniture.length === 0 && (
         <div className="flex flex-col items-center justify-center py-24 text-center">
           <Box className="w-10 h-10 text-white/20 mb-3" />
-          <p className="text-white/40 text-sm">
-            No furniture found
-          </p>
+          <p className="text-white/40 text-sm">No furniture found</p>
           <p className="text-white/20 text-xs mt-1">
             Try adjusting your search
           </p>
@@ -225,18 +207,14 @@ export default function AdminFurniture() {
           item={modalState.item}
           categories={categories}
           onClose={() =>
-            setModalState({
-              isOpen: false,
-              mode: "create",
-              item: null,
-            })
+            setModalState({ isOpen: false, mode: "create", item: null })
           }
           onSave={handleSave}
         />
       )}
 
       {/* MUTATION STATUS */}
-      {mutating && (
+      {saving && (
         <div className="fixed bottom-4 right-4 bg-black/90 border border-white/10 text-white text-xs px-4 py-2 rounded-lg">
           Saving changes...
         </div>

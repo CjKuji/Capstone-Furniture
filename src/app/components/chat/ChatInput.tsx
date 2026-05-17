@@ -1,23 +1,12 @@
 "use client";
 
-import {
-  ImagePlus,
-  SendHorizonal,
-} from "lucide-react";
+import { ImagePlus, SendHorizonal } from "lucide-react";
 
 type Props = {
   message: string;
-
-  setMessage: (
-    value: string
-  ) => void;
-
+  setMessage: (value: string) => void;
   files: File[];
-
-  setFiles: (
-    files: File[]
-  ) => void;
-
+  setFiles: (files: File[]) => void;
   onSend: () => void;
 };
 
@@ -28,179 +17,92 @@ export default function ChatInput({
   setFiles,
   onSend,
 }: Props) {
-  /**
-   * =========================================================
-   * ENTER SEND
-   * =========================================================
-   */
-  const handleKeyDown = (
-    e: React.KeyboardEvent<HTMLTextAreaElement>
-  ) => {
-    if (
-      e.key === "Enter" &&
-      !e.shiftKey
-    ) {
+  /* ── ENTER SEND ── */
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-
       onSend();
     }
   };
 
-  /**
-   * =========================================================
-   * FILE PICKER
-   * =========================================================
-   */
-  const handleFiles = (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const selected = Array.from(
-      e.target.files || []
-    );
-
-    setFiles([
-      ...files,
-      ...selected,
-    ]);
-
-    /**
-     * IMPORTANT:
-     * reset input so same file can re-upload
-     */
+  /* ── FILE PICKER ── */
+  const handleFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = Array.from(e.target.files || []);
+    setFiles([...files, ...selected]);
     e.target.value = "";
   };
 
-  /**
-   * =========================================================
-   * DISABLED STATE
-   * =========================================================
-   */
-  const isDisabled =
-    !message.trim() &&
-    files.length === 0;
+  const isDisabled = !message.trim() && files.length === 0;
 
   return (
-    <div className="rounded-3xl border border-[#E8D9CC] bg-white p-3 shadow-sm">
-      <div className="flex items-end gap-3">
-        {/* =================================================
-            FILE BUTTON
-        ================================================= */}
+    <div className="rounded-2xl border border-[#2A1F14] bg-[#0B0704] p-2.5">
+      <div className="flex items-end gap-2">
+        {/* FILE BUTTON */}
         <div className="flex-shrink-0">
           <label
             htmlFor="chat-file"
             className="
-              flex
-              h-11
-              w-11
-              cursor-pointer
-              items-center
-              justify-center
-              rounded-2xl
-              border
-              border-[#E8D9CC]
-              bg-[#FAF7F2]
-              text-[#8C593F]
-              transition
-              hover:bg-[#F3E8DC]
+              flex h-10 w-10 cursor-pointer items-center justify-center
+              rounded-xl border border-[#2A1F14] bg-white/[0.03]
+              text-white/35
+              hover:bg-white/[0.07] hover:text-[#D4A97A]
+              transition-all
             "
           >
-            <ImagePlus
-              size={18}
-            />
+            <ImagePlus size={16} />
           </label>
-
           <input
             id="chat-file"
             type="file"
             hidden
             multiple
             accept="image/*"
-            onChange={
-              handleFiles
-            }
+            onChange={handleFiles}
           />
         </div>
 
-        {/* =================================================
-            TEXTAREA
-        ================================================= */}
+        {/* TEXTAREA */}
         <div className="flex-1">
           <textarea
             value={message}
-            onChange={(e) =>
-              setMessage(
-                e.target.value
-              )
-            }
-            onKeyDown={
-              handleKeyDown
-            }
+            onChange={(e) => setMessage(e.target.value)}
+            onKeyDown={handleKeyDown}
             rows={1}
-            placeholder="Write a message..."
+            placeholder="Write a message…"
             className="
-              min-h-[44px]
-              max-h-36
-              w-full
-              resize-none
-              border-0
-              bg-transparent
-              px-1
-              py-2
-              text-[14px]
-              text-[#2B1D16]
+              min-h-[40px] max-h-32 w-full
+              resize-none border-0 bg-transparent
+              px-1 py-2
+              text-[13px] text-white/80
               outline-none
-              placeholder:text-[#A28B78]
+              placeholder:text-white/20
             "
           />
         </div>
 
-        {/* =================================================
-            SEND BUTTON
-        ================================================= */}
+        {/* SEND BUTTON */}
         <button
           type="button"
           onClick={onSend}
           disabled={isDisabled}
           className={`
-            flex
-            h-11
-            min-w-[48px]
-            items-center
-            justify-center
-            rounded-2xl
-            px-4
-            transition-all
-
-            ${
-              isDisabled
-                ? `
-                  cursor-not-allowed
-                  bg-[#EADFD3]
-                  text-[#B59E8A]
-                `
-                : `
-                  bg-[#8C593F]
-                  text-white
-                  shadow-sm
-                  hover:bg-[#77482E]
-                `
+            flex h-10 min-w-[44px] items-center justify-center
+            rounded-xl px-3.5
+            transition-all duration-200
+            ${isDisabled
+              ? "cursor-not-allowed bg-white/[0.03] text-white/15"
+              : "bg-gradient-to-r from-[#C49A6C] via-[#D4A97A] to-[#E8C98A] text-[#0E0A06] shadow-[0_2px_8px_rgba(212,169,122,0.25)] hover:brightness-105 hover:shadow-[0_4px_16px_rgba(212,169,122,0.35)]"
             }
           `}
         >
-          <SendHorizonal
-            size={17}
-          />
+          <SendHorizonal size={15} />
         </button>
       </div>
 
-      {/* ===================================================
-          FOOTER HINT
-      =================================================== */}
-      <div className="mt-2 px-1">
-        <p className="text-[11px] text-[#9A8472]">
-          Press Enter to send •
-          Shift + Enter for new
-          line
+      {/* HINT */}
+      <div className="mt-1.5 px-1">
+        <p className="text-[9px] font-black uppercase tracking-[0.14em] text-white/15">
+          Enter to send · Shift + Enter for new line
         </p>
       </div>
     </div>

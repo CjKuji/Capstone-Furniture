@@ -1,24 +1,16 @@
 "use client";
 
 import ChatImageMessage from "./ChatMessageImages";
-
 import { formatPHTime } from "@/utils/chatDate";
-
 import type { Message } from "@/types/chat";
 
 type Props = {
   msg: Message;
-
   isMine: boolean;
-
   senderName: string;
-
   senderRole: string;
-
   showSenderName: boolean;
-
   isGroupedTop: boolean;
-
   isGroupedBottom: boolean;
 };
 
@@ -31,26 +23,18 @@ export default function ChatMessageBubble({
   isGroupedTop,
   isGroupedBottom,
 }: Props) {
-  /**
-   * =========================================================
-   * TYPES
-   * =========================================================
-   */
-  const isSystem =
-    msg.sender_type === "system";
+  const isSystem = msg.sender_type === "system";
+  const isAdmin = msg.sender_type === "admin";
 
-  const isAdmin =
-    msg.sender_type === "admin";
-
-  /**
-   * =========================================================
-   * SYSTEM MESSAGE
-   * =========================================================
-   */
+  /* ── SYSTEM MESSAGE ── */
   if (isSystem) {
     return (
-      <div className="my-6 flex justify-center">
-        <div className="rounded-full border border-[#E8D9CC] bg-[#F7F1E8] px-4 py-2 text-[11px] text-[#8C593F] shadow-sm">
+      <div className="my-5 flex justify-center">
+        <div className="
+          rounded-full border border-[#2A1F14] bg-[#160F08]
+          px-4 py-1.5
+          text-[10px] font-black uppercase tracking-[0.14em] text-[#7A5C3A]
+        ">
           {msg.message}
         </div>
       </div>
@@ -60,158 +44,80 @@ export default function ChatMessageBubble({
   return (
     <div
       className={`
-        flex
-        w-full
+        flex w-full
         ${isMine ? "justify-end" : "justify-start"}
-        ${isGroupedTop ? "mt-1.5" : "mt-5"}
+        ${isGroupedTop ? "mt-1" : "mt-4"}
       `}
     >
-      {/* =====================================================
-          MESSAGE WRAPPER
-      ===================================================== */}
       <div
         className={`
-          flex
-          flex-col
-          max-w-[82%]
-          sm:max-w-[75%]
+          flex flex-col max-w-[80%] sm:max-w-[72%]
           ${isMine ? "items-end" : "items-start"}
         `}
       >
-        {/* =====================================================
-            SENDER INFO
-        ===================================================== */}
-        {showSenderName &&
-          !isMine && (
-            <div className="mb-1 px-1">
-              <div className="flex items-center gap-2">
-                <span className="text-[12px] font-semibold text-[#2B1D16]">
-                  {senderName}
-                </span>
+        {/* SENDER LABEL */}
+        {showSenderName && !isMine && (
+          <div className="mb-1 flex items-center gap-2 px-1">
+            <span className="text-[11px] font-bold text-white/60">{senderName}</span>
+            <span className={`
+              rounded-full px-2 py-[2px]
+              text-[8px] font-black uppercase tracking-[0.12em]
+              ${isAdmin
+                ? "bg-[#D4A97A]/10 text-[#D4A97A] border border-[#D4A97A]/20"
+                : "bg-white/[0.05] text-white/35 border border-white/10"}
+            `}>
+              {senderRole}
+            </span>
+          </div>
+        )}
 
-                <span
-                  className={`
-                    rounded-full px-2 py-[2px]
-                    text-[9px] font-semibold uppercase tracking-wide
-                    ${
-                      isAdmin
-                        ? "bg-[#8C593F]/10 text-[#8C593F]"
-                        : "bg-[#EEE7DE] text-[#6B584B]"
-                    }
-                  `}
-                >
-                  {senderRole}
-                </span>
-              </div>
-            </div>
-          )}
-
-        {/* =====================================================
-            MESSAGE BUBBLE
-        ===================================================== */}
+        {/* BUBBLE */}
         <div
           className={`
-            relative
-            overflow-hidden
-            border
-            px-4
-            py-3
-            shadow-sm
-            transition-all
+            relative overflow-hidden border px-4 py-3
+            shadow-sm transition-all
 
-            ${
-              isMine
-                ? `
-                  bg-[#8C593F]
-                  border-[#8C593F]
-                  text-white
-                `
-                : `
-                  bg-white
-                  border-[#E8D9CC]
-                  text-[#2B1D16]
-                `
-            }
+            ${isMine
+              ? "bg-[#C49A6C] border-[#C49A6C] text-[#0E0A06]"
+              : "bg-[#160F08] border-[#2A1F14] text-white/80"}
 
-            ${
-              isGroupedTop
-                ? isMine
-                  ? "rounded-[22px] rounded-tr-md"
-                  : "rounded-[22px] rounded-tl-md"
-                : "rounded-[22px]"
-            }
+            ${isGroupedTop
+              ? isMine
+                ? "rounded-[20px] rounded-tr-md"
+                : "rounded-[20px] rounded-tl-md"
+              : "rounded-[20px]"}
 
-            ${
-              isGroupedBottom
-                ? isMine
-                  ? "rounded-br-lg"
-                  : "rounded-bl-lg"
-                : ""
-            }
+            ${isGroupedBottom
+              ? isMine
+                ? "rounded-br-md"
+                : "rounded-bl-md"
+              : ""}
           `}
         >
-          {/* =================================================
-              MESSAGE TEXT
-          ================================================= */}
+          {/* TEXT */}
           {msg.message && (
-            <p
-              className={`
-                whitespace-pre-wrap
-                break-words
-                text-[14px]
-                leading-relaxed
-                ${
-                  isMine
-                    ? "text-white"
-                    : "text-[#2B1D16]"
-                }
-              `}
-            >
+            <p className={`
+              whitespace-pre-wrap break-words text-[13px] leading-relaxed
+              ${isMine ? "text-[#0E0A06]" : "text-white/75"}
+            `}>
               {msg.message}
             </p>
           )}
 
-          {/* =================================================
-              IMAGE
-          ================================================= */}
+          {/* IMAGE */}
           {msg.image_url && (
-            <div
-              className={
-                msg.message
-                  ? "mt-3"
-                  : ""
-              }
-            >
-              <ChatImageMessage
-                imageUrl={msg.image_url}
-              />
+            <div className={msg.message ? "mt-3" : ""}>
+              <ChatImageMessage imageUrl={msg.image_url} />
             </div>
           )}
 
-          {/* =================================================
-              TIME
-          ================================================= */}
+          {/* TIME */}
           {!isGroupedBottom && (
-            <div
-              className={`
-                mt-2
-                flex
-                items-center
-                gap-1
-                text-[10px]
-
-                ${
-                  isMine
-                    ? "justify-end text-white/70"
-                    : "justify-start text-[#8C593F]/60"
-                }
-              `}
-            >
-              <span>
-                {formatPHTime(
-                  msg.created_at
-                )}
-              </span>
+            <div className={`
+              mt-1.5 flex items-center gap-1 text-[9px]
+              ${isMine ? "justify-end text-[#0E0A06]/50" : "justify-start text-white/25"}
+            `}>
+              <span>{formatPHTime(msg.created_at)}</span>
             </div>
           )}
         </div>
