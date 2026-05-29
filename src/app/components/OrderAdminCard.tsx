@@ -74,7 +74,8 @@ export default function AdminOrderCard({ order: propOrder, conversation, adminId
   }, [propOrder]);
 
   // ── LIVE NOTIFICATION & ORDER STATE ──
-  const [liveUnreadCount, setLiveUnreadCount] = useState(conversation?.customer_unread_count ?? 0);
+  // Fix: Use admin_unread_count for the Admin card
+  const [liveUnreadCount, setLiveUnreadCount] = useState(conversation?.admin_unread_count ?? 0);
 
   useEffect(() => {
     const channels: RealtimeChannel[] = [];
@@ -82,12 +83,12 @@ export default function AdminOrderCard({ order: propOrder, conversation, adminId
     // Channel for Conversation Updates (Unread counts)
     if (conversation?.id) {
       const convChannel = supabase
-        .channel(`unread-count-${conversation.id}`)
+        .channel(`unread-count-admin-${conversation.id}`)
         .on(
           "postgres_changes",
           { event: "UPDATE", schema: "public", table: "conversations", filter: `id=eq.${conversation.id}` },
           (payload) => {
-            const newCount = payload.new.customer_unread_count;
+            const newCount = payload.new.admin_unread_count;
             if (typeof newCount === "number") setLiveUnreadCount(newCount);
           }
         )
@@ -97,7 +98,7 @@ export default function AdminOrderCard({ order: propOrder, conversation, adminId
 
     // Channel for Order Row Updates (Status/Pricing)
     const orderChannel = supabase
-      .channel(`order-live-${order.id}`)
+      .channel(`order-live-admin-${order.id}`)
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "orders", filter: `id=eq.${order.id}` },
@@ -112,6 +113,12 @@ export default function AdminOrderCard({ order: propOrder, conversation, adminId
       channels.forEach(ch => supabase.removeChannel(ch));
     };
   }, [conversation?.id, order.id]);
+
+  // ── ACTION HANDLERS ──
+  const handleOpenChat = () => {
+    setLiveUnreadCount(0); // Mark as read locally for instant feedback
+    setOpenChat(true);
+  };
 
   const { charges = [] as OrderCharge[] } = useOrderCharges(order.id);
   const { data: payments, isLoading: paymentsLoading } = usePaymentsQuery(order.id);
@@ -304,7 +311,7 @@ export default function AdminOrderCard({ order: propOrder, conversation, adminId
             </button>
 
             <button
-              onClick={() => setOpenChat(true)}
+              onClick={handleOpenChat}
               className="relative h-9 rounded-xl bg-[#C49A6C] hover:bg-[#D4A97A] active:scale-[0.97] text-[10px] font-black uppercase tracking-[0.1em] text-[#0E0A06] shadow-[0_4px_12px_rgba(196,154,108,0.2)] transition-all duration-200"
             >
               Chat
