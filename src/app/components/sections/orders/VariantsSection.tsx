@@ -25,8 +25,7 @@ type Props = {
 /* ========================================================= */
 
 export default function OrderVariantsSection({ items, onApplyVariant }: Props) {
-  const safe = Array.isArray(items) ? items : [];
-
+  const safeItems = Array.isArray(items) ? items : [];
   const [active, setActive] = useState<Record<string, string | null>>({});
 
   const apply = (item: OrderItem, v: VariantSnapshot | null) => {
@@ -34,140 +33,127 @@ export default function OrderVariantsSection({ items, onApplyVariant }: Props) {
     onApplyVariant?.(item.id, v);
   };
 
-  if (!safe.length) {
+  if (!safeItems.length) {
     return (
-      <div
-        className="rounded-2xl p-5 text-sm"
-        style={{ color: "rgba(255,255,255,0.25)" }}
-      >
-        No variants available
-      </div>
+      <p className="text-sm text-white/25 italic">No variants available.</p>
     );
   }
 
-  return (
-    <div
-      className="rounded-2xl p-5 space-y-5"
-      style={{
-        background: "rgba(255,255,255,0.03)",
-        border: "1px solid rgba(255,255,255,0.07)",
-      }}
-    >
+  /* ================= SHARED STYLE ENGINE TRIPPERS ================= */
+  const rowBase = `
+    w-full flex items-center gap-4 p-3 rounded-xl text-left transition-all duration-200
+  `.trim();
 
-      {/* HEADER */}
+  const rowActive = `border border-[#D4A97A]/35 bg-[#D4A97A]/[0.06]`;
+  const rowIdle   = `border border-white/[0.06] bg-white/[0.03]`;
+
+  const thumbBase = `
+    w-11 h-11 shrink-0 rounded-lg overflow-hidden flex items-center justify-center
+  `.trim();
+
+  return (
+    <div className="space-y-4">
+      {/* SECTION HEADER */}
       <div className="flex items-center gap-3">
         <div className="w-1 h-4 rounded-full" style={{ background: "#D4A97A" }} />
         <div>
-          <h3 className="text-sm font-semibold text-white">Variants</h3>
-          <p className="text-xs mt-0.5" style={{ color: "rgba(212,169,122,0.5)" }}>
-            Finish applied at order time
+          <p className="text-xs font-semibold text-white/40 uppercase tracking-widest">
+            Finishes &amp; Variants
+          </p>
+          <p className="text-[10px] text-white/20 uppercase tracking-wider mt-0.5">
+            Snapshot configuration details
           </p>
         </div>
       </div>
 
-      {/* ITEMS */}
-      {safe.map((item, i) => {
-        const v = item.variant_snapshot;
-        const isActive = active[item.id] === (v?.id ?? null);
+      {/* ITEMS MAP LOOP */}
+      <div className="space-y-4">
+        {safeItems.map((item, i) => {
+          const v = item.variant_snapshot;
+          const isActive = active[item.id] === (v?.id ?? null);
 
-        return (
-          <div key={item.id} className="space-y-2">
-
-            {/* ITEM LABEL */}
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-white/50 uppercase tracking-widest">
-                Item {i + 1}
-              </span>
-              <span className="text-xs text-white/30">
-                {item.furniture_snapshot?.name ?? "Unnamed"}
-              </span>
-            </div>
-
-            {/* NO VARIANT */}
-            {!v ? (
-              <div
-                className="rounded-xl px-4 py-3 text-xs"
-                style={{
-                  background: "rgba(255,255,255,0.02)",
-                  border: "1px dashed rgba(255,255,255,0.08)",
-                  color: "rgba(255,255,255,0.25)",
-                }}
-              >
-                No variant selected for this item
+          return (
+            <div key={item.id} className="space-y-2">
+              {/* ITEM METADATA STRIP */}
+              <div className="flex items-center justify-between border-b border-white/[0.04] pb-1.5">
+                <span className="text-[10px] font-semibold text-white/30 uppercase tracking-widest">
+                  Item {i + 1}
+                </span>
+                <span className="text-xs font-medium text-white/50 max-w-[70%] truncate">
+                  {item.furniture_snapshot?.name ?? "Unnamed Base Item"}
+                </span>
               </div>
-            ) : (
-              /* VARIANT ROW */
-              <div
-                className="flex items-center gap-4 p-3 rounded-xl transition-all duration-200"
-                style={{
-                  background: isActive
-                    ? "rgba(212,169,122,0.07)"
-                    : "rgba(255,255,255,0.03)",
-                  border: isActive
-                    ? "1px solid rgba(212,169,122,0.35)"
-                    : "1px solid rgba(255,255,255,0.07)",
-                }}
-              >
 
-                {/* TEXTURE THUMB — only renders img when url exists */}
+              {/* VARIANT DETAILS OR EMPTY FALLBACK CONTAINER */}
+              {!v ? (
                 <div
-                  className="w-12 h-12 shrink-0 rounded-lg overflow-hidden flex items-center justify-center"
+                  className="rounded-xl px-4 py-3.5 text-xs italic text-white/25 text-left"
                   style={{
-                    background: "rgba(0,0,0,0.3)",
-                    border: "1px solid rgba(255,255,255,0.08)",
+                    background: "rgba(255,255,255,0.01)",
+                    border: "1px dashed rgba(255,255,255,0.06)",
                   }}
                 >
-                  {v.preview_image_url ? (
-                    <img
-                      src={v.preview_image_url}
-                      alt={v.name ?? "Variant"}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <span className="text-[9px] text-white/20">N/A</span>
-                  )}
+                  Standard production: No variants or finish adjustments configured.
                 </div>
+              ) : (
+                <div className={`${rowBase} ${isActive ? rowActive : rowIdle}`}>
+                  {/* TEXTURE SPECIMEN PLUG */}
+                  <div
+                    className={thumbBase}
+                    style={{
+                      background: "rgba(255,255,255,0.05)",
+                      border: "1px solid rgba(255,255,255,0.08)",
+                    }}
+                  >
+                    {v.preview_image_url ? (
+                      <img
+                        src={v.preview_image_url}
+                        alt={v.name ?? ""}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <span className="text-[9px] font-semibold text-white/25 tracking-widest">DEF</span>
+                    )}
+                  </div>
 
-                {/* LABELS */}
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-white truncate">
-                    {v.name ?? "Unnamed Variant"}
-                  </p>
-                  <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.3)" }}>
-                    {v.price_adjustment
-                      ? `+₱${Number(v.price_adjustment).toLocaleString()}`
-                      : "No price adjustment"}
-                  </p>
+                  {/* LABELS COLUMN */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-white truncate">
+                      {v.name ?? "Custom Specification"}
+                    </p>
+                    <p className="text-xs text-white/30 mt-0.5">
+                      {v.price_adjustment
+                        ? `+₱${Number(v.price_adjustment).toLocaleString()}`
+                        : "No price adjustment"}
+                    </p>
+                  </div>
+
+                  {/* PREVIEW INTERACTION STATE TRIGGER BUTTON */}
+                  <button
+                    onClick={() => apply(item, isActive ? null : v)}
+                    className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all duration-200`}
+                    style={
+                      isActive
+                        ? {
+                            background: "rgba(255, 80, 80, 0.08)",
+                            borderColor: "rgba(255, 80, 80, 0.2)",
+                            color: "rgba(255, 120, 120, 0.9)",
+                          }
+                        : {
+                            background: "rgba(212, 169, 122, 0.1)",
+                            borderColor: "rgba(212, 169, 122, 0.25)",
+                            color: "#D4A97A",
+                          }
+                    }
+                  >
+                    {isActive ? "Clear View" : "Preview"}
+                  </button>
                 </div>
-
-                {/* APPLY / REMOVE */}
-                <button
-                  onClick={() => apply(item, isActive ? null : v)}
-                  className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition"
-                  style={
-                    isActive
-                      ? {
-                          background: "rgba(255,80,80,0.1)",
-                          color: "rgba(255,100,100,0.8)",
-                          border: "1px solid rgba(255,80,80,0.15)",
-                        }
-                      : {
-                          background: "rgba(212,169,122,0.12)",
-                          color: "#D4A97A",
-                          border: "1px solid rgba(212,169,122,0.2)",
-                        }
-                  }
-                >
-                  {isActive ? "Remove" : "Preview"}
-                </button>
-
-              </div>
-            )}
-
-          </div>
-        );
-      })}
-
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

@@ -42,9 +42,9 @@ type SelectedItem = {
 type Step = "items" | "delivery" | "review" | "success";
 const WIZARD_STEPS: Exclude<Step, "success">[] = ["items", "delivery", "review"];
 const STEP_LABELS: Record<string, string> = {
-  items: "Select Items",
+  items:    "Items",
   delivery: "Delivery",
-  review: "Review",
+  review:   "Review",
 };
 
 /* ── HELPERS ── */
@@ -53,17 +53,17 @@ function buildItems(furniture: Furniture): SelectedItem[] {
   return [
     ...furniture.variants.map((v) => ({
       furniture_id: furniture.id,
-      variant_id: v.id,
-      quantity: 0,
-      label: `${furniture.name} • ${v.name}`,
-      unit_price: furniture.base_price + v.price_adjustment,
+      variant_id:   v.id,
+      quantity:     0,
+      label:        `${furniture.name} • ${v.name}`,
+      unit_price:   furniture.base_price + v.price_adjustment,
     })),
     {
       furniture_id: furniture.id,
-      variant_id: null,
-      quantity: 0,
-      label: `${furniture.name} (Base)`,
-      unit_price: furniture.base_price,
+      variant_id:   null,
+      quantity:     0,
+      label:        `${furniture.name} (Base)`,
+      unit_price:   furniture.base_price,
     },
   ];
 }
@@ -80,31 +80,18 @@ export default function PlaceOrderModal({ open, onClose, furniture }: Props) {
   const { createOrder, isPending } = useOrderCreate();
 
   /* ── STATE ── */
-  const [step, setStep] = useState<Step>("items");
-  const [list, setList] = useState<SelectedItem[]>(() => buildItems(furniture));
-
-  const [deliveryState, setDeliveryState] = useState<DeliveryStepState>({
-    method: "pickup",
-    phone: "",
-    address: "",
-  });
-
-  const [requestState, setRequestState] = useState<RequestStepState>({
-    description: "",
-  });
+  const [step, setStep]                     = useState<Step>("items");
+  const [list, setList]                     = useState<SelectedItem[]>(() => buildItems(furniture));
+  const [deliveryState, setDeliveryState]   = useState<DeliveryStepState>({ method: "pickup", phone: "", address: "" });
+  const [requestState, setRequestState]     = useState<RequestStepState>({ description: "" });
 
   /* ── DERIVED ── */
-  const activeItems = useMemo(() => list.filter((i) => i.quantity > 0), [list]);
-
-  const subtotal = useMemo(
-    () => activeItems.reduce((s, i) => s + i.quantity * i.unit_price, 0),
-    [activeItems]
-  );
-
-  const deliveryValid = isDeliveryStepValid(deliveryState);
-  const canConfirm = activeItems.length > 0 && deliveryValid;
-  const isSuccess = step === "success";
-  const stepIndex = WIZARD_STEPS.indexOf(step as any);
+  const activeItems    = useMemo(() => list.filter((i) => i.quantity > 0), [list]);
+  const subtotal       = useMemo(() => activeItems.reduce((s, i) => s + i.quantity * i.unit_price, 0), [activeItems]);
+  const deliveryValid  = isDeliveryStepValid(deliveryState);
+  const canConfirm     = activeItems.length > 0 && deliveryValid;
+  const isSuccess      = step === "success";
+  const stepIndex      = WIZARD_STEPS.indexOf(step as any);
 
   /* ── ACTIONS ── */
   function reset() {
@@ -114,10 +101,7 @@ export default function PlaceOrderModal({ open, onClose, furniture }: Props) {
     setRequestState({ description: "" });
   }
 
-  function handleClose() {
-    reset();
-    onClose();
-  }
+  function handleClose() { reset(); onClose(); }
 
   function updateQty(index: number, delta: number) {
     setList((prev) =>
@@ -128,8 +112,8 @@ export default function PlaceOrderModal({ open, onClose, furniture }: Props) {
   }
 
   function goNext() {
-    if (step === "items" && activeItems.length > 0) setStep("delivery");
-    else if (step === "delivery" && deliveryValid) setStep("review");
+    if (step === "items" && activeItems.length > 0)   setStep("delivery");
+    else if (step === "delivery" && deliveryValid)     setStep("review");
   }
 
   function goPrev() {
@@ -141,19 +125,18 @@ export default function PlaceOrderModal({ open, onClose, furniture }: Props) {
     if (!canConfirm) return;
     const delivery = buildDeliveryData(deliveryState);
     await createOrder({
-      delivery_method: delivery.delivery_method,
-      phone_number: delivery.phone_number,
+      delivery_method:  delivery.delivery_method,
+      phone_number:     delivery.phone_number,
       delivery_address: delivery.delivery_address,
-      pickup_location: delivery.pickup_location,
+      pickup_location:  delivery.pickup_location,
       items: activeItems.map((i) => ({
         furniture_id: i.furniture_id,
-        variant_id: i.variant_id,
-        quantity: i.quantity,
+        variant_id:   i.variant_id,
+        quantity:     i.quantity,
       })),
-      request:
-        requestState.description.trim()
-          ? { description: requestState.description.trim() }
-          : null,
+      request: requestState.description.trim()
+        ? { description: requestState.description.trim() }
+        : null,
     });
     setStep("success");
   }
@@ -161,48 +144,61 @@ export default function PlaceOrderModal({ open, onClose, furniture }: Props) {
   if (!open) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+    /* ── OVERLAY ── */
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4">
+
+      {/* ── SHEET / DIALOG ── */}
       <div className="
-        flex w-full max-w-xl flex-col overflow-hidden
-        rounded-3xl bg-[#0B0704]
-        border border-[#2A1F14]
-        shadow-[0_32px_80px_rgba(0,0,0,0.8)]
-        max-h-[92vh]
+        relative flex flex-col
+        w-full sm:max-w-lg
+        /* mobile: bottom-sheet that fills but never overflows */
+        max-h-[96dvh] sm:max-h-[90vh]
+        /* rounding: flat top on mobile sheets, fully rounded on sm+ */
+        rounded-t-3xl sm:rounded-3xl
+        overflow-hidden
+        bg-[#0B0704]
+        border-t border-x sm:border border-[#2A1F14]
+        shadow-[0_-16px_80px_rgba(0,0,0,0.9)] sm:shadow-[0_32px_80px_rgba(0,0,0,0.8)]
       ">
+
+        {/* ── DRAG PILL (mobile only) ── */}
+        {!isSuccess && (
+          <div className="flex justify-center pt-3 pb-0 sm:hidden shrink-0">
+            <div className="h-1 w-10 rounded-full bg-white/15" />
+          </div>
+        )}
 
         {/* ── HEADER ── */}
         {!isSuccess && (
-          <div className="flex items-start justify-between border-b border-[#2A1F14] px-5 py-4 flex-shrink-0 bg-[#0E0B06]/60">
-            <div className="space-y-0.5">
-              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/25">
+          <div className="shrink-0 flex items-center justify-between gap-3 border-b border-[#2A1F14] px-4 sm:px-5 py-3.5 bg-[#0E0B06]/60">
+            <div className="min-w-0">
+              <p className="text-[9px] font-black uppercase tracking-[0.18em] text-white/25">
                 Place Order
               </p>
-              <h2 className="text-sm font-semibold text-white/85">{furniture.name}</h2>
+              <h2 className="text-sm font-semibold text-white/85 truncate">{furniture.name}</h2>
             </div>
             <button
               onClick={handleClose}
               className="
-                flex h-8 w-8 items-center justify-center
+                shrink-0 flex h-8 w-8 items-center justify-center
                 rounded-full border border-[#2A1F14] bg-white/[0.03]
                 text-white/35 text-xs
                 hover:bg-white/[0.07] hover:text-white/60 hover:border-[#D4A97A]/20
                 transition-all
               "
-            >
-              ✕
-            </button>
+            >✕</button>
           </div>
         )}
 
         {/* ── STEP INDICATOR ── */}
         {!isSuccess && (
-          <div className="flex border-b border-[#2A1F14] flex-shrink-0">
+          <div className="shrink-0 flex border-b border-[#2A1F14]">
             {WIZARD_STEPS.map((s, i) => (
               <div
                 key={s}
                 className={`
-                  flex flex-1 items-center justify-center gap-2 py-3
-                  text-[10px] font-black uppercase tracking-[0.14em]
+                  flex flex-1 items-center justify-center gap-1.5 py-2.5
+                  text-[9px] font-black uppercase tracking-[0.12em]
                   border-r border-[#2A1F14] last:border-r-0 transition-colors
                   ${i === stepIndex
                     ? "text-[#D4A97A] bg-[#D4A97A]/[0.06]"
@@ -212,7 +208,7 @@ export default function PlaceOrderModal({ open, onClose, furniture }: Props) {
                 `}
               >
                 <span className={`
-                  flex h-4 w-4 items-center justify-center rounded-full text-[9px]
+                  flex h-4 w-4 items-center justify-center rounded-full text-[8px] shrink-0
                   ${i === stepIndex
                     ? "bg-[#D4A97A] text-[#0B0704]"
                     : i < stepIndex
@@ -221,63 +217,58 @@ export default function PlaceOrderModal({ open, onClose, furniture }: Props) {
                 `}>
                   {i < stepIndex ? "✓" : i + 1}
                 </span>
-                <span className="hidden sm:inline">{STEP_LABELS[s]}</span>
+                {/* label always visible — short labels fit on any width */}
+                <span>{STEP_LABELS[s]}</span>
               </div>
             ))}
           </div>
         )}
 
-        {/* ── BODY ── */}
+        {/* ── SCROLLABLE BODY ── */}
         <div className="flex-1 overflow-y-auto min-h-0 scrollbar-thin scrollbar-thumb-[#2A1F14] scrollbar-track-transparent">
 
-          {/* ── SUCCESS ── */}
+          {/* SUCCESS */}
           {isSuccess && (
-            <div className="flex flex-col items-center justify-center gap-6 px-8 py-16 text-center">
+            <div className="flex flex-col items-center justify-center gap-5 px-6 sm:px-8 py-12 sm:py-16 text-center">
               <div className="relative">
-                <div className="flex h-20 w-20 items-center justify-center rounded-full border border-[#D4A97A]/30 bg-[#D4A97A]/[0.08]">
-                  <span className="text-3xl text-[#D4A97A]">✦</span>
+                <div className="flex h-16 w-16 sm:h-20 sm:w-20 items-center justify-center rounded-full border border-[#D4A97A]/30 bg-[#D4A97A]/[0.08]">
+                  <span className="text-2xl sm:text-3xl text-[#D4A97A]">✦</span>
                 </div>
                 <div className="absolute inset-0 rounded-full border border-[#D4A97A]/10 scale-125" />
               </div>
 
               <div className="space-y-2">
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#D4A97A]/60">
+                <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[#D4A97A]/60">
                   Order Placed
                 </p>
-                <h2 className="text-xl font-bold text-white/90">
+                <h2 className="text-lg sm:text-xl font-bold text-white/90">
                   We've received your order!
                 </h2>
-                <p className="text-[13px] text-white/40 leading-relaxed max-w-xs mx-auto">
+                <p className="text-[12px] sm:text-[13px] text-white/40 leading-relaxed max-w-xs mx-auto">
                   Your order for{" "}
                   <span className="text-white/65">{furniture.name}</span>{" "}
-                  has been submitted. Our team will review it and reach out to confirm the details shortly.
+                  has been submitted. Our team will review and confirm the details shortly.
                 </p>
               </div>
 
               <div className="w-full rounded-2xl border border-[#2A1F14] bg-[#160F08] divide-y divide-[#2A1F14] overflow-hidden">
-                <div className="flex items-center justify-between px-4 py-3">
-                  <span className="text-[10px] font-black uppercase tracking-[0.14em] text-white/25">Items</span>
-                  <span className="text-[12px] text-white/50">
-                    {activeItems.length} variant{activeItems.length !== 1 ? "s" : ""}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between px-4 py-3">
-                  <span className="text-[10px] font-black uppercase tracking-[0.14em] text-white/25">Method</span>
-                  <span className="text-[12px] font-semibold text-[#D4A97A] uppercase tracking-wide">
-                    {deliveryState.method === "pickup" ? "Store Pickup" : "Delivery"}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between px-4 py-3">
-                  <span className="text-[10px] font-black uppercase tracking-[0.14em] text-white/25">Total</span>
-                  <span className="text-[14px] font-bold text-[#D4A97A]">
-                    ₱{subtotal.toLocaleString()}
-                  </span>
-                </div>
+                {[
+                  { label: "Items",  value: `${activeItems.length} variant${activeItems.length !== 1 ? "s" : ""}` },
+                  { label: "Method", value: deliveryState.method === "pickup" ? "Store Pickup" : "Delivery", gold: true },
+                  { label: "Total",  value: `₱${subtotal.toLocaleString()}`, gold: true, large: true },
+                ].map(({ label, value, gold, large }) => (
+                  <div key={label} className="flex items-center justify-between px-4 py-3">
+                    <span className="text-[9px] font-black uppercase tracking-[0.14em] text-white/25">{label}</span>
+                    <span className={`font-${large ? "bold" : "semibold"} ${large ? "text-[14px]" : "text-[12px]"} ${gold ? "text-[#D4A97A]" : "text-white/50"}`}>
+                      {value}
+                    </span>
+                  </div>
+                ))}
               </div>
 
               <div className="rounded-2xl border border-[#2A1F14] bg-[#160F08] px-4 py-3 w-full">
                 <p className="text-[11px] text-[#7A5C3A] leading-relaxed">
-                  ✦ &nbsp;Check the Orders tab to track your order status and chat with our team.
+                  ✦ &nbsp;Check the Orders tab to track your order status.
                 </p>
               </div>
 
@@ -298,30 +289,30 @@ export default function PlaceOrderModal({ open, onClose, furniture }: Props) {
             </div>
           )}
 
-          {/* ── STEP 1: ITEMS ── */}
+          {/* STEP 1: ITEMS */}
           {step === "items" && (
-            <div className="p-5 space-y-3">
-              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-white/25 pb-1">
-                Choose Variants & Quantities
+            <div className="p-4 sm:p-5 space-y-3">
+              <p className="text-[9px] font-black uppercase tracking-[0.14em] text-white/25 pb-1">
+                Choose Variants &amp; Quantities
               </p>
 
               {list.map((item, index) => (
                 <div
                   key={`${item.furniture_id}-${item.variant_id ?? "base"}`}
                   className={`
-                    flex items-center justify-between rounded-2xl border p-4 transition-all
+                    flex items-center justify-between rounded-2xl border p-3.5 transition-all
                     ${item.quantity > 0
                       ? "border-[#D4A97A]/30 bg-[#D4A97A]/[0.04]"
                       : "border-[#2A1F14] bg-[#160F08]"}
                   `}
                 >
-                  <div className="min-w-0 flex-1 pr-4">
+                  <div className="min-w-0 flex-1 pr-3">
                     <p className="text-[13px] font-medium text-white/80 truncate">{item.label}</p>
                     <p className="text-[11px] text-[#D4A97A]/70 mt-0.5">
                       ₱{item.unit_price.toLocaleString()}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
+                  <div className="flex items-center gap-2 shrink-0">
                     <button
                       onClick={() => updateQty(index, -1)}
                       disabled={item.quantity === 0}
@@ -333,7 +324,7 @@ export default function PlaceOrderModal({ open, onClose, furniture }: Props) {
                         transition-all
                       "
                     >−</button>
-                    <span className="min-w-[24px] text-center text-[13px] font-semibold text-white/80">
+                    <span className="min-w-[22px] text-center text-[13px] font-semibold text-white/80">
                       {item.quantity}
                     </span>
                     <button
@@ -351,109 +342,88 @@ export default function PlaceOrderModal({ open, onClose, furniture }: Props) {
 
               {activeItems.length > 0 && (
                 <div className="flex items-center justify-between rounded-2xl border border-[#2A1F14] bg-[#160F08] px-4 py-3">
-                  <span className="text-[10px] font-black uppercase tracking-[0.14em] text-white/30">
-                    Subtotal
-                  </span>
-                  <span className="text-[13px] font-semibold text-[#D4A97A]">
-                    ₱{subtotal.toLocaleString()}
-                  </span>
+                  <span className="text-[9px] font-black uppercase tracking-[0.14em] text-white/30">Subtotal</span>
+                  <span className="text-[13px] font-semibold text-[#D4A97A]">₱{subtotal.toLocaleString()}</span>
                 </div>
               )}
             </div>
           )}
 
-          {/* ── STEP 2: DELIVERY (from DeliveryMethodModal) ── */}
+          {/* STEP 2: DELIVERY */}
           {step === "delivery" && (
             <>
               <DeliveryStep state={deliveryState} onChange={setDeliveryState} />
-
-              {/* Custom request lives here too — keeps delivery + request on one step */}
-              <div className="px-5 pb-5">
-                <RequestStep
-                  state={requestState}
-                  onChange={setRequestState}
-                  items={activeItems}
-                />
+              <div className="px-4 sm:px-5 pb-5">
+                <RequestStep state={requestState} onChange={setRequestState} items={activeItems} />
               </div>
             </>
           )}
 
-          {/* ── STEP 3: REVIEW ── */}
+          {/* STEP 3: REVIEW */}
           {step === "review" && (
-            <div className="p-5 space-y-4">
-              <p className="text-[10px] font-black uppercase tracking-[0.14em] text-white/25 pb-1">
+            <div className="p-4 sm:p-5 space-y-4">
+              <p className="text-[9px] font-black uppercase tracking-[0.14em] text-white/25 pb-1">
                 Order Summary
               </p>
 
-              {/* Items */}
+              {/* ITEMS TABLE */}
               <div className="rounded-2xl border border-[#2A1F14] bg-[#160F08] divide-y divide-[#2A1F14] overflow-hidden">
                 <div className="px-4 py-2.5">
-                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-white/25">Items</p>
+                  <p className="text-[9px] font-black uppercase tracking-[0.14em] text-white/25">Items</p>
                 </div>
                 {activeItems.map((item, i) => (
-                  <div key={i} className="flex items-center justify-between px-4 py-3">
+                  <div key={i} className="flex items-start justify-between gap-3 px-4 py-3">
                     <div className="min-w-0 flex-1">
-                      <p className="text-[13px] text-white/70 truncate">{item.label}</p>
+                      <p className="text-[12px] text-white/70 truncate">{item.label}</p>
                       <p className="text-[11px] text-white/30 mt-0.5">
                         ₱{item.unit_price.toLocaleString()} × {item.quantity}
                       </p>
                     </div>
-                    <span className="text-[13px] font-semibold text-[#D4A97A] ml-4">
+                    <span className="text-[12px] font-semibold text-[#D4A97A] shrink-0">
                       ₱{(item.unit_price * item.quantity).toLocaleString()}
                     </span>
                   </div>
                 ))}
                 <div className="flex items-center justify-between px-4 py-3 bg-[#D4A97A]/[0.04]">
-                  <span className="text-[10px] font-black uppercase tracking-[0.14em] text-white/40">Total</span>
-                  <span className="text-[15px] font-bold text-[#D4A97A]">
-                    ₱{subtotal.toLocaleString()}
-                  </span>
+                  <span className="text-[9px] font-black uppercase tracking-[0.14em] text-white/40">Total</span>
+                  <span className="text-[14px] font-bold text-[#D4A97A]">₱{subtotal.toLocaleString()}</span>
                 </div>
               </div>
 
-              {/* Delivery */}
+              {/* DELIVERY */}
               <div className="rounded-2xl border border-[#2A1F14] bg-[#160F08] divide-y divide-[#2A1F14] overflow-hidden">
                 <div className="px-4 py-2.5">
-                  <p className="text-[10px] font-black uppercase tracking-[0.14em] text-white/25">Delivery</p>
+                  <p className="text-[9px] font-black uppercase tracking-[0.14em] text-white/25">Delivery</p>
                 </div>
                 <div className="px-4 py-3 space-y-2.5">
-                  <div className="flex justify-between">
-                    <span className="text-[11px] text-white/30 uppercase tracking-wide">Method</span>
-                    <span className="text-[12px] font-semibold text-[#D4A97A] uppercase tracking-wide">
-                      {deliveryState.method === "pickup" ? "Store Pickup" : "Delivery"}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-[11px] text-white/30 uppercase tracking-wide">Phone</span>
-                    <span className="text-[12px] text-white/60">{deliveryState.phone}</span>
-                  </div>
-                  {deliveryState.method === "delivery" && deliveryState.address && (
-                    <div className="flex justify-between gap-4">
-                      <span className="text-[11px] text-white/30 uppercase tracking-wide flex-shrink-0">Address</span>
-                      <span className="text-[12px] text-white/60 text-right">{deliveryState.address}</span>
+                  {[
+                    { label: "Method", value: deliveryState.method === "pickup" ? "Store Pickup" : "Delivery", gold: true },
+                    { label: "Phone",  value: deliveryState.phone },
+                    ...(deliveryState.method === "delivery" && deliveryState.address
+                      ? [{ label: "Address",  value: deliveryState.address }]
+                      : []),
+                    ...(deliveryState.method === "pickup"
+                      ? [{ label: "Location", value: STORE_PICKUP }]
+                      : []),
+                  ].map(({ label, value, gold }: any) => (
+                    <div key={label} className="flex justify-between gap-4">
+                      <span className="text-[10px] text-white/30 uppercase tracking-wide shrink-0">{label}</span>
+                      <span className={`text-[11px] text-right ${gold ? "font-semibold text-[#D4A97A] uppercase tracking-wide" : "text-white/60"}`}>
+                        {value}
+                      </span>
                     </div>
-                  )}
-                  {deliveryState.method === "pickup" && (
-                    <div className="flex justify-between gap-4">
-                      <span className="text-[11px] text-white/30 uppercase tracking-wide flex-shrink-0">Location</span>
-                      <span className="text-[12px] text-white/60 text-right">{STORE_PICKUP}</span>
-                    </div>
-                  )}
+                  ))}
                 </div>
               </div>
 
-              {/* Custom request */}
+              {/* CUSTOM REQUEST */}
               {requestState.description.trim() && (
                 <div className="rounded-2xl border border-[#2A1F14] bg-[#160F08] divide-y divide-[#2A1F14] overflow-hidden">
                   <div className="px-4 py-2.5">
-                    <p className="text-[10px] font-black uppercase tracking-[0.14em] text-white/25">
-                      Custom Request
-                    </p>
+                    <p className="text-[9px] font-black uppercase tracking-[0.14em] text-white/25">Custom Request</p>
                   </div>
                   <div className="px-4 py-3">
-                    <p className="text-[13px] text-white/60 leading-relaxed">
-                      {requestState.description}
-                    </p>
+                    <p className="text-[12px] text-white/60 leading-relaxed">{requestState.description}</p>
                   </div>
                 </div>
               )}
@@ -463,44 +433,34 @@ export default function PlaceOrderModal({ open, onClose, furniture }: Props) {
 
         {/* ── FOOTER ── */}
         {!isSuccess && (
-          <div className="border-t border-[#2A1F14] bg-[#0E0B06]/60 px-5 py-4 flex-shrink-0">
-            <div className="flex gap-3">
-              {step === "items" ? (
-                <button
-                  onClick={handleClose}
-                  className="
-                    flex-1 rounded-2xl border border-[#2A1F14] bg-white/[0.02]
-                    py-3 text-[11px] font-black uppercase tracking-[0.14em] text-white/30
-                    hover:bg-white/[0.05] hover:text-white/50
-                    transition-all
-                  "
-                >
-                  Cancel
-                </button>
-              ) : (
-                <button
-                  onClick={goPrev}
-                  className="
-                    flex-1 rounded-2xl border border-[#2A1F14] bg-white/[0.02]
-                    py-3 text-[11px] font-black uppercase tracking-[0.14em] text-white/30
-                    hover:bg-white/[0.05] hover:text-white/50
-                    transition-all
-                  "
-                >
-                  ← Back
-                </button>
-              )}
+          <div className="shrink-0 border-t border-[#2A1F14] bg-[#0E0B06]/60 px-4 sm:px-5 py-3.5">
+            {/* Safe area padding for mobile home-bar */}
+            <div className="flex gap-2.5 pb-[env(safe-area-inset-bottom)]">
 
+              {/* BACK / CANCEL */}
+              <button
+                onClick={step === "items" ? handleClose : goPrev}
+                className="
+                  flex-1 min-h-[44px] rounded-2xl border border-[#2A1F14] bg-white/[0.02]
+                  text-[10px] font-black uppercase tracking-[0.14em] text-white/30
+                  hover:bg-white/[0.05] hover:text-white/50
+                  transition-all
+                "
+              >
+                {step === "items" ? "Cancel" : "← Back"}
+              </button>
+
+              {/* NEXT / CONFIRM */}
               {step !== "review" ? (
                 <button
                   onClick={goNext}
                   disabled={
-                    (step === "items" && activeItems.length === 0) ||
+                    (step === "items"    && activeItems.length === 0) ||
                     (step === "delivery" && !deliveryValid)
                   }
                   className="
-                    flex-[2] rounded-2xl py-3
-                    text-[11px] font-black uppercase tracking-[0.14em]
+                    flex-[2] min-h-[44px] rounded-2xl
+                    text-[10px] font-black uppercase tracking-[0.14em]
                     bg-gradient-to-r from-[#C49A6C] via-[#D4A97A] to-[#E8C98A]
                     text-[#0E0A06]
                     shadow-[0_2px_8px_rgba(212,169,122,0.25)]
@@ -516,8 +476,8 @@ export default function PlaceOrderModal({ open, onClose, furniture }: Props) {
                   onClick={handleConfirm}
                   disabled={!canConfirm || isPending}
                   className="
-                    flex-[2] rounded-2xl py-3
-                    text-[11px] font-black uppercase tracking-[0.14em]
+                    flex-[2] min-h-[44px] rounded-2xl
+                    text-[10px] font-black uppercase tracking-[0.14em]
                     bg-gradient-to-r from-[#C49A6C] via-[#D4A97A] to-[#E8C98A]
                     text-[#0E0A06]
                     shadow-[0_2px_8px_rgba(212,169,122,0.25)]
@@ -536,9 +496,11 @@ export default function PlaceOrderModal({ open, onClose, furniture }: Props) {
                   )}
                 </button>
               )}
+
             </div>
           </div>
         )}
+
       </div>
     </div>,
     document.body

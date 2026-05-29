@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Box, RefreshCw } from "lucide-react";
+import { Box, RefreshCw, LoaderCircle } from "lucide-react";
 
 import {
   useAdminOrders,
@@ -14,16 +14,15 @@ import {
 } from "@/hooks/useConversationList";
 
 import type { OrderStatus } from "@/types/enums";
-
 import OrderAdminCard from "@/app/components/OrderAdminCard";
 import { supabase } from "@/lib/supabase";
 
 export default function AdminOrdersPage() {
-  const { data: orders = [], isLoading, isError } = useAdminOrders();
-  const { invalidateOrders } = useAdminOrderActions();
+  // isFetching detects background validation calls silently
+  const { data: orders = [], isLoading, isError, isFetching } = useAdminOrders();
+  const { updateStatus } = useAdminOrderActions();
 
   /* ================= AUTH ================= */
-
   const [adminId, setAdminId] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
 
@@ -33,7 +32,6 @@ export default function AdminOrdersPage() {
     const getAdmin = async () => {
       try {
         const { data, error } = await supabase.auth.getUser();
-
         if (!mounted) return;
 
         if (error || !data.user) {
@@ -50,14 +48,10 @@ export default function AdminOrdersPage() {
     };
 
     getAdmin();
-
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false; };
   }, []);
 
   /* ================= CONVERSATIONS ================= */
-
   const { conversations } = useConversationList({
     userId: adminId ?? "",
     role: "admin",
@@ -66,40 +60,27 @@ export default function AdminOrdersPage() {
   const conversationMap = useMemo(() => {
     return new Map<string, Conversation>(
       conversations
-        .filter(
-          (c): c is Conversation & { order_id: string } =>
-            !!c.order_id
-        )
+        .filter((c): c is Conversation & { order_id: string } => !!c.order_id)
         .map((c) => [c.order_id, c])
     );
   }, [conversations]);
 
   /* ================= STATUS UPDATE ================= */
-
-  const updateOrderStatus = async (
-    orderId: string,
-    status: OrderStatus
-  ) => {
-    const { error } = await supabase
-      .from("orders")
-      .update({ order_status: status })
-      .eq("id", orderId);
-
-    if (error) {
+  const updateOrderStatus = async (orderId: string, status: OrderStatus) => {
+    try {
+      await updateStatus({ orderId, status });
+    } catch (error) {
       console.error("UPDATE_ORDER_STATUS_ERROR", error);
-      return;
     }
-
-    invalidateOrders();
   };
 
-  /* ================= LOADING ================= */
-
-  if (isLoading || authLoading) {
+  /* ================= INITIAL HARD LOADING BLOCKS ================= */
+  // Notice that we only display the pulse layout placeholder on initial, non-cached mounting states!
+  if ((isLoading && !isFetching) || authLoading) {
     return (
       <main className="min-h-screen bg-[#0F0A06] text-white p-6">
         <div className="animate-pulse space-y-6">
-          <div className="h-6 w-48 bg-white/10 rounded" />
+          <div className="h-6 w-48 bg-white/10 rounded-xl" />
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {Array.from({ length: 6 }).map((_, i) => (
               <div
@@ -114,19 +95,17 @@ export default function AdminOrdersPage() {
   }
 
   /* ================= ERROR ================= */
-
   if (isError) {
     return (
       <main className="min-h-screen bg-[#0F0A06] text-white p-6 flex items-center justify-center">
-        <div className="text-center text-red-400">
-          <p className="text-sm">Failed to load orders</p>
-
+        <div className="text-center text-rose-400">
+          <p className="text-sm font-medium">Failed to synchronize application layout data records.</p>
           <button
             onClick={() => window.location.reload()}
-            className="mt-4 inline-flex items-center gap-2 text-xs bg-red-500/10 hover:bg-red-500/20 px-4 py-2 rounded-full"
+            className="mt-4 inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-wider bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 px-4 py-2.5 rounded-xl transition"
           >
             <RefreshCw className="w-3 h-3" />
-            Retry
+            Retry Connection
           </button>
         </div>
       </main>
@@ -134,66 +113,66 @@ export default function AdminOrdersPage() {
   }
 
   /* ================= UNAUTHORIZED ================= */
-
   if (!adminId) {
     return (
       <main className="min-h-screen bg-[#0F0A06] text-white flex items-center justify-center">
         <div className="text-center text-white/40">
-          <p className="text-sm">Unauthorized access</p>
+          <p className="text-sm tracking-wide font-medium">Security Clearance Exception: Access Denied</p>
         </div>
       </main>
     );
   }
 
-  /* ================= EMPTY ================= */
-
-  if (orders.length === 0) {
-    return (
-      <main className="min-h-screen bg-[#0F0A06] text-white p-6">
-        <div className="flex flex-col items-center justify-center py-24 text-center">
-          <Box className="w-10 h-10 text-white/20 mb-3" />
-          <p className="text-white/40 text-sm">No orders found</p>
-          <p className="text-white/20 text-xs mt-1">
-            Orders will appear here once customers start purchasing
-          </p>
-        </div>
-      </main>
-    );
-  }
-
-  /* ================= MAIN UI ================= */
-
+  /* ================= MAIN APPLICATION UI RENDER CANVAS ================= */
   return (
     <main className="min-h-screen bg-[#0F0A06] text-white p-6 space-y-6">
 
-      {/* HEADER */}
-      <div className="flex items-end justify-between border-b border-white/5 pb-4">
+      {/* HEADER SECTION CONTAINER */}
+      <div className="flex items-end justify-between border-b border-white/5 pb-4 relative">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
+          <h1 className="text-2xl font-bold tracking-tight text-white">
             Orders Management
           </h1>
-          <p className="text-sm text-white/40">
+          <p className="text-xs sm:text-sm text-white/40 mt-0.5">
             Track and manage customer orders in real time
           </p>
         </div>
 
-        <div className="text-xs text-white/30">
-          Live updates enabled
+        <div className="flex items-center gap-2 text-xs text-white/30 font-medium">
+          {/* Transparent, zero-layout-shift sync loading wheel wrapper */}
+          {isFetching ? (
+            <div className="flex items-center gap-1.5 text-[#D4A97A]">
+              <LoaderCircle className="w-3.5 h-3.5 animate-spin" />
+              <span>Syncing system data...</span>
+            </div>
+          ) : (
+            <span>Live updates enabled</span>
+          )}
         </div>
       </div>
 
-      {/* GRID */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-        {orders.map((order) => (
-          <OrderAdminCard
-            key={order.id}
-            order={order}
-            adminId={adminId}
-            conversation={conversationMap.get(order.id)}
-            onUpdateStatus={updateOrderStatus}
-          />
-        ))}
-      </div>
+      {/* CONDITIONAL SYSTEM DISPLAY: EMPTY VIEW VS GRID CARDS CANVAS */}
+      {orders.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-32 text-center rounded-2xl border border-dashed border-white/5 bg-[#0B0704]">
+          <Box className="w-8 h-8 text-white/20 mb-3" />
+          <p className="text-white/50 text-sm font-semibold tracking-tight">No active orders discovered</p>
+          <p className="text-white/25 text-xs mt-1 max-w-[280px] sm:max-w-none leading-relaxed">
+            Database pipelines are active. Orders will display instantly when checkout routines trigger.
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          {orders.map((order) => (
+            <OrderAdminCard
+              key={order.id}
+              order={order}
+              adminId={adminId}
+              conversation={conversationMap.get(order.id)}
+              onUpdateStatus={updateOrderStatus}
+            />
+          ))}
+        </div>
+      )}
     </main>
   );
 }

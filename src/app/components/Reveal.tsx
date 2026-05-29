@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, useInView } from "framer-motion";
-import { useRef } from "react";
+import { useRef, isValidElement } from "react";
 import type { ReactNode } from "react";
 
 type Props = {
@@ -62,11 +62,16 @@ export function RevealList({
 }) {
   return (
     <>
-      {children.map((child, i) => (
-        <Reveal key={i} delay={baseDelay + i * stagger} from={from} className={className}>
-          {child}
-        </Reveal>
-      ))}
+      {children.map((child, i) => {
+        // Safe check: If the child has a dedicated key, preserve it to protect 3D Canvas elements
+        const stableKey = isValidElement(child) && child.key ? child.key : i;
+        
+        return (
+          <Reveal key={`reveal-${stableKey}`} delay={baseDelay + i * stagger} from={from} className={className}>
+            {child}
+          </Reveal>
+        );
+      })}
     </>
   );
 }

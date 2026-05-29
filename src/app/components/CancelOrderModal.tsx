@@ -1,7 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
-
+import { useState, useEffect } from "react";
 import type { Order } from "@/types/order";
 
 type Props = {
@@ -9,28 +8,18 @@ type Props = {
   onClose: () => void;
   onConfirm: (reason: string) => Promise<void>;
   order: Order;
-  mode: "instant" | "request";
+  mode: "instant" | "request"; // Added to fix the TypeScript interface assignment error
 };
 
 /* =========================================================
-   INSTANT CANCEL RULES
+   MESSAGE LOGIC
 ========================================================= */
-const isInstantCancel = (order: Order) => {
-  return (
-    ["requested", "accepted"].includes(order.order_status) &&
-    order.payment_status === "unpaid"
-  );
-};
-
-/* =========================================================
-   MESSAGE
-========================================================= */
-const getMessage = (order: Order) => {
+const getMessage = (order: Order, mode: "instant" | "request") => {
   if (order.cancel_status === "requested") {
     return "Your cancellation request is already pending admin review.";
   }
 
-  if (isInstantCancel(order)) {
+  if (mode === "instant") {
     return "Your order will be cancelled immediately after confirmation. This action cannot be undone.";
   }
 
@@ -45,40 +34,22 @@ const getMessage = (order: Order) => {
   return "This cancellation request requires admin review before approval.";
 };
 
+/* =========================================================
+   COMPONENT
+========================================================= */
 export default function CancelOrderModal({
   open,
   onClose,
   onConfirm,
   order,
+  mode, // Destructured for direct consumption
 }: Props) {
   const [reason, setReason] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const [loading, setLoading] =
-    useState(false);
+  const message = getMessage(order, mode);
 
-  /**
-   * =========================================================
-   * DERIVED MODE
-   * =========================================================
-   */
-  const mode = useMemo<
-    "instant" | "request"
-  >(() => {
-    return isInstantCancel(order)
-      ? "instant"
-      : "request";
-  }, [order]);
-
-  const message = useMemo(
-    () => getMessage(order),
-    [order]
-  );
-
-  /**
-   * =========================================================
-   * RESET
-   * =========================================================
-   */
+  // Reset inputs on close
   useEffect(() => {
     if (!open) {
       setReason("");
@@ -86,70 +57,32 @@ export default function CancelOrderModal({
     }
   }, [open]);
 
-  /**
-   * =========================================================
-   * ESC CLOSE
-   * =========================================================
-   */
+  // ESC key dismissal
   useEffect(() => {
     if (!open) return;
-
-    const handleKey = (
-      e: KeyboardEvent
-    ) => {
-      if (e.key === "Escape") {
-        onClose();
-      }
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
     };
-
-    window.addEventListener(
-      "keydown",
-      handleKey
-    );
-
-    return () => {
-      window.removeEventListener(
-        "keydown",
-        handleKey
-      );
-    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
   }, [open, onClose]);
 
-  /**
-   * =========================================================
-   * BODY LOCK
-   * =========================================================
-   */
+  // Prevent parent scroll layout bleed
   useEffect(() => {
     if (!open) return;
-
-    const prev =
-      document.body.style.overflow;
-
-    document.body.style.overflow =
-      "hidden";
-
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     return () => {
-      document.body.style.overflow =
-        prev;
+      document.body.style.overflow = originalOverflow;
     };
   }, [open]);
 
-  /**
-   * =========================================================
-   * SUBMIT
-   * =========================================================
-   */
   const handleSubmit = async () => {
     if (!reason.trim()) return;
-
     try {
       setLoading(true);
-
       await onConfirm(reason.trim());
-
       setReason("");
-
       onClose();
     } finally {
       setLoading(false);
@@ -158,293 +91,164 @@ export default function CancelOrderModal({
 
   if (!open) return null;
 
-  const isPending =
-    order.cancel_status === "requested";
+  const isPending = order.cancel_status === "requested";
 
   return (
     <div
-      className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-      onClick={onClose}
+      className="fixed inset-0 z-[99999] flex justify-center p-4 pb-6 md:pb-8 backdrop-blur-md overflow-hidden bg-[#0A0705]/65"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div
-        onClick={(e) =>
-          e.stopPropagation()
-        }
-        className="
-          w-full
-          max-w-lg
-          overflow-hidden
-          rounded-[30px]
-          border
-          border-[#E8D9CC]
-          bg-[#FAF7F2]
-          shadow-[0_20px_60px_rgba(0,0,0,0.18)]
-        "
-      >
-        {/* =====================================================
-            HEADER
-        ===================================================== */}
-        <div className="border-b border-[#E8D9CC] bg-white px-6 py-5">
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <h2 className="text-[20px] font-semibold text-[#2B1D16]">
-                Cancel Order
-              </h2>
+      <div className="
+        w-full flex flex-col 
+        rounded-2xl max-w-lg
+        mt-[76px] h-[calc(100vh-100px)] md:mt-[84px] md:h-[calc(100vh-116px)]
+        shadow-[0_24px_64px_rgba(0,0,0,0.8)] transition-all duration-200 overflow-hidden
+        border border-[#2A1F14] bg-[#0E0A06]
+      ">
+        {/* TOP ACCENT GRADIENT LINE */}
+        <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-[#D4A97A]/60 to-transparent flex-shrink-0" />
 
-              <p className="mt-1 text-sm text-[#8C593F]">
-                Order #
-                {order.order_reference_code ??
-                  order.id}
-              </p>
-            </div>
-
-            <button
-              onClick={onClose}
-              disabled={loading}
-              className="
-                flex h-10 w-10 items-center justify-center
-                rounded-full
-                border border-[#E8D9CC]
-                bg-[#FAF7F2]
-                text-[#6B584B]
-                transition
-                hover:bg-[#F3E7DD]
-              "
-            >
-              ✕
-            </button>
+        {/* ── HEADER ── */}
+        <div className="flex items-center justify-between px-5 sm:px-6 py-4 shrink-0 bg-[#0B0704] border-b border-[#2A1F14]">
+          <div className="min-w-0">
+            <p className="text-[9px] font-black tracking-[0.22em] text-[#7A5C3A] uppercase mb-0.5">
+              Order Dismissal
+            </p>
+            <h2 className="text-sm sm:text-base font-bold text-white tracking-tight truncate">
+              Cancel Order
+            </h2>
+            <p className="text-[10px] text-white/30 mt-0.5">
+              Order #{order.order_reference_code ?? order.id}
+            </p>
           </div>
+
+          <button
+            onClick={onClose}
+            disabled={loading}
+            className="w-8 h-8 rounded-xl flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition text-xs"
+          >
+            ✕
+          </button>
         </div>
 
-        {/* =====================================================
-            CONTENT
-        ===================================================== */}
-        <div className="space-y-5 px-6 py-6">
-          {/* STATUS BADGE */}
-          <div
-            className={`
-              inline-flex items-center rounded-full px-4 py-2 text-xs font-semibold
-
-              ${
-                mode === "instant"
-                  ? `
-                    border border-red-200
-                    bg-red-50
-                    text-red-700
-                  `
-                  : `
-                    border border-amber-200
-                    bg-amber-50
-                    text-amber-700
-                  `
+        {/* ── INTERNAL SCROLLABLE BODY ── */}
+        <div className="overflow-y-auto flex-1 p-5 sm:p-6 space-y-5 focus:outline-none custom-scrollbar">
+          
+          {/* CRITICAL MODE BADGE */}
+          <div>
+            <span className={`
+              text-[9px] font-black uppercase tracking-[0.15em] px-3 py-1.5 rounded-full border
+              ${mode === "instant" 
+                ? "bg-rose-500/5 text-rose-500 border-rose-500/20" 
+                : "bg-[#D4A97A]/5 text-[#D4A97A] border-[#D4A97A]/20"
               }
-            `}
-          >
-            {mode === "instant"
-              ? "Instant Cancellation"
-              : "Admin Review Required"}
+            `}>
+              {mode === "instant" ? "Instant Cancellation" : "Admin Review Required"}
+            </span>
           </div>
 
-          {/* INFO CARD */}
-          <div
-            className={`
-              rounded-2xl border p-4
-
-              ${
-                mode === "instant"
-                  ? `
-                    border-red-200
-                    bg-red-50
-                  `
-                  : `
-                    border-amber-200
-                    bg-amber-50
-                  `
-              }
-            `}
-          >
-            <div className="flex gap-3">
-              <div className="mt-[2px] text-lg">
-                {mode === "instant"
-                  ? "⚠️"
-                  : "📝"}
-              </div>
-
-              <div>
-                <p
-                  className={`
-                    text-sm leading-relaxed
-
-                    ${
-                      mode === "instant"
-                        ? "text-red-700"
-                        : "text-amber-800"
-                    }
-                  `}
-                >
-                  {message}
-                </p>
-              </div>
+          {/* SYSTEM INFO CONTAINER */}
+          <div className={`
+            rounded-xl p-4 border text-xs sm:text-sm leading-relaxed
+            ${mode === "instant"
+              ? "bg-rose-500/[0.03] border-rose-500/15 text-rose-500/85"
+              : "bg-[#D4A97A]/[0.02] border-[#D4A97A]/15 text-white/60"
+            }
+          `}>
+            <div className="flex gap-2.5 items-start">
+              <span className="shrink-0 text-sm mt-0.5">{mode === "instant" ? "⚠️" : "📝"}</span>
+              <p>{message}</p>
             </div>
           </div>
 
-          {/* ORDER SUMMARY */}
-          <div className="rounded-2xl border border-[#E8D9CC] bg-white p-5">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-[#6B5B52]">
-                Order Status
-              </span>
-
-              <span className="font-medium capitalize text-[#2B1D16]">
-                {order.order_status?.replace(
-                  /_/g,
-                  " "
-                )}
+          {/* STATE METRICS BLOCK */}
+          <div className="rounded-xl p-4 space-y-3 bg-[#0B0704] border border-[#2A1F14]">
+            <div className="flex justify-between items-baseline py-0.5 border-b border-[#2A1F14]/30">
+              <span className="text-[9px] font-black uppercase tracking-[0.16em] text-white/25 shrink-0">Order Status</span>
+              <span className="text-[11px] font-semibold text-white/70 text-right capitalize truncate max-w-[70%]">
+                {order.order_status?.replace(/_/g, " ")}
               </span>
             </div>
 
-            <div className="mt-3 flex items-center justify-between text-sm">
-              <span className="text-[#6B5B52]">
-                Payment Status
-              </span>
-
-              <span className="font-medium capitalize text-[#2B1D16]">
-                {order.payment_status?.replace(
-                  /_/g,
-                  " "
-                )}
+            <div className="flex justify-between items-baseline py-0.5">
+              <span className="text-[9px] font-black uppercase tracking-[0.16em] text-white/25 shrink-0">Payment Status</span>
+              <span className="text-[11px] font-semibold text-white/70 text-right capitalize truncate max-w-[70%]">
+                {order.payment_status?.replace(/_/g, " ")}
               </span>
             </div>
 
             {isPending && (
-              <div className="mt-4 rounded-xl border border-[#E8D9CC] bg-[#FAF7F2] px-4 py-3">
-                <p className="text-xs leading-relaxed text-[#8C593F]">
-                  A cancellation request has
-                  already been submitted and is
-                  waiting for admin review.
+              <div className="mt-2 pt-3 border-t border-[#2A1F14]/40 text-center">
+                <p className="text-[10px] font-medium leading-relaxed text-[#7A5C3A]">
+                  A cancellation request is processing and holds architectural priority review.
                 </p>
               </div>
             )}
           </div>
 
-          {/* REASON */}
+          {/* TEXTAREA FORM CONTROL */}
           {!isPending && (
             <div className="space-y-2">
-              <label className="block text-sm font-medium text-[#2B1D16]">
+              <label className="block text-[10px] font-black uppercase tracking-[0.18em] text-white/40">
                 Cancellation Reason
               </label>
 
               <textarea
                 value={reason}
-                onChange={(e) =>
-                  setReason(e.target.value)
-                }
-                placeholder="Tell us why you want to cancel this order..."
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="Provide details explaining the intent behind this cancellation..."
+                maxLength={500}
                 className="
-                  min-h-[140px]
-                  w-full
-                  resize-none
-                  rounded-2xl
-                  border
-                  border-[#E8D9CC]
-                  bg-white
-                  px-4
-                  py-4
-                  text-sm
-                  text-[#2B1D16]
-                  outline-none
-                  transition
-
-                  placeholder:text-[#B89B87]
-
-                  focus:border-[#C6A892]
-                  focus:ring-4
-                  focus:ring-[#E8D9CC]/50
+                  min-h-[120px] w-full resize-none rounded-xl border px-4 py-3.5 text-xs sm:text-sm text-white
+                  outline-none transition placeholder:text-white/20 bg-[#060403] border-[#2A1F14]
+                  focus:border-[#D4A97A]/40 focus:ring-2 focus:ring-[#D4A97A]/10
                 "
               />
 
-              <div className="flex justify-between text-xs text-[#8C593F]/70">
-                <span>
-                  This message will be visible
-                  to the admin.
-                </span>
-
-                <span>
-                  {reason.length}/500
-                </span>
+              <div className="flex justify-between text-[10px] text-white/25">
+                <span>Transmitted securely to administration system records.</span>
+                <span className="tabular-nums font-medium">{reason.length}/500</span>
               </div>
             </div>
           )}
         </div>
 
-        {/* =====================================================
-            FOOTER
-        ===================================================== */}
-        <div className="border-t border-[#E8D9CC] bg-white px-6 py-5">
-          <div className="flex flex-col-reverse gap-3 sm:flex-row">
+        {/* ── FOOTER ACTIONS ── */}
+        <div className="px-5 sm:px-6 py-4 shrink-0 bg-[#0B0704] flex flex-col-reverse sm:flex-row gap-3 border-t border-[#2A1F14]">
+          <button
+            onClick={onClose}
+            disabled={loading}
+            className="
+              flex-1 h-10 rounded-xl text-[10px] font-black uppercase tracking-[0.15em] transition
+              border border-[#2A1F14] bg-white/[0.02] text-white/50
+              hover:bg-white/[0.05] hover:text-white/80 active:scale-[0.99] disabled:opacity-40
+            "
+          >
+            Close
+          </button>
+
+          {!isPending && (
             <button
-              onClick={onClose}
-              disabled={loading}
-              className="
-                flex-1
-                rounded-2xl
-                border
-                border-[#E8D9CC]
-                bg-white
-                py-3.5
-                text-sm
-                font-medium
-                text-[#2B1D16]
-                transition
-
-                hover:bg-[#FAF7F2]
-                disabled:opacity-50
-              "
-            >
-              Close
-            </button>
-
-            {!isPending && (
-              <button
-                onClick={handleSubmit}
-                disabled={
-                  loading ||
-                  !reason.trim()
+              onClick={handleSubmit}
+              disabled={loading || !reason.trim()}
+              className={`
+                flex-1 h-10 rounded-xl text-[10px] font-black uppercase tracking-[0.15em] transition
+                active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed
+                ${mode === "instant" 
+                  ? "bg-rose-600 text-white border-none hover:bg-rose-500" 
+                  : "bg-[#D4A97A]/10 text-[#D4A97A] border border-[#D4A97A]/20 hover:bg-[#D4A97A]/15"
                 }
-                className={`
-                  flex-1
-                  rounded-2xl
-                  py-3.5
-                  text-sm
-                  font-semibold
-                  text-white
-                  transition
-
-                  disabled:cursor-not-allowed
-                  disabled:opacity-50
-
-                  ${
-                    mode === "instant"
-                      ? `
-                        bg-red-600
-                        hover:bg-red-700
-                      `
-                      : `
-                        bg-[#8C593F]
-                        hover:bg-[#6F4732]
-                      `
-                  }
-                `}
-              >
-                {loading
-                  ? "Processing..."
-                  : mode === "instant"
-                  ? "Cancel Order"
-                  : "Send Cancellation Request"}
-              </button>
-            )}
-          </div>
+              `}
+            >
+              {loading
+                ? "Processing..."
+                : mode === "instant"
+                ? "Cancel Order"
+                : "Submit Request"}
+            </button>
+          )}
         </div>
+
       </div>
     </div>
   );

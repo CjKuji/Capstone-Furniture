@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-
 import { getAdminStats } from "@/services/dashboardService";
 import { useUser } from "@/hooks/useUser";
 
@@ -13,7 +12,6 @@ interface Stats {
   totalFurniture: number;
   publishedFurniture: number;
   totalUsers: number;
-  savedConfigs: number;
 }
 
 /* =========================================================
@@ -42,7 +40,6 @@ export default function AdminDashboard() {
       totalFurniture: 0,
       publishedFurniture: 0,
       totalUsers: 0,
-      savedConfigs: 0,
     }
   );
 
@@ -74,9 +71,16 @@ export default function AdminDashboard() {
         const data = await getAdminStats();
         if (!mounted) return;
 
-        setStats(data);
+        // Clean up the structural properties assigned to the state and cache boundaries
+        const formattedData: Stats = {
+          totalFurniture: data?.totalFurniture ?? 0,
+          publishedFurniture: data?.publishedFurniture ?? 0,
+          totalUsers: data?.totalUsers ?? 0,
+        };
 
-        dashboardCache = data;
+        setStats(formattedData);
+
+        dashboardCache = formattedData;
         dashboardCacheTime = Date.now();
       } catch (err) {
         console.error("DASHBOARD_ERROR", err);
@@ -117,10 +121,10 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* KPI */}
+      {/* KPI GRID (Reconfigured for 3 items instead of 4) */}
       {loading && !dashboardCache ? (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {Array.from({ length: 4 }).map((_, i) => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: 3 }).map((_, i) => (
             <div
               key={i}
               className="h-24 rounded-xl bg-white/5 border border-white/10 animate-pulse"
@@ -128,7 +132,7 @@ export default function AdminDashboard() {
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
 
           <KpiCard label="Furniture Items" value={stats.totalFurniture} />
 
@@ -139,12 +143,6 @@ export default function AdminDashboard() {
           />
 
           <KpiCard label="Users" value={stats.totalUsers} />
-
-          <KpiCard
-            label="Saved Configs"
-            value={stats.savedConfigs}
-            tone="muted"
-          />
 
         </div>
       )}

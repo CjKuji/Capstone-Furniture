@@ -5,7 +5,7 @@ import { useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 
 /* =========================================================
-   TYPES
+    TYPES
 ========================================================= */
 
 export type Conversation = {
@@ -30,14 +30,14 @@ type Props = {
 };
 
 /* =========================================================
-   HOOK
+    HOOK
 ========================================================= */
 
 export function useConversationList({ userId, role }: Props) {
   const queryClient = useQueryClient();
 
   /* =========================================================
-     FETCH (FULLY SAFE + NO UNION TYPES)
+      FETCH (FILTERED BY USER ID TO PREVENT LOUPS)
   ========================================================= */
 
   const conversationsQuery = useQuery<Conversation[], Error>({
@@ -45,20 +45,23 @@ export function useConversationList({ userId, role }: Props) {
     enabled: !!userId,
 
     queryFn: async (): Promise<Conversation[]> => {
+      // FIX: Added explicit filter targeting the authenticated consumer context
+      const fieldToFilter = role === "admin" ? "admin_id" : "user_id";
+
       const { data, error } = await supabase
         .from("conversations")
         .select("*")
+        .eq(fieldToFilter, userId)
         .order("last_message_at", { ascending: false });
 
       if (error) throw new Error(error.message);
 
-      // ALWAYS force array type
       return (data ?? []) as Conversation[];
     },
   });
 
   /* =========================================================
-     NORMALIZED ARRAY (CRITICAL FIX)
+      NORMALIZED ARRAY
   ========================================================= */
 
   const conversations: Conversation[] = Array.isArray(
@@ -68,7 +71,7 @@ export function useConversationList({ userId, role }: Props) {
     : [];
 
   /* =========================================================
-     UNREAD HELPER
+      UNREAD HELPER
   ========================================================= */
 
   const getUnreadCount = useCallback(
@@ -83,20 +86,23 @@ export function useConversationList({ userId, role }: Props) {
   );
 
   /* =========================================================
-     REALTIME SYNC (SAFE MERGE)
+      REALTIME SYNC (ROW LEVEL REALTIME ISOLATION)
   ========================================================= */
 
   useEffect(() => {
     if (!userId) return;
 
+    const fieldToFilter = role === "admin" ? "admin_id" : "user_id";
+
     const channel = supabase
-      .channel(`conversations:${userId}`)
+      .channel(`conversations_room:${userId}`)
       .on(
         "postgres_changes",
         {
           event: "*",
           schema: "public",
           table: "conversations",
+          filter: `${fieldToFilter}=eq.${userId}`, // FIX: Isolate websocket frames strictly to this user
         },
         (payload) => {
           const updated = payload.new as Partial<Conversation> | null;
@@ -129,10 +135,10 @@ export function useConversationList({ userId, role }: Props) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [userId, queryClient]);
+  }, [userId, role, queryClient]);
 
   /* =========================================================
-     CACHE UPDATE
+      CACHE UPDATE
   ========================================================= */
 
   const updateConversationCache = useCallback(
@@ -152,7 +158,7 @@ export function useConversationList({ userId, role }: Props) {
   );
 
   /* =========================================================
-     CLEAR UNREAD
+      CLEAR UNREAD
   ========================================================= */
 
   const clearUnread = useCallback(
@@ -168,14 +174,9 @@ export function useConversationList({ userId, role }: Props) {
     [updateConversationCache, role]
   );
 
-  /* =========================================================
-     RETURN
-  ========================================================= */
-
   return {
-    conversations, // ✅ always clean Conversation[]
+    conversations,
     isLoading: conversationsQuery.isLoading,
-
     getUnreadCount,
     updateConversationCache,
     clearUnread,

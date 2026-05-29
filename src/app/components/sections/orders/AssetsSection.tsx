@@ -17,96 +17,94 @@ type Props = {
 /* ========================================================= */
 
 export default function OrderAssetsSection({ items }: Props) {
-  const safe = Array.isArray(items) ? items : [];
+  const safeItems = Array.isArray(items) ? items : [];
 
   return (
-    <div
-      className="rounded-2xl p-5 space-y-5"
-      style={{
-        background: "rgba(255,255,255,0.03)",
-        border: "1px solid rgba(255,255,255,0.07)",
-      }}
-    >
-
-      {/* HEADER */}
+    <div className="space-y-6">
+      {/* SECTION HEADER */}
       <div className="flex items-center gap-3">
         <div className="w-1 h-4 rounded-full" style={{ background: "#D4A97A" }} />
         <div>
-          <h3 className="text-sm font-semibold text-white">Order Assets</h3>
-          <p className="text-xs mt-0.5" style={{ color: "rgba(212,169,122,0.5)" }}>
+          <p className="text-xs font-semibold text-white/40 uppercase tracking-widest">
+            Order Assets
+          </p>
+          <p className="text-[10px] text-white/20 uppercase tracking-wider mt-0.5">
             Visual snapshots per item
           </p>
         </div>
       </div>
 
-      {/* EMPTY */}
-      {safe.length === 0 && (
-        <p className="text-sm" style={{ color: "rgba(255,255,255,0.25)" }}>
-          No images available
-        </p>
+      {/* EMPTY STATE */}
+      {safeItems.length === 0 && (
+        <p className="text-sm text-white/25 italic">No images available.</p>
       )}
 
-      {/* ITEMS */}
-      {safe.map((item, i) => {
-        const images = (item.furniture_snapshot?.images ?? []).filter(
-          (img) => !!img?.url
-        );
+      {/* SNAPSHOT LIST */}
+      <div className="space-y-5">
+        {safeItems.map((item, i) => {
+          const images = (item.furniture_snapshot?.images ?? []).filter(
+            (img) => !!img?.url
+          );
 
-        if (!images.length) return null;
+          if (!images.length) return null;
 
-        return (
-          <div key={item.id} className="space-y-3">
+          return (
+            <div key={item.id} className="space-y-2.5">
+              {/* ITEM COMPONENT SUB-LABEL */}
+              <div className="flex items-center justify-between border-b border-white/[0.04] pb-1.5">
+                <span className="text-[10px] font-semibold text-white/30 uppercase tracking-widest">
+                  Item {i + 1}
+                </span>
+                <span className="text-xs font-medium text-white/50 max-w-[70%] truncate">
+                  {item.furniture_snapshot?.name ?? "Unnamed"}
+                </span>
+              </div>
 
-            {/* ITEM LABEL */}
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-white/50 uppercase tracking-widest">
-                Item {i + 1}
-              </span>
-              <span className="text-xs text-white/30">
-                {item.furniture_snapshot?.name ?? "Unnamed"}
-              </span>
-            </div>
+              {/* IMAGE GRID */}
+              <div className="grid grid-cols-3 gap-2">
+                {images.map((img, idx) => (
+                  <div
+                    key={idx}
+                    className="relative group aspect-square rounded-xl overflow-hidden"
+                    style={{
+                      background: "rgba(255,255,255,0.03)",
+                      border: img.isPrimary
+                        ? "1.5px solid rgba(212,169,122,0.4)"
+                        : "1px solid rgba(255,255,255,0.06)",
+                    }}
+                  >
+                    <img
+                      src={img.url}
+                      alt=""
+                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                    />
 
-            {/* IMAGE GRID */}
-            <div className="grid grid-cols-2 gap-2">
-              {images.map((img, idx) => (
-                <div
-                  key={idx}
-                  className="relative rounded-xl overflow-hidden aspect-video"
-                  style={{
-                    background: "rgba(0,0,0,0.3)",
-                    border: img.isPrimary
-                      ? "1.5px solid rgba(212,169,122,0.4)"
-                      : "1px solid rgba(255,255,255,0.06)",
-                  }}
-                >
-                  <img
-                    src={img.url}
-                    alt=""
-                    className="w-full h-full object-cover"
-                  />
+                    {/* PRIMARY BADGE */}
+                    {img.isPrimary && (
+                      <div
+                        className="absolute top-2 left-2 px-2 py-0.5 rounded-full text-[9px] font-semibold"
+                        style={{
+                          background: "rgba(212,169,122,0.2)",
+                          border: "1px solid rgba(212,169,122,0.35)",
+                          color: "#D4A97A",
+                        }}
+                      >
+                        Main
+                      </div>
+                    )}
 
-                  {/* PRIMARY BADGE — parent is relative, this is correct */}
-                  {img.isPrimary && (
+                    {/* HOVER OVERLAY */}
                     <div
-                      className="absolute top-2 left-2 px-2 py-0.5 rounded-full text-[9px] font-semibold"
-                      style={{
-                        background: "rgba(212,169,122,0.2)",
-                        border: "1px solid rgba(212,169,122,0.35)",
-                        color: "#D4A97A",
-                      }}
-                    >
-                      Primary
-                    </div>
-                  )}
-                </div>
-              ))}
+                      className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                      style={{ background: "rgba(212,169,122,0.06)" }}
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
-
-          </div>
-        );
-      })}
-
+          );
+        })}
+      </div>
     </div>
   );
 }

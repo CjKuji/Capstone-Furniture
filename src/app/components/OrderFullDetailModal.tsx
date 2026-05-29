@@ -1,61 +1,118 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import type { Order, OrderItem } from "@/types/order";
+import type { Conversation } from "@/hooks/useConversationList";
 
 import BasicInfoSection from "@/app/components/sections/orders/BasicInfoSection";
-import AssetsSection from "@/app/components/sections/orders/AssetsSection";
-import VariantsSection from "@/app/components/sections/orders/VariantsSection";
+import AssetsSection    from "@/app/components/sections/orders/AssetsSection";
+import VariantsSection  from "@/app/components/sections/orders/VariantsSection";
 import Furniture3DViewer from "@/app/components/Furniture3DViewer";
 
-/* ========================================================= */
-
+/* =========================================================
+    TYPES
+========================================================= */
 type Props = {
   order: Order;
   open: boolean;
   onClose: () => void;
   onViewFull?: () => void;
+  conversation?: Conversation;
 };
 
-/* ========================================================= */
-
+/* =========================================================
+    COMPONENT
+========================================================= */
 export default function OrderFullDetailModal({
   order,
   open,
   onClose,
   onViewFull,
+  conversation,
 }: Props) {
+  const [canRenderCanvas, setCanRenderCanvas] = useState(false);
+  const [isAnimateIn, setIsAnimateIn] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const frameRef = useRef<number | null>(null);
 
+  // Handle SSR hydration matching safely for Portals
+  useEffect(() => {
+    setMounted(true);
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      if (frameRef.current) cancelAnimationFrame(frameRef.current);
+    };
+  }, []);
+
+  // Strict animation sequencing & layout isolation engine
+  useEffect(() => {
+    if (!open) {
+      setIsAnimateIn(false);
+      setCanRenderCanvas(false);
+      return;
+    }
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    // Wait for DOM tree allocation to settle layout measurements
+    frameRef.current = requestAnimationFrame(() => {
+      frameRef.current = requestAnimationFrame(() => {
+        setIsAnimateIn(true);
+      });
+    });
+
+    // Defer WebGL/Canvas layout bindings securely until CSS transitions finalize tracking dimensions
+    // Changed to 500ms to guarantee DOM layout calculation is 100% complete before canvas initialization
+    timerRef.current = setTimeout(() => {
+      setCanRenderCanvas(true);
+    }, 500); 
+
+    return () => {
+      if (frameRef.current) cancelAnimationFrame(frameRef.current);
+      if (timerRef.current) clearTimeout(timerRef.current);
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [open]);
+
+  /* ── MEMOIZED DATA NORMALIZATION ARCHITECTURE ── */
   const items: OrderItem[] = useMemo(() => {
-    return (order.order_items ?? []).map((item) => ({
-      ...item,
+    if (!order?.order_items) return [];
+    return order.order_items.map((item) => {
+      const snapshot = item.furniture_snapshot;
+      const rawDimensions = (snapshot as any)?.dimensions;
 
-      furniture_snapshot: item.furniture_snapshot
-        ? {
-            id:          item.furniture_snapshot.id,
-            name:        item.furniture_snapshot.name        ?? undefined,
-            description: item.furniture_snapshot.description ?? undefined,
-            category:    item.furniture_snapshot.category    ?? undefined,
-            base_price:  item.furniture_snapshot.base_price  ?? undefined,
-            model_url:   item.furniture_snapshot.model_url   ?? undefined,
-            width_cm:    item.furniture_snapshot.width_cm    ?? undefined,
-            depth_cm:    item.furniture_snapshot.depth_cm    ?? undefined,
-            height_cm:   item.furniture_snapshot.height_cm   ?? undefined,
-            images:      item.furniture_snapshot.images      ?? undefined,
-          }
-        : undefined,
-
-      variant_snapshot: item.variant_snapshot
-        ? {
-            id:                item.variant_snapshot.id,
-            name:              item.variant_snapshot.name              ?? undefined,
-            texture_url:       item.variant_snapshot.texture_url       ?? undefined,
-            preview_image_url: item.variant_snapshot.preview_image_url ?? undefined,
-            price_adjustment:  item.variant_snapshot.price_adjustment  ?? undefined,
-          }
-        : undefined,
-    }));
-  }, [order.order_items]);
+      return {
+        ...item,
+        furniture_snapshot: snapshot
+          ? {
+              id:          snapshot.id,
+              name:        snapshot.name        ?? undefined,
+              description: snapshot.description ?? undefined,
+              category:    snapshot.category    ?? undefined,
+              base_price:  snapshot.base_price  ?? undefined,
+              model_url:   snapshot.model_url   ?? undefined,
+              width_cm:    rawDimensions?.width_cm  ?? undefined,
+              depth_cm:    rawDimensions?.depth_cm  ?? undefined,
+              height_cm:   rawDimensions?.height_cm ?? undefined,
+              images:      snapshot.images      ?? undefined,
+            }
+          : undefined,
+        variant_snapshot: item.variant_snapshot
+          ? {
+              id:                item.variant_snapshot.id,
+              name:              item.variant_snapshot.name              ?? undefined,
+              texture_url:       item.variant_snapshot.texture_url       ?? undefined,
+              preview_image_url: item.variant_snapshot.preview_image_url ?? undefined,
+              price_adjustment:  item.variant_snapshot.price_adjustment  ?? undefined,
+            }
+          : undefined,
+      };
+    });
+  }, [order?.order_items]);
 
   const totalItems = useMemo(
     () => items.reduce((sum, i) => sum + (i.quantity ?? 0), 0),
@@ -67,60 +124,96 @@ export default function OrderFullDetailModal({
     [items]
   );
 
-  if (!open) return null;
+  // Avoid running tracking elements before server framework completion cycles
+  if (!mounted) return null;
 
-  /* ================= UI ================= */
+  if (!order || !order.id) {
+    return createPortal(
+      <div className={`fixed inset-0 z-[99999] flex items-center justify-center p-4 backdrop-blur-md bg-black/80 transition-all duration-300 ${open ? "opacity-100 visible" : "opacity-0 invisible pointer-events-none"}`}>
+        <div className="w-full max-w-md bg-[#0A0705] border border-white/[0.06] rounded-2xl p-8 text-center shadow-2xl animate-pulse">
+          <p className="text-[10px] font-black uppercase tracking-[0.25em] text-[#D4A97A]">
+            Initializing Order Manifest...
+          </p>
+        </div>
+      </div>,
+      document.body
+    );
+  }
 
-  return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-
+  /* ── MAIN MODAL CONTENT TEMPLATE ── */
+  return createPortal(
+    <div
+      className={`fixed inset-0 z-[99999] flex items-center justify-center p-0 sm:p-6 backdrop-blur-md overflow-hidden transition-all duration-300 ease-out ${
+        open ? "opacity-100 visible" : "opacity-0 invisible pointer-events-none"
+      }`}
+      style={{
+        backgroundColor: "rgba(6, 4, 3, 0.85)",
+        willChange: "opacity",
+      }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
       <div
-        className="w-full max-w-7xl max-h-[95vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden"
-        style={{ background: "#120C07", border: "1px solid rgba(212,169,122,0.15)" }}
+        className={`
+          relative w-full flex flex-col
+          rounded-none sm:rounded-2xl
+          h-screen sm:h-[calc(100vh-48px)]
+          max-w-full sm:max-w-[95%] md:max-w-[92%] lg:max-w-[90%] xl:max-w-[85%] 2xl:max-w-[1600px]
+          shadow-[0_24px_60px_rgba(0,0,0,0.8)] overflow-hidden
+          border-0 sm:border border-white/[0.06] bg-[#0A0705]
+          transition-all duration-300 ease-out
+          ${isAnimateIn ? "transform scale-100 translate-y-0" : "transform scale-[0.99] translate-y-4"}
+        `}
+        style={{ willChange: "transform, opacity" }}
       >
+        <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-[#D4A97A]/50 to-transparent flex-shrink-0" />
 
         {/* ── HEADER ── */}
         <div
-          className="flex items-center justify-between px-6 py-4 shrink-0"
-          style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
+          className="flex items-center justify-between px-5 sm:px-8 py-4 shrink-0 bg-[#0E0A07]"
+          style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
         >
-          <div>
-            <h2 className="text-base font-semibold text-white tracking-tight">
-              Order #{order.order_reference_code}
-            </h2>
-            <p className="text-xs mt-0.5" style={{ color: "rgba(212,169,122,0.5)" }}>
-              {new Date(order.created_at).toLocaleString()}
+          <div className="min-w-0">
+            <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-[#D4A97A]/70 mb-0.5">
+              Detailed Breakdown
             </p>
+            <div className="flex items-baseline gap-2.5">
+              <h2 className="text-base sm:text-lg font-bold text-white tracking-tight truncate">
+                Order #{order.order_reference_code ?? "Pending"}
+              </h2>
+              <span className="text-xs text-white/30 hidden sm:inline">·</span>
+              <p className="text-xs text-white/40 font-medium hidden sm:inline">
+                {totalItems} item{totalItems !== 1 ? "s" : ""} configured
+              </p>
+            </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3 shrink-0">
+            {order.created_at && (
+              <p className="text-[11px] text-white/30 font-medium text-right mr-1 hidden md:block">
+                Placed {new Date(order.created_at).toLocaleDateString(undefined, { dateStyle: "medium" })}
+              </p>
+            )}
             {onViewFull && (
               <button
                 onClick={onViewFull}
-                className="text-xs px-3 py-1.5 rounded-xl font-medium transition"
-                style={{
-                  background: "rgba(212,169,122,0.12)",
-                  color: "#D4A97A",
-                  border: "1px solid rgba(212,169,122,0.2)",
-                }}
+                className="text-[10px] px-3.5 py-1.5 rounded-lg font-semibold uppercase tracking-wider transition-all duration-200 flex items-center bg-[#D4A97A]/10 text-[#D4A97A] border border-[#D4A97A]/20 hover:bg-[#D4A97A]/15 active:scale-95"
               >
                 Full View
               </button>
             )}
-
             <button
               onClick={onClose}
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition text-lg leading-none"
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-white/40 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/[0.06] transition-all duration-200 text-xs"
             >
               ✕
             </button>
           </div>
         </div>
 
-        {/* ── BODY ── */}
-        <div className="overflow-y-auto p-6 space-y-8">
+        {/* ── SCROLLABLE BODY ── */}
+        <div className="overflow-y-auto flex-1 p-5 sm:p-8 space-y-8 focus:outline-none custom-scrollbar bg-gradient-to-b from-[#0A0705] to-[#070504]">
 
-          {/* ── ORDER ITEMS ── */}
+          {/* ── ORDER ITEMS LIST ── */}
           {items.map((item, index) => {
             const snapshot = item.furniture_snapshot;
             const variant  = item.variant_snapshot;
@@ -130,14 +223,9 @@ export default function OrderFullDetailModal({
               return (
                 <div
                   key={item.id}
-                  className="rounded-xl p-4 text-sm"
-                  style={{
-                    background: "rgba(255,255,255,0.03)",
-                    border: "1px solid rgba(255,255,255,0.07)",
-                    color: "rgba(255,255,255,0.3)",
-                  }}
+                  className="rounded-xl p-8 text-xs text-center border border-dashed border-white/[0.06] bg-white/[0.01] text-white/25"
                 >
-                  No snapshot for item {index + 1}
+                  Missing historical snapshot layout available for Item {index + 1}
                 </div>
               );
             }
@@ -145,64 +233,78 @@ export default function OrderFullDetailModal({
             return (
               <div
                 key={item.id}
-                className="rounded-2xl overflow-hidden"
-                style={{
-                  background: "rgba(255,255,255,0.02)",
-                  border: "1px solid rgba(255,255,255,0.07)",
-                }}
+                className="rounded-2xl overflow-hidden bg-[#0D0907]/60 border border-white/[0.04] shadow-inner"
               >
-
-                {/* ITEM HEADER */}
+                {/* ITEM BLOCK HEADER */}
                 <div
-                  className="flex items-center justify-between px-5 py-3"
-                  style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}
+                  className="flex items-center justify-between px-5 sm:px-6 py-3.5 bg-white/[0.02]"
+                  style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="w-1 h-4 rounded-full" style={{ background: "#D4A97A" }} />
-                    <h3 className="text-sm font-semibold text-white">
-                      {snapshot.name ?? "Unnamed"} × {item.quantity}
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-1 h-4 rounded-full shrink-0" style={{ background: "#D4A97A" }} />
+                    <h3 className="text-xs sm:text-sm font-semibold text-white truncate tracking-wide">
+                      {snapshot.name ?? "Unnamed Design"}
+                      <span className="text-white/20 font-normal mx-2 text-xs">×</span>
+                      <span className="text-sm font-bold text-[#D4A97A]">{item.quantity}</span>
                     </h3>
                   </div>
-                  <span
-                    className="text-xs px-2.5 py-1 rounded-full"
-                    style={{
-                      background: "rgba(212,169,122,0.1)",
-                      color: "rgba(212,169,122,0.6)",
-                      border: "1px solid rgba(212,169,122,0.15)",
-                    }}
-                  >
+                  <span className="text-[9px] font-bold uppercase tracking-[0.2em] px-3 py-1 rounded-full shrink-0 ml-2 border bg-[#D4A97A]/5 text-[#D4A97A] border-[#D4A97A]/20">
                     Item {index + 1}
                   </span>
                 </div>
 
-                {/* ITEM BODY */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 p-5">
+                {/* LAYOUT DETAILS SPLIT */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 p-5 sm:p-6 items-start">
 
-                  {/* 3D VIEWER */}
-                  <div
-                    className="rounded-2xl flex items-center justify-center min-h-[320px] overflow-hidden"
-                    style={{
-                      background: "#0F0A06",
-                      border: "1px solid rgba(255,255,255,0.05)",
-                    }}
-                  >
+                  {/* VIEWPORT CONTROLLER (LEFT COLUMN) */}
+                  <div className="lg:col-span-5 w-full min-w-0">
                     {modelUrl ? (
-                      <Furniture3DViewer
-                        modelUrl={modelUrl}
-                        selectedVariantTextureUrl={variant?.texture_url}
-                      />
+                      <div className="
+                        relative w-full rounded-xl overflow-hidden bg-[#050302]
+                        aspect-square sm:aspect-video lg:aspect-square
+                        border border-white/[0.04] shadow-2xl
+                      ">
+                        {canRenderCanvas ? (
+                          <Furniture3DViewer
+                            modelUrl={modelUrl}
+                            selectedVariantTextureUrl={variant?.texture_url}
+                            dimensions={{
+                              width_cm:  snapshot.width_cm,
+                              depth_cm:  snapshot.depth_cm,
+                              height_cm: snapshot.height_cm,
+                            }}
+                          />
+                        ) : (
+                          <div className="absolute inset-0 flex items-center justify-center bg-[#050302]">
+                            <div className="text-[10px] text-[#D4A97A] font-bold uppercase tracking-[0.25em] animate-pulse">
+                              Constructing Viewport...
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     ) : (
-                      <p className="text-sm" style={{ color: "rgba(255,255,255,0.2)" }}>
-                        No 3D model available
-                      </p>
+                      <div className="rounded-xl flex items-center justify-center aspect-square sm:aspect-video lg:aspect-square w-full bg-[#050302] border border-white/[0.04]">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/20">
+                          No 3D Space Available
+                        </p>
+                      </div>
                     )}
                   </div>
 
-                  {/* DETAIL SECTIONS */}
-                  <div className="space-y-4">
-                    <BasicInfoSection items={[item]} />
-                    <AssetsSection    items={[item]} />
-                    <VariantsSection  items={[item]} />
+                  {/* INFO SECTION BLOCKS (RIGHT COLUMN) */}
+                  <div className="lg:col-span-7 flex flex-col gap-6 w-full min-w-0">
+                    <div className="w-full bg-white/[0.01] p-4 rounded-xl border border-white/[0.02]">
+                      <BasicInfoSection items={[item]} />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5 w-full">
+                      <div className="w-full flex flex-col bg-white/[0.01] p-4 rounded-xl border border-white/[0.02]">
+                        <AssetsSection items={[item]} />
+                      </div>
+                      <div className="w-full flex flex-col bg-white/[0.01] p-4 rounded-xl border border-white/[0.02]">
+                        <VariantsSection items={[item]} />
+                      </div>
+                    </div>
                   </div>
 
                 </div>
@@ -210,73 +312,68 @@ export default function OrderFullDetailModal({
             );
           })}
 
-          {/* ── ORDER SUMMARY ── */}
-          <div
-            className="rounded-2xl p-6 space-y-4"
-            style={{
-              background: "rgba(255,255,255,0.03)",
-              border: "1px solid rgba(255,255,255,0.07)",
-            }}
-          >
-
-            <div className="flex items-center gap-3">
-              <div className="w-1 h-4 rounded-full" style={{ background: "#D4A97A" }} />
-              <h3 className="text-sm font-semibold text-white">Order Summary</h3>
+          {/* ── GENERAL SUMMARY TILES ── */}
+          <div className="rounded-2xl p-5 sm:p-6 space-y-5 bg-[#0E0A07]/40 border border-white/[0.04]">
+            <div className="flex items-center gap-2.5">
+              <div className="w-1 h-3.5 bg-[#D4A97A] rounded-full" />
+              <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/40">Fulfillment Summary</h3>
             </div>
 
-            <div className="space-y-2">
-              {[
-                { label: "Customer",  value: order.customer_name },
-                { label: "Method",    value: order.delivery_method },
-                ...(order.delivery_method !== "pickup"
-                  ? [{ label: "Phone", value: order.phone_number }]
-                  : []),
-                {
-                  label: order.delivery_method === "pickup" ? "Pickup" : "Address",
-                  value: order.delivery_method === "pickup"
-                    ? (order.pickup_location ?? "Store / Warehouse")
-                    : order.delivery_address,
-                },
-              ].map(({ label, value }) => (
-                <div key={label} className="flex justify-between items-start gap-6">
-                  <span className="text-xs text-white/35 shrink-0">{label}</span>
-                  <span className="text-xs font-medium text-white/75 text-right capitalize">
-                    {value ?? "—"}
-                  </span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-12 gap-y-4">
+              <div className="flex justify-between items-baseline gap-4 py-1.5 border-b border-white/[0.03]">
+                <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-white/30 shrink-0">Customer</span>
+                <span className="text-xs font-medium text-white/70 text-right capitalize truncate max-w-[75%]">{order.customer_name ?? "—"}</span>
+              </div>
+              <div className="flex justify-between items-baseline gap-4 py-1.5 border-b border-white/[0.03]">
+                <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-white/30 shrink-0">Method</span>
+                <span className="text-xs font-medium text-white/70 text-right capitalize truncate max-w-[75%]">{order.delivery_method ?? "—"}</span>
+              </div>
+              {order.delivery_method !== "pickup" && (
+                <div className="flex justify-between items-baseline gap-4 py-1.5 border-b border-white/[0.03]">
+                  <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-white/30 shrink-0">Contact</span>
+                  <span className="text-xs font-medium text-white/70 text-right capitalize truncate max-w-[75%]">{order.phone_number ?? "—"}</span>
                 </div>
-              ))}
+              )}
+              <div className="flex justify-between items-baseline gap-4 py-1.5 border-b border-white/[0.03]">
+                <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-white/30 shrink-0">
+                  {order.delivery_method === "pickup" ? "Pickup Point" : "Shipping Destination"}
+                </span>
+                <span className="text-xs font-medium text-white/70 text-right capitalize truncate max-w-[75%]">
+                  {order.delivery_method === "pickup" ? (order.pickup_location ?? "Store Warehouse") : (order.delivery_address ?? "—")}
+                </span>
+              </div>
             </div>
 
-            {/* TOTAL */}
             <div
-              className="flex justify-between items-center pt-4"
-              style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}
+              className="flex justify-between items-center pt-5"
+              style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}
             >
-              <span className="text-sm text-white/50">
-                Total Items: <span className="text-white font-semibold">{totalItems}</span>
+              <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-white/40">
+                Aggregated Units: <span className="text-white font-semibold ml-1.5">{totalItems}</span>
               </span>
-              <span className="text-lg font-bold" style={{ color: "#D4A97A" }}>
-                ₱{totalPrice.toLocaleString()}
-              </span>
+              <div className="text-right">
+                <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-[#D4A97A] mb-0.5">Calculated Total</p>
+                <span className="text-xl sm:text-2xl font-bold tracking-tight text-[#E8C98A]">
+                  ₱{totalPrice.toLocaleString()}
+                </span>
+              </div>
             </div>
-
           </div>
 
-          {/* ── CLOSE ── */}
           <button
             onClick={onClose}
-            className="w-full rounded-xl py-3 text-sm font-semibold transition"
-            style={{
-              background: "rgba(255,255,255,0.05)",
-              color: "rgba(255,255,255,0.5)",
-              border: "1px solid rgba(255,255,255,0.08)",
-            }}
+            className="
+              w-full h-11 rounded-xl text-[10px] font-bold uppercase tracking-[0.2em] transition-all duration-200
+              border border-white/[0.04] bg-white/[0.01] text-white/40
+              hover:bg-white/[0.03] hover:text-white/70 active:scale-[0.99]
+            "
           >
-            Close
+            Close Detail Overview
           </button>
 
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
