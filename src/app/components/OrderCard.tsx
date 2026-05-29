@@ -53,12 +53,13 @@ const getOrderMessage = (order: Order): string => {
 
 type Props = {
   order: Order;
+  userId: string; 
   conversation?: {
     customer_unread_count?: number;
   };
 };
 
-export default function OrderCard({ order, conversation }: Props) {
+export default function OrderCard({ order, userId, conversation }: Props) {
   /* ── MODAL VISIBILITY STATES ── */
   const [openDetail, setOpenDetail] = useState(false);
   const [openChat, setOpenChat] = useState(false);
@@ -121,6 +122,7 @@ export default function OrderCard({ order, conversation }: Props) {
   const { canCancel, canPay, payButtonLabel } = useMemo(() => {
     if (!order) return { canCancel: false, canPay: false, payButtonLabel: "Pay Now" };
 
+    /* ── PREVIOUS LOGIC (COMMENTED OUT) ──
     const inProductionFlow =
       order.order_status === "in_production" ||
       order.order_status === "ready_for_pickup" ||
@@ -135,9 +137,17 @@ export default function OrderCard({ order, conversation }: Props) {
       order.order_status === "shipped" ||
       order.order_status === "in_transit" ||
       order.order_status === "completed";
+    
+    const oldCanCancel = !isFinalState && !inProductionFlow && !isPaidState && order.cancel_status !== "requested";
+    */
+
+    // NEW LOGIC: Only cancel if accepted/requested AND unpaid AND NO accepted charges
+    const isEarlyStatus = order.order_status === "accepted" || order.order_status === "requested";
+    const isUnpaid = order.payment_status === "unpaid";
+    const hasNoAcceptedCharges = order.charge_status !== "accepted";
 
     return {
-      canCancel: !isFinalState && !inProductionFlow && !isPaidState && order.cancel_status !== "requested",
+      canCancel: isEarlyStatus && isUnpaid && hasNoAcceptedCharges && order.cancel_status !== "requested",
       canPay: payNowValue > 0 && order.charge_status === "accepted" && order.order_status !== "cancelled",
       payButtonLabel: totalPaid > 0 ? "Pay Remaining" : "Pay Now",
     };
@@ -168,7 +178,7 @@ export default function OrderCard({ order, conversation }: Props) {
 
   const handleConfirmCancel = async (reason: string) => {
     if (!order?.id) return;
-    await cancelOrder({ orderId: order.id, userId: order.user_id, reason });
+    await cancelOrder({ orderId: order.id, userId: userId, reason });
     setOpenCancel(false);
   };
 
@@ -176,154 +186,76 @@ export default function OrderCard({ order, conversation }: Props) {
 
   return (
     <>
-      {/* ── CARD SHELL WITH NATURAL FLEX HEIGHT ── */}
-      <div className="
-        relative flex flex-col
-        w-full max-w-md mx-auto
-        rounded-2xl overflow-hidden
-        border border-[#423120]
-        bg-gradient-to-b from-[#140F0A] to-[#0E0A06]
-        shadow-[0_12px_40px_rgba(0,0,0,0.7)]
-        transition-all duration-300 ease-out
-        hover:border-[#D4A97A]/50
-        hover:shadow-[0_20px_48px_rgba(212,169,122,0.08),0_24px_64px_rgba(0,0,0,0.8)]
-      ">
-        {/* TOP GLOW ACCENT */}
+      <div className="relative flex flex-col w-full max-w-md mx-auto rounded-2xl overflow-hidden border border-[#423120] bg-gradient-to-b from-[#140F0A] to-[#0E0A06] shadow-[0_12px_40px_rgba(0,0,0,0.7)] transition-all duration-300 ease-out hover:border-[#D4A97A]/50 hover:shadow-[0_20px_48px_rgba(212,169,122,0.08),0_24px_64px_rgba(0,0,0,0.8)]">
         <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-[#D4A97A]/80 to-transparent flex-shrink-0" />
 
-        {/* ── HEADER ── */}
         <div className="flex-shrink-0 px-5 pt-4 pb-2">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <p className="text-[9px] font-black tracking-[0.22em] text-[#A68056] uppercase mb-0.5">
-                Order Reference
-              </p>
-              <h2 className="text-[15px] font-bold text-white tracking-wide leading-tight truncate">
-                {order.order_reference_code ?? "Pending Order"}
-              </h2>
+              <p className="text-[9px] font-black tracking-[0.22em] text-[#A68056] uppercase mb-0.5">Order Reference</p>
+              <h2 className="text-[15px] font-bold text-white tracking-wide leading-tight truncate">{order.order_reference_code ?? "Pending Order"}</h2>
               {order.created_at && (
-                <p className="text-[10px] text-white/40 mt-0.5">
-                  Ordered on {new Date(order.created_at).toLocaleDateString()}
-                </p>
+                <p className="text-[10px] text-white/40 mt-0.5">Ordered on {new Date(order.created_at).toLocaleDateString()}</p>
               )}
             </div>
-
-            <span className={`
-              flex-shrink-0 px-3 py-1 rounded-full
-              text-[9px] font-black uppercase tracking-[0.15em]
-              border backdrop-blur-sm bg-black/30 shadow-inner ${statusUI?.color ?? "text-white"}
-            `}>
+            <span className={`flex-shrink-0 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-[0.15em] border backdrop-blur-sm bg-black/30 shadow-inner ${statusUI?.color ?? "text-white"}`}>
               {statusUI?.label ?? "Processing"}
             </span>
           </div>
         </div>
 
-        {/* ── UNIFIED QUANTITY BADGE ROW ── */}
         <div className="px-5 mb-2.5 flex-shrink-0">
           <div className="flex items-center gap-2 bg-white/[0.02] border border-[#2A1F14] rounded-xl px-3 py-1.5">
-            <span className="text-[11px] font-black text-[#D4A97A] bg-[#D4A97A]/10 px-1.5 py-0.5 rounded-md">
-              x{totalPieces}
-            </span>
-            <span className="text-[11.5px] font-semibold text-white/90 tracking-wide">
-              Furniture Design
-            </span>
+            <span className="text-[11px] font-black text-[#D4A97A] bg-[#D4A97A]/10 px-1.5 py-0.5 rounded-md">x{totalPieces}</span>
+            <span className="text-[11.5px] font-semibold text-white/90 tracking-wide">Furniture Design</span>
           </div>
         </div>
 
-        {/* ── FINANCIALS BLOCK ── */}
         <div className="flex-shrink-0 mx-5 mb-2.5">
           <div className="grid grid-cols-3 divide-x divide-[#38291A] rounded-t-xl border-t border-x border-[#38291A] bg-[#070503] overflow-hidden shadow-inner">
             <FinStat label="Total" value={`₱${finalTotal.toLocaleString()}`} color="text-[#E8C98A]" />
-            <FinStat
-              label="Paid"
-              value={paymentsLoading ? "…" : `₱${totalPaid.toLocaleString()}`}
-              color="text-emerald-400"
-            />
-            <FinStat
-              label="Balance"
-              value={`₱${remaining.toLocaleString()}`}
-              color={remaining > 0 ? "text-amber-500 font-bold" : "text-emerald-400"}
-            />
+            <FinStat label="Paid" value={paymentsLoading ? "…" : `₱${totalPaid.toLocaleString()}`} color="text-emerald-400" />
+            <FinStat label="Balance" value={`₱${remaining.toLocaleString()}`} color={remaining > 0 ? "text-amber-500 font-bold" : "text-emerald-400"} />
           </div>
-
-          {/* Quick Adjustment Cost Trace Line */}
           <div className="flex items-center justify-between border border-[#38291A] bg-[#110B06] px-3 py-1.5 rounded-b-xl text-[10px]">
-            <span className="text-white/40 font-medium">
-              Base Quote: <span className="text-white/70">₱{baseTotal.toLocaleString()}</span>
-            </span>
+            <span className="text-white/40 font-medium">Base Quote: <span className="text-white/70">₱{baseTotal.toLocaleString()}</span></span>
             <span className={`font-semibold ${chargesTotal >= 0 ? "text-amber-500" : "text-emerald-400"}`}>
               {chargesTotal >= 0 ? "+" : ""} Fees: ₱{chargesTotal.toLocaleString()}
             </span>
           </div>
         </div>
 
-        {/* ── SYSTEM PIPELINE MESSAGE ── */}
         <div className="flex-shrink-0 mx-5 mb-2.5">
           <div className="flex items-start gap-2.5 rounded-xl bg-[#1B120A] border border-[#38291A] px-3.5 py-2">
             <div className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[#D4A97A] shadow-[0_0_8px_#D4A97A]" />
-            <p className="text-[11px] leading-relaxed text-white/70 italic">
-              {orderMessage}
-            </p>
+            <p className="text-[11px] leading-relaxed text-white/70 italic">{orderMessage}</p>
           </div>
         </div>
 
-        {/* ── CUSTOMER ARCHITECTURE META ROWS ── */}
         <div className="flex-shrink-0 mx-5 mb-3.5 space-y-1.5">
           <InfoRow label="Customer" value={customerName} />
           <InfoRow label="Contact" value={phoneNumber} />
-          <InfoRow
-            label={isPickup ? "Pickup" : "Shipping"}
-            value={isPickup ? pickupLocation : deliveryAddress}
-            truncate
-          />
+          <InfoRow label={isPickup ? "Pickup" : "Shipping"} value={isPickup ? pickupLocation : deliveryAddress} truncate />
         </div>
 
-        {/* ── FOOTER INTERACTION CONSOLE ── */}
         <div className="mt-auto border-t border-[#2A1F14] bg-[#080604] px-5 py-3.5 flex flex-col gap-3">
-          
-          {/* Charges and Global Charge Status Header Status Block */}
           <div className="flex items-center justify-between border-b border-[#1C150E] pb-2">
             <div className="flex flex-col gap-0.5">
-              <span className="text-[9px] font-black uppercase tracking-[0.18em] text-white/30">
-                Adjustments ({safeCharges.length})
-              </span>
+              <span className="text-[9px] font-black uppercase tracking-[0.18em] text-white/30">Adjustments ({safeCharges.length})</span>
               <span className={`text-[9px] font-bold uppercase tracking-wider border px-1.5 py-0.5 rounded ${chargeStatusBadge}`}>
                 {chargeStatusLabel}
               </span>
             </div>
-            <button
-              onClick={() => setOpenCharges(true)}
-              className="text-[10px] font-black uppercase tracking-wider text-[#D4A97A] hover:text-[#E5BC8E] transition-colors"
-            >
+            <button onClick={() => setOpenCharges(true)} className="text-[10px] font-black uppercase tracking-wider text-[#D4A97A] hover:text-[#E5BC8E] transition-colors">
               Statement →
             </button>
           </div>
 
-          {/* Details & Chat Controllers */}
           <div className="grid grid-cols-2 gap-2 w-full">
-            <button
-              onClick={() => setOpenDetail(true)}
-              className="
-                h-9 rounded-xl
-                border border-[#38291A] bg-white/[0.04]
-                text-[10px] font-black uppercase tracking-[0.1em] text-white/70
-                hover:bg-white/[0.08] hover:text-white/90 hover:border-[#4E3A25]
-                transition-all duration-200
-              "
-            >
+            <button onClick={() => setOpenDetail(true)} className="h-9 rounded-xl border border-[#38291A] bg-white/[0.04] text-[10px] font-black uppercase tracking-[0.1em] text-white/70 hover:bg-white/[0.08] hover:text-white/90 hover:border-[#4E3A25] transition-all duration-200">
               Details
             </button>
-
-            <button
-              onClick={() => setOpenChat(true)}
-              className="
-                relative h-9 rounded-xl
-                bg-[#C49A6C] hover:bg-[#D4A97A] active:scale-[0.97]
-                text-[10px] font-black uppercase tracking-[0.1em] text-[#0E0A06]
-                shadow-[0_4px_12px_rgba(196,154,108,0.2)]
-                transition-all duration-200
-              "
-            >
+            <button onClick={() => setOpenChat(true)} className="relative h-9 rounded-xl bg-[#C49A6C] hover:bg-[#D4A97A] active:scale-[0.97] text-[10px] font-black uppercase tracking-[0.1em] text-[#0E0A06] shadow-[0_4px_12px_rgba(196,154,108,0.2)] transition-all duration-200">
               Chat
               {unreadCount > 0 && (
                 <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[8px] font-black text-white shadow-lg animate-pulse">
@@ -333,34 +265,18 @@ export default function OrderCard({ order, conversation }: Props) {
             </button>
           </div>
 
-          {/* Action Processing Controller Module */}
           {canPay && (
-            <button
-              onClick={() => setOpenPay(true)}
-              className="
-                h-9 w-full rounded-xl
-                bg-gradient-to-r from-[#C49A6C] via-[#D4A97A] to-[#E8C98A]
-                text-[10px] font-black uppercase tracking-[0.12em] text-[#0E0A06]
-                shadow-[0_4px_12px_rgba(212,169,122,0.2)] hover:shadow-[0_4px_20px_rgba(212,169,122,0.45)]
-                hover:brightness-105 active:scale-[0.99]
-                transition-all duration-200
-              "
-            >
+            <button onClick={() => setOpenPay(true)} className="h-9 w-full rounded-xl bg-gradient-to-r from-[#C49A6C] via-[#D4A97A] to-[#E8C98A] text-[10px] font-black uppercase tracking-[0.12em] text-[#0E0A06] shadow-[0_4px_12px_rgba(212,169,122,0.2)] hover:shadow-[0_4px_20px_rgba(212,169,122,0.45)] hover:brightness-105 active:scale-[0.99] transition-all duration-200">
               {payButtonLabel}
             </button>
           )}
 
-          {/* Secondary Cancellation Dynamic Inline Alert Row */}
-          {order.cancel_status === "requested" && (
+          {canCancel && (
             <div className="pt-1 border-t border-[#1C150E] flex items-center justify-center">
               <button
                 onClick={() => setOpenCancel(true)}
                 disabled={isCancelling}
-                className="
-                  text-[9px] font-black uppercase tracking-[0.18em]
-                  text-rose-400 hover:text-rose-300 disabled:opacity-40
-                  transition-colors duration-200
-                "
+                className="text-[9px] font-black uppercase tracking-[0.18em] text-rose-400 hover:text-rose-300 disabled:opacity-40 transition-colors duration-200"
               >
                 {isCancelling ? "Cancelling…" : "Cancel Order"}
               </button>
@@ -369,95 +285,30 @@ export default function OrderCard({ order, conversation }: Props) {
         </div>
       </div>
 
-      {/* ── MODALS (MOUNTED PERSISTENTLY VIA TAILWIND DP WRAPPERS) ── */}
-      <div className={openDetail ? "block" : "hidden"}>
-        <OrderFullDetailModal
-          key={`cust-detail-${order.id}`}
-          open={openDetail}
-          onClose={() => setOpenDetail(false)}
-          order={order}
-        />
-      </div>
-
-      <div className={openChat ? "block" : "hidden"}>
-        <ChatModal 
-          open={openChat} 
-          onClose={() => setOpenChat(false)} 
-          order={order} 
-          currentUserId={order.user_id || "client"} 
-          senderType="customer" 
-        />
-      </div>
-
-      <div className={openCharges ? "block" : "hidden"}>
-        <UserChargesModal
-          open={openCharges}
-          onClose={() => setOpenCharges(false)}
-          charges={safeCharges}
-          order={order}
-          userId={order.user_id || "client"}
-        />
-      </div>
-
-      <div className={openPay ? "block" : "hidden"}>
-        <PayModal
-          open={openPay}
-          onClose={() => setOpenPay(false)}
-          order={order}
-          totalAmount={finalTotal}
-        />
-      </div>
-
-      <div className={openCancel ? "block" : "hidden"}>
-        <CancelOrderModal
-          open={openCancel}
-          onClose={() => setOpenCancel(false)}
-          order={order}
-          mode="request"
-          onConfirm={handleConfirmCancel}
-        />
-      </div>
+      {/* ── MODALS ── */}
+      <OrderFullDetailModal open={openDetail} onClose={() => setOpenDetail(false)} order={order} />
+      <ChatModal open={openChat} onClose={() => setOpenChat(false)} order={order} currentUserId={userId} senderType="customer" />
+      <UserChargesModal open={openCharges} onClose={() => setOpenCharges(false)} charges={safeCharges} order={order} userId={userId} />
+      <PayModal open={openPay} onClose={() => setOpenPay(false)} order={order} totalAmount={finalTotal} />
+      <CancelOrderModal open={openCancel} onClose={() => setOpenCancel(false)} order={order} mode="request" onConfirm={handleConfirmCancel} />
     </>
   );
 }
 
-/* ── SUB-COMPONENTS ── */
-function FinStat({
-  label,
-  value,
-  color = "text-white",
-}: {
-  label: string;
-  value: string;
-  color?: string;
-}) {
+function FinStat({ label, value, color = "text-white" }: { label: string; value: string; color?: string }) {
   return (
     <div className="flex flex-col items-center justify-center py-2 px-1">
-      <p className="text-[8px] font-black uppercase tracking-[0.18em] text-white/30 mb-0.5">
-        {label}
-      </p>
+      <p className="text-[8px] font-black uppercase tracking-[0.18em] text-white/30 mb-0.5">{label}</p>
       <p className={`text-[12px] font-bold tracking-wide tabular-nums ${color}`}>{value}</p>
     </div>
   );
 }
 
-function InfoRow({
-  label,
-  value,
-  truncate = false,
-}: {
-  label: string;
-  value: string;
-  truncate?: boolean;
-}) {
+function InfoRow({ label, value, truncate = false }: { label: string; value: string; truncate?: boolean }) {
   return (
     <div className="flex items-baseline justify-between gap-4">
-      <span className="flex-shrink-0 text-[9px] font-black uppercase tracking-[0.16em] text-white/35">
-        {label}
-      </span>
-      <span className={`text-[11px] font-medium text-white/80 ${truncate ? "max-w-[220px] truncate pl-4" : ""}`}>
-        {value}
-      </span>
+      <span className="flex-shrink-0 text-[9px] font-black uppercase tracking-[0.16em] text-white/35">{label}</span>
+      <span className={`text-[11px] font-medium text-white/80 ${truncate ? "max-w-[220px] truncate pl-4" : ""}`}>{value}</span>
     </div>
   );
 }

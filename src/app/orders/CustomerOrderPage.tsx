@@ -24,7 +24,7 @@ function CustomerOrdersContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // 1. Hook initializations
+  /* ── 1. HOOK INITIALIZATIONS ── */
   const { user } = useUser();
   
   const {
@@ -41,7 +41,7 @@ function CustomerOrdersContent() {
     role: "customer",
   });
 
-  // 2. Memoized Mappers & Conversions
+  /* ── 2. MEMOIZED MAPPERS ── */
   const conversationMap = useMemo(() => {
     return new Map(conversations.map((c) => [c.order_id, c]));
   }, [conversations]);
@@ -59,7 +59,7 @@ function CustomerOrdersContent() {
     }
   };
 
-  /* ── DERIVED INITIAL LOADING GUARD ── */
+  /* ── 3. LOADING & AUTH GUARDS ── */
   const isAuthLoading = user === undefined;
 
   if (isLoading || isAuthLoading) {
@@ -83,7 +83,6 @@ function CustomerOrdersContent() {
     );
   }
 
-  /* ── ERROR BOUNDARY STATE ── */
   if (isError) {
     return (
       <main className="min-h-screen bg-[#0F0A06] text-white">
@@ -93,7 +92,7 @@ function CustomerOrdersContent() {
             <XCircle className="w-7 h-7 text-rose-500" />
           </div>
           <div className="space-y-1">
-            <h2 className="font-bold text-xl tracking-tight text-white">Failed to synchronize application layout data</h2>
+            <h2 className="font-bold text-xl tracking-tight text-white">System Synchronization Error</h2>
             <p className="text-white/40 text-xs max-w-sm mx-auto">
               {error?.message ?? "Failed to connect to order pipeline services"}
             </p>
@@ -109,23 +108,24 @@ function CustomerOrdersContent() {
     );
   }
 
-  /* ── UNAUTHORIZED BOUNDARY ── */
+  // Ensure user exists before rendering the main list
   if (!user?.id) {
     return (
       <main className="min-h-screen bg-[#0F0A06] text-white flex items-center justify-center">
         <div className="text-center text-white/40">
-          <p className="text-sm tracking-wide font-medium">Security Clearance Exception: Access Denied</p>
+          <p className="text-sm tracking-wide font-medium">Access Denied: Session Expired</p>
         </div>
       </main>
     );
   }
 
-  /* ── MAIN INTERFACE CANVAS ── */
+  /* ── 4. MAIN INTERFACE ── */
   return (
     <PageTransition>
       <div className="bg-[#0F0A06] min-h-screen font-sans text-white relative selection:bg-[#D4A97A]/30">
         <Navbar />
 
+        {/* Ambient Background Blur */}
         <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
           <div className="top-0 -right-40 absolute bg-[#7A4E2D]/10 blur-[100px] sm:blur-[140px] rounded-full w-[320px] sm:w-[500px] h-[320px] sm:h-[500px]" />
         </div>
@@ -152,7 +152,7 @@ function CustomerOrdersContent() {
               {isFetching ? (
                 <div className="flex items-center gap-1.5 text-[#D4A97A]">
                   <LoaderCircle className="w-3.5 h-3.5 animate-spin" />
-                  <span className="hidden sm:inline">Syncing system data...</span>
+                  <span className="hidden sm:inline">Syncing data...</span>
                 </div>
               ) : (
                 <span>Live updates enabled</span>
@@ -177,12 +177,11 @@ function CustomerOrdersContent() {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-5">
                 {orders.map((order, idx) => (
-                  <div key={`order-container-${order.id}`} className="contents">
+                  <div key={`order-wrapper-${order.id}`} className="contents">
                     <Reveal delay={idx * 0.04} from="bottom">
                       <OrderCard
-                        key={`customer-order-${order.id}`}
                         order={order}
-                        userId={user.id}
+                        userId={user.id} // Successfully passed to fixed OrderCard
                         conversation={conversationMap.get(order.id)}
                       />
                     </Reveal>
@@ -193,9 +192,10 @@ function CustomerOrdersContent() {
           </section>
         </main>
 
+        {/* ── PAYMENT STATUS MODAL ── */}
         {hasPaymentModal && (
           <div className="fixed inset-0 z-[100] flex justify-center items-center bg-black/80 backdrop-blur-md p-4">
-            <div className="bg-[#1C1209] border border-white/10 p-6 sm:p-8 rounded-2xl w-full max-w-sm sm:max-w-md text-center shadow-2xl max-h-[92vh] overflow-y-auto style-scrollbar transform scale-100 opacity-100 transition-all duration-300">
+            <div className="bg-[#1C1209] border border-white/10 p-6 sm:p-8 rounded-2xl w-full max-w-sm sm:max-w-md text-center shadow-2xl">
 
               {paymentStatus === "processing" && (
                 <>
@@ -203,7 +203,7 @@ function CustomerOrdersContent() {
                     <LoaderCircle className="w-10 h-10 text-[#D4A97A] animate-spin" />
                   </div>
                   <h2 className="mb-1.5 font-bold text-xl text-white tracking-tight">Processing...</h2>
-                  <p className="text-white/50 text-xs px-2">Verifying your transaction with the bank.</p>
+                  <p className="text-white/50 text-xs px-2">Verifying transaction with your bank.</p>
                 </>
               )}
 
@@ -216,7 +216,7 @@ function CustomerOrdersContent() {
                   </div>
                   <h2 className="mb-1.5 font-bold text-xl text-white tracking-tight">Payment Received</h2>
                   <p className="text-white/50 text-xs leading-relaxed px-1">
-                    Excellent choice. Your order has been moved to our craftsmen's queue.
+                    Your order has been moved to our craftsmen's queue.
                   </p>
                 </>
               )}
@@ -230,14 +230,14 @@ function CustomerOrdersContent() {
                   </div>
                   <h2 className="mb-1.5 font-bold text-xl text-white tracking-tight">Payment Cancelled</h2>
                   <p className="text-white/50 text-xs leading-relaxed px-1">
-                    The transaction was not completed. You can try again whenever you're ready.
+                    The transaction was not completed.
                   </p>
                 </>
               )}
 
               <button
                 onClick={closeModal}
-                className="bg-white/5 hover:bg-white/10 text-white font-semibold text-xs py-3 rounded-xl w-full mt-6 border border-white/5 transition-all active:scale-[0.99]"
+                className="bg-white/5 hover:bg-white/10 text-white font-semibold text-xs py-3 rounded-xl w-full mt-6 border border-white/5 transition-all"
               >
                 Return to Orders
               </button>

@@ -20,7 +20,7 @@ import {
 
 import { computeRealScale } from "@/lib/3D/nomarlizeFurnitureModel";
 import ARModal from "./ARModal";
-import { Scan } from "lucide-react";
+import { Scan, AlertTriangle, Loader2 } from "lucide-react";
 
 /* =========================================================
     TYPES
@@ -43,19 +43,16 @@ type ModelProps = {
 ========================================================= */
 
 function ViewerFallback({
-  message = "Unable to load 3D model",
+  message = "Loading 3D Model",
 }: {
   message?: string;
 }) {
   return (
-    <div
-      className="flex items-center justify-center w-full h-full text-center px-4 animate-pulse"
-      style={{
-        color: "rgba(255,255,255,0.35)",
-        fontSize: 13,
-      }}
-    >
-      {message}
+    <div className="flex flex-col items-center justify-center w-full h-full text-center px-4 space-y-3">
+      <Loader2 className="w-5 h-5 animate-spin text-[#D4A97A]" />
+      <span className="text-white/40 text-[11px] font-medium tracking-[0.15em] uppercase">
+        {message}
+      </span>
     </div>
   );
 }
@@ -253,8 +250,8 @@ function SafeCanvas({
     };
   }, [contextKey]);
 
-  if (!modelUrl.trim()) return <ViewerFallback message="No 3D model available" />;
-  if (!hasValidDimensions || !mounted) return <ViewerFallback message="Preparing layout..." />;
+  if (!modelUrl.trim()) return <ViewerFallback message="No Model File" />;
+  if (!hasValidDimensions || !mounted) return <ViewerFallback message="Preparing Viewport" />;
 
   return (
     <Canvas
@@ -262,7 +259,6 @@ function SafeCanvas({
       eventSource={eventSource ?? undefined}
       camera={{ position: [1.5, 1.2, 3], fov: 45 }}
       style={{ width: "100%", height: "100%" }}
-      // FIXED: Removed 'debug' and verified property types for GLProps
       gl={{
         antialias: true,
         alpha: true,
@@ -290,9 +286,9 @@ function SafeCanvas({
       <Environment preset="city" />
       <mesh rotation={[-Math.PI / 2, 0, 0]}>
         <planeGeometry args={[20, 20]} />
-        <meshStandardMaterial color="#E5E5E5" />
+        <meshStandardMaterial color="#E5E5E5" transparent opacity={0.1} />
       </mesh>
-      <Suspense fallback={<Html center><span className="text-[#D4A97A] text-[13px] tracking-widest">LOADING...</span></Html>}>
+      <Suspense fallback={<Html center><ViewerFallback /></Html>}>
         <Model url={modelUrl} textureUrl={textureUrl} dimensions={dimensions} />
       </Suspense>
       <OrbitControls makeDefault target={[0, 0.4, 0]} enableDamping dampingFactor={0.08} />
@@ -314,15 +310,27 @@ export default function Furniture3DViewer({
   dimensions?: Dimensions;
 }) {
   const [arOpen, setArOpen] = useState(false);
+  const [arSupported, setArSupported] = useState<boolean | null>(null);
   const [containerElement, setContainerElement] = useState<HTMLDivElement | null>(null);
 
   const containerCallbackRef = useCallback((node: HTMLDivElement | null) => {
     if (node !== null) setContainerElement(node);
   }, []);
 
+  // Performance & Stability Fix: Detect AR capability early
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const checkAR = async () => {
+        const supported = !!(navigator.xr && await (navigator.xr as any).isSessionSupported?.('immersive-ar'));
+        setArSupported(supported);
+      };
+      checkAR();
+    }
+  }, []);
+
   if (!modelUrl.trim()) {
     return (
-      <div className="flex items-center justify-center w-full min-h-[240px] rounded-2xl bg-[#0F0A06] border border-white/10 text-white/30 text-[13px]">
+      <div className="flex items-center justify-center w-full min-h-[240px] rounded-2xl bg-black/5 border border-black/10 text-black/40 text-[13px] font-medium">
         No model available
       </div>
     );
@@ -336,12 +344,17 @@ export default function Furniture3DViewer({
         ref={containerCallbackRef}
         className="relative w-full overflow-hidden rounded-2xl min-h-[240px] sm:min-h-[320px] md:min-h-[380px] lg:min-h-[420px] bg-[#0F0A06] border border-white/10"
       >
+        {/* BUTTON CONTRAST FIX: Added dark backdrop and high-contrast text */}
         <button
-          onClick={() => setArOpen(true)}
-          className="absolute top-3 right-3 z-10 flex items-center gap-1.5 bg-[#D4A97A] hover:bg-[#C4976A] px-3 py-1.5 rounded-xl font-semibold text-[#1C1209] text-xs transition-all"
+          onClick={() => arSupported !== false && setArOpen(true)}
+          disabled={arSupported === false}
+          className={`absolute top-3 right-3 z-10 flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-[11px] uppercase tracking-wider transition-all shadow-xl
+            ${arSupported === false 
+              ? "bg-white/5 text-white/20 border border-white/5 cursor-not-allowed" 
+              : "bg-[#D4A97A] hover:bg-[#C4976A] text-[#1C1209] border border-[#D4A97A]"}`}
         >
-          <Scan className="w-3.5 h-3.5" />
-          <span>View in AR</span>
+          {arSupported === false ? <AlertTriangle size={14} /> : <Scan size={14} />}
+          <span>{arSupported === false ? "AR Unsupported" : "View in Space"}</span>
         </button>
 
         <div className="absolute inset-0">
@@ -351,6 +364,13 @@ export default function Furniture3DViewer({
             dimensions={dimensions}
             eventSource={containerElement}
           />
+        </div>
+
+        {/* GUIDANCE TEXT CONTRAST FIX: Semi-transparent pill background */}
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 pointer-events-none">
+          <p className="px-3 py-1 bg-black/40 backdrop-blur-sm rounded-full text-white/50 text-[10px] font-medium tracking-widest uppercase">
+            Orbit to rotate
+          </p>
         </div>
       </div>
     </>
