@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useCallback } from "react"; // Added
 import { supabase } from "@/lib/supabase";
 import {
   getAdminOrders,
@@ -16,11 +17,6 @@ export const adminOrderKeys = {
   detail: (id: string) => [...adminOrderKeys.all, "detail", id] as const,
 };
 
-/**
- * =========================================================
- * ALL ADMIN ORDERS
- * =========================================================
- */
 export function useAdminOrders() {
   return useQuery<OrderAdmin[]>({
     queryKey: adminOrderKeys.list(),
@@ -28,20 +24,14 @@ export function useAdminOrders() {
       const data = await getAdminOrders();
       return data ?? [];
     },
-    // Set staleTime to Infinity to pull instantly from cache with 0 loading flicker
     staleTime: Infinity,
-    gcTime: 15 * 60 * 1000, // Retain inside garbage collector for 15 minutes
+    gcTime: 15 * 60 * 1000,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
     retry: 2,
   });
 }
 
-/**
- * =========================================================
- * SINGLE ADMIN ORDER
- * =========================================================
- */
 export function useAdminOrder(orderId?: string) {
   const safeOrderId = orderId ?? "";
 
@@ -63,15 +53,9 @@ export function useAdminOrder(orderId?: string) {
   });
 }
 
-/**
- * =========================================================
- * ADMIN MUTATIONS & MUTATION ACTIONS
- * =========================================================
- */
 export function useAdminOrderActions() {
   const queryClient = useQueryClient();
 
-  // Encapulsated mutation hook for safe state validation handling
   const updateStatusMutation = useMutation({
     mutationFn: async ({ orderId, status }: { orderId: string; status: OrderStatus }) => {
       const { error } = await supabase
@@ -86,13 +70,14 @@ export function useAdminOrderActions() {
     },
   });
 
-  const invalidateOrders = async () => {
+  // Wrapped in useCallback for use in useEffect
+  const invalidateOrders = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: adminOrderKeys.all });
-  };
+  }, [queryClient]);
 
-  const invalidateOrder = async (orderId: string) => {
+  const invalidateOrder = useCallback(async (orderId: string) => {
     await queryClient.invalidateQueries({ queryKey: adminOrderKeys.detail(orderId) });
-  };
+  }, [queryClient]);
 
   return {
     invalidateOrders,

@@ -1,6 +1,7 @@
 "use client";
 
-import type { Order } from "@/types/order";
+import React from "react";
+import type { OrderAdmin as Order, OrderStatus } from "@/types/order";
 import { useOrderFlow } from "@/hooks/useOrderFlow";
 import { useOrderPermissions } from "@/hooks/useOrderPermissions";
 
@@ -11,13 +12,14 @@ type Props = {
   adminId: string;
   onOpenFinalize: () => void;
   onOpenCancelReview: () => void;
+  onUpdateStatus: (orderId: string, status: OrderStatus) => Promise<void>;
 };
 
 /* =========================================================
-   DESIGN SYSTEM BUTTON PRIMITIVES
+    DESIGN SYSTEM BUTTON PRIMITIVES
 ========================================================= */
 const baseBtnClass =
-  "flex items-center justify-center h-9 w-full rounded-xl text-[10px] font-black uppercase tracking-wider transition-all duration-200 border backdrop-blur-sm text-center active:scale-[0.97] select-none cursor-pointer";
+  "flex items-center justify-center h-9 w-full rounded-xl text-[10px] font-black uppercase tracking-wider transition-all duration-200 border backdrop-blur-sm text-center active:scale-[0.97] select-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed";
 
 const styles = {
   primary: "bg-[#D4A97A] text-[#1C1209] border-[#D4A97A] hover:bg-[#E5BC8E] shadow-sm",
@@ -34,23 +36,44 @@ export default function OrderActionBar({
   adminId,
   onOpenFinalize,
   onOpenCancelReview,
+  onUpdateStatus,
 }: Props) {
   const flow = useOrderFlow();
   const p = useOrderPermissions(order, totalPaid, finalTotal);
 
   const safe = {
-    accept: () => adminId && flow.accept(order.id, adminId),
-    start: () => flow.startProduction(order.id),
-    ready: () => flow.markReady(order.id),
-    ship: () => flow.dispatch(order.id),
-    complete: () => flow.complete(order.id),
+    accept: async () => {
+      if (!adminId) return;
+      await flow.accept(order.id, adminId);
+      await onUpdateStatus(order.id, "accepted");
+    },
+    start: async () => {
+      await flow.startProduction(order.id);
+      await onUpdateStatus(order.id, "in_production");
+    },
+    ready: async () => {
+      await flow.markReady(order.id);
+      // Logic for pickup vs shipment status
+      const nextStatus = order.delivery_method === "pickup" ? "ready_for_pickup" : "ready_for_shipment";
+      await onUpdateStatus(order.id, nextStatus);
+    },
+    ship: async () => {
+      await flow.dispatch(order.id);
+      await onUpdateStatus(order.id, "shipped");
+    },
+    complete: async () => {
+      await flow.complete(order.id);
+      await onUpdateStatus(order.id, "completed");
+    },
   };
 
   const isChargesAccepted = order.charge_status === "accepted";
+  const hasPayment = totalPaid > 0;
 
-  // Build an active stack array to cleanly compute positions without placeholder gaps
+  // Build an active stack array to cleanly compute positions
   const activeButtons: React.ReactNode[] = [];
 
+  // 1. ACCEPTANCE PHASE
   if (p.canAccept) {
     activeButtons.push(
       <button key="accept" onClick={safe.accept} className={`${baseBtnClass} ${styles.primary}`}>
@@ -59,14 +82,33 @@ export default function OrderActionBar({
     );
   }
 
-  if (p.canStartProduction) {
+  // 2. PRICING PHASE
+  if (p.canFinalizeCharges && !isChargesAccepted) {
     activeButtons.push(
-      <button key="start" onClick={safe.start} className={`${baseBtnClass} ${styles.dark}`}>
-        Start Production
+      <button key="finalize" onClick={onOpenFinalize} className={`${baseBtnClass} ${styles.primary}`}>
+        Finalize Pricing
       </button>
     );
   }
 
+  // 3. PRODUCTION PHASE
+  if (p.canStartProduction) {
+    if (isChargesAccepted && hasPayment) {
+      activeButtons.push(
+        <button key="start" onClick={safe.start} className={`${baseBtnClass} ${styles.success}`}>
+          Start Production
+        </button>
+      );
+    } else if (isChargesAccepted && !hasPayment) {
+      activeButtons.push(
+        <button key="awaiting-payment" disabled className={`${baseBtnClass} ${styles.dark}`}>
+          Awaiting Payment
+        </button>
+      );
+    }
+  }
+
+  // 4. READY/FULFILLMENT PHASE
   if (p.canMarkReady) {
     activeButtons.push(
       <button key="ready" onClick={safe.ready} className={`${baseBtnClass} ${styles.warning}`}>
@@ -83,6 +125,7 @@ export default function OrderActionBar({
     );
   }
 
+  // 5. COMPLETION PHASE
   if (p.canComplete) {
     activeButtons.push(
       <button key="complete" onClick={safe.complete} className={`${baseBtnClass} ${styles.success}`}>
@@ -91,14 +134,7 @@ export default function OrderActionBar({
     );
   }
 
-  if (p.canFinalizeCharges && !isChargesAccepted) {
-    activeButtons.push(
-      <button key="finalize" onClick={onOpenFinalize} className={`${baseBtnClass} ${styles.dark}`}>
-        Finalize Pricing
-      </button>
-    );
-  }
-
+  // 6. CANCELLATION OVERRIDE
   if (p.canReviewCancel) {
     activeButtons.push(
       <button key="review-cancel" onClick={onOpenCancelReview} className={`${baseBtnClass} ${styles.danger}`}>
@@ -107,7 +143,6 @@ export default function OrderActionBar({
     );
   }
 
-  // If no state buttons match permissions, instantly return null to avoid vertical margin bleed
   if (activeButtons.length === 0) return null;
 
   return (

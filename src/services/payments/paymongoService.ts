@@ -13,12 +13,28 @@ type CreateCheckoutParams = {
 
 /**
  * =========================================================
- * PAYMONGO CONFIG
+ * PAYMONGO CONFIG & DYNAMIC URL LOGIC
  * =========================================================
  */
 const PAYMONGO_SECRET_KEY = process.env.PAYMONGO_SECRET_KEY!;
 const PAYMONGO_BASE_URL = "https://api.paymongo.com/v1";
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL!;
+
+/**
+ * DYNAMIC APP_URL HELPER
+ * Ensures redirects point to localhost in dev and Vercel in prod.
+ */
+const getBaseUrl = () => {
+  if (typeof window !== "undefined") return window.location.origin;
+
+  // Check if we are on Vercel
+  if (process.env.VERCEL_ENV === "production") return `https://woodforge.vercel.app`;
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+
+  // Fallback to local environment variable or localhost
+  return process.env.NEXT_PUBLIC_APP_URL || "https://drivable-equipment-dart.ngrok-free.dev";
+};
+
+const APP_URL = getBaseUrl();
 
 /**
  * =========================================================
@@ -38,13 +54,6 @@ function getAuthHeader() {
  * =========================================================
  * CREATE CHECKOUT (CLEAN + RETRY SAFE)
  * =========================================================
- *
- * RULES (MATCHING YOUR SYSTEM):
- * - Payments are created BEFORE this step (createPayment)
- * - Each payment row = single checkout attempt
- * - Only "paid" is final
- * - Pending = disposable retries
- * - This service ONLY creates PayMongo session
  */
 export async function createPaymongoCheckout({
   paymentId,
@@ -52,9 +61,7 @@ export async function createPaymongoCheckout({
   description = "Furniture Order Payment",
 }: CreateCheckoutParams) {
   /**
-   * ---------------------------------------------------------
    * 1. FETCH PAYMENT (SOURCE OF TRUTH)
-   * ---------------------------------------------------------
    */
   const { data: payment, error } = await supabase
     .from("payments")
@@ -77,19 +84,14 @@ export async function createPaymongoCheckout({
   }
 
   /**
-   * ---------------------------------------------------------
    * 2. BLOCK ONLY FINALIZED PAYMENTS
-   * ---------------------------------------------------------
    */
   if (payment.status === "paid") {
     throw new Error("Payment already completed");
   }
 
   /**
-   * ---------------------------------------------------------
    * 3. OPTIONAL SAFE REUSE (UI OPTIMIZATION ONLY)
-   * ---------------------------------------------------------
-   * Not business logic — just avoids duplicate sessions
    */
   if (
     payment.status === "pending" &&
@@ -105,22 +107,16 @@ export async function createPaymongoCheckout({
   }
 
   /**
-   * ---------------------------------------------------------
    * 4. VALIDATE AMOUNT
-   * ---------------------------------------------------------
    */
   const amount = Number(payment.amount);
-
   if (!amount || amount <= 0) {
     throw new Error("Invalid payment amount");
   }
-
   const amountInCentavos = Math.round(amount * 100);
 
   /**
-   * ---------------------------------------------------------
-   * 5. ROUTES
-   * ---------------------------------------------------------
+   * 5. DYNAMIC ROUTES
    */
   const successUrl =
     `${APP_URL}/orders?payment=success` +
@@ -133,9 +129,7 @@ export async function createPaymongoCheckout({
     `&orderId=${payment.order_id}`;
 
   /**
-   * ---------------------------------------------------------
    * 6. CREATE PAYMONGO CHECKOUT SESSION
-   * ---------------------------------------------------------
    */
   const response = await fetch(
     `${PAYMONGO_BASE_URL}/checkout_sessions`,
@@ -185,9 +179,7 @@ export async function createPaymongoCheckout({
   const result = await response.json();
 
   /**
-   * ---------------------------------------------------------
    * 7. ERROR HANDLING
-   * ---------------------------------------------------------
    */
   if (!response.ok) {
     throw new Error(
@@ -197,27 +189,19 @@ export async function createPaymongoCheckout({
   }
 
   const checkout = result?.data;
-
   if (!checkout?.attributes?.checkout_url) {
     throw new Error("Invalid PayMongo response");
   }
 
   /**
-   * ---------------------------------------------------------
    * 8. EXTRACT DATA
-   * ---------------------------------------------------------
    */
   const checkoutSessionId = checkout.id;
-
-  const paymentIntentId =
-    checkout?.attributes?.payment_intent?.id ?? null;
-
+  const paymentIntentId = checkout?.attributes?.payment_intent?.id ?? null;
   const checkoutUrl = checkout.attributes.checkout_url;
 
   /**
-   * ---------------------------------------------------------
    * 9. SAVE CHECKOUT DATA (NO BUSINESS LOGIC)
-   * ---------------------------------------------------------
    */
   const { error: updateError } = await supabase
     .from("payments")
@@ -236,9 +220,7 @@ export async function createPaymongoCheckout({
   }
 
   /**
-   * ---------------------------------------------------------
    * 10. RETURN RESULT
-   * ---------------------------------------------------------
    */
   return {
     checkoutId: checkoutSessionId,

@@ -29,19 +29,41 @@ export default function ChatModal({
   const [files, setFiles] = useState<File[]>([]);
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
-  const { messages, isLoading, send } = useChat({
+  const { messages, isLoading, send, markAsRead } = useChat({
     orderId: order?.id ?? "",
     readerType: senderType,
   });
 
-  /* AUTO SCROLL */
+  /**
+   * ── MARK AS READ ──
+   * Triggers once when modal opens.
+   */
+  useEffect(() => {
+    if (open) {
+      markAsRead();
+    }
+  }, [open, markAsRead]);
+
+  /**
+   * ── AUTO SCROLL (MESSENGER STYLE) ──
+   * Scrolls to bottom whenever the messages array changes (new message sent or received).
+   */
   useEffect(() => {
     if (!open) return;
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, open]);
 
-  /* ESC CLOSE */
+    // Use requestAnimationFrame to ensure the DOM has finished painting the new message
+    const scrollTimeout = setTimeout(() => {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, 50);
+
+    return () => clearTimeout(scrollTimeout);
+  }, [messages, open]); // Watching 'messages' captures content changes, not just length
+
+  /**
+   * ── ESCAPE KEY TO CLOSE ──
+   */
   useEffect(() => {
     if (!open) return;
     const handler = (e: KeyboardEvent) => {
@@ -51,24 +73,30 @@ export default function ChatModal({
     return () => window.removeEventListener("keydown", handler);
   }, [open, onClose]);
 
-  /* SEND */
+  /**
+   * ── HANDLE SEND ──
+   */
   const handleSend = async () => {
-    if (!message.trim() && files.length === 0) return;
-
     const text = message.trim();
     const selectedFiles = files;
 
+    if (!text && selectedFiles.length === 0) return;
+
+    // 1. CLEAR UI IMMEDIATELY (Instant Feedback)
     setMessage("");
     setFiles([]);
 
     try {
+      // 2. SEND IN BACKGROUND
+      // The useChat hook handles the optimistic local update
       await send({
         message: text || undefined,
-        file: selectedFiles[0] ?? undefined,
+        file: selectedFiles[0] ?? null,
         senderType,
       });
     } catch (err) {
-      console.error(err);
+      console.error("[CHAT_MODAL] Send failed:", err);
+      // Rollback UI text if the send failed completely
       setMessage(text);
       setFiles(selectedFiles);
     }
@@ -79,8 +107,8 @@ export default function ChatModal({
   return createPortal(
     /* BACKDROP */
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-
-      {/* MODAL */}
+      
+      {/* MODAL CONTAINER */}
       <div className="
         w-full max-w-3xl h-[88vh] flex flex-col
         rounded-3xl overflow-hidden
@@ -90,7 +118,7 @@ export default function ChatModal({
       ">
 
         {/* ── HEADER ── */}
-        <div className="
+        <header className="
           flex items-center justify-between
           px-5 py-4
           bg-[#0E0B06]/80 backdrop-blur
@@ -124,21 +152,25 @@ export default function ChatModal({
           >
             ✕
           </button>
-        </div>
+        </header>
 
-        {/* ── CHAT AREA ── */}
-        <div className="flex-1 overflow-y-auto px-4 py-5 min-h-0 scrollbar-thin scrollbar-thumb-[#2A1F14] scrollbar-track-transparent">
+        {/* ── MESSAGES SCROLL AREA ── */}
+        <main 
+          ref={scrollContainerRef}
+          className="flex-1 overflow-y-auto px-4 py-5 min-h-0 scrollbar-thin scrollbar-thumb-[#2A1F14] scrollbar-track-transparent"
+        >
           <ChatMessages
             messages={messages}
             isLoading={isLoading}
             currentUserId={currentUserId}
             senderType={senderType}
           />
-          <div ref={bottomRef} />
-        </div>
+          {/* Scroll Anchor */}
+          <div ref={bottomRef} className="h-px w-full" />
+        </main>
 
-        {/* ── INPUT AREA ── */}
-        <div className="
+        {/* ── INPUT CONSOLE ── */}
+        <footer className="
           border-t border-[#2A1F14]
           bg-[#0E0B06]/60
           px-4 py-3 space-y-3
@@ -157,7 +189,7 @@ export default function ChatModal({
             setFiles={setFiles}
             onSend={handleSend}
           />
-        </div>
+        </footer>
       </div>
     </div>,
     document.body

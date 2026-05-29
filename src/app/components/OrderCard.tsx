@@ -1,7 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import type { Order } from "@/types/order";
+import { useMemo, useState, useEffect } from "react";
+import { supabase } from "@/lib/supabase"; // Updated to match your admin card
+import { useRouter } from "next/navigation";
+import type { Order, OrderStatus } from "@/types/order";
 
 import OrderFullDetailModal from "@/app/components/OrderFullDetailModal";
 import ChatModal from "@/app/components/chat/ChatModal";
@@ -59,7 +61,44 @@ type Props = {
   };
 };
 
-export default function OrderCard({ order, userId, conversation }: Props) {
+export default function OrderCard({ order: initialOrder, userId, conversation }: Props) {
+  const router = useRouter();
+  
+  // ── LIVE STATE ──
+  const [order, setOrder] = useState<Order>(initialOrder);
+
+  // Sync state if props update from parent
+  useEffect(() => {
+    setOrder(initialOrder);
+  }, [initialOrder]);
+
+  // ── REALTIME LISTENER ──
+  useEffect(() => {
+    if (!order?.id) return;
+
+    const channel = supabase
+      .channel(`live-order-status-${order.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "orders",
+          filter: `id=eq.${order.id}`,
+        },
+        (payload: { new: Order }) => {
+          // Explicitly typing payload fixes the 'any' error
+          setOrder(payload.new);
+          router.refresh(); // Syncs server components if necessary
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [order.id, router]);
+
   /* ── MODAL VISIBILITY STATES ── */
   const [openDetail, setOpenDetail] = useState(false);
   const [openChat, setOpenChat] = useState(false);
@@ -122,26 +161,6 @@ export default function OrderCard({ order, userId, conversation }: Props) {
   const { canCancel, canPay, payButtonLabel } = useMemo(() => {
     if (!order) return { canCancel: false, canPay: false, payButtonLabel: "Pay Now" };
 
-    /* ── PREVIOUS LOGIC (COMMENTED OUT) ──
-    const inProductionFlow =
-      order.order_status === "in_production" ||
-      order.order_status === "ready_for_pickup" ||
-      order.order_status === "ready_for_shipment";
-
-    const isPaidState =
-      order.payment_status === "partially_paid" ||
-      order.payment_status === "fully_paid";
-
-    const isFinalState =
-      order.order_status === "cancelled" ||
-      order.order_status === "shipped" ||
-      order.order_status === "in_transit" ||
-      order.order_status === "completed";
-    
-    const oldCanCancel = !isFinalState && !inProductionFlow && !isPaidState && order.cancel_status !== "requested";
-    */
-
-    // NEW LOGIC: Only cancel if accepted/requested AND unpaid AND NO accepted charges
     const isEarlyStatus = order.order_status === "accepted" || order.order_status === "requested";
     const isUnpaid = order.payment_status === "unpaid";
     const hasNoAcceptedCharges = order.charge_status !== "accepted";
@@ -153,12 +172,6 @@ export default function OrderCard({ order, userId, conversation }: Props) {
     };
   }, [order?.order_status, order?.payment_status, order?.cancel_status, order?.charge_status, payNowValue, totalPaid]);
 
-  /* ── SUB-CONTEXT TEXT MAPPERS ── */
-  const customerName = order?.customer_name ?? "-";
-  const phoneNumber = order?.phone_number ?? "-";
-  const pickupLocation = order?.pickup_location ?? "-";
-  const deliveryAddress = order?.delivery_address ?? "-";
-
   const isPickup = order?.delivery_method === "pickup";
   const unreadCount = conversation?.customer_unread_count ?? 0;
 
@@ -167,13 +180,6 @@ export default function OrderCard({ order, userId, conversation }: Props) {
     if (status === "accepted") return "text-emerald-400 bg-emerald-500/10 border-emerald-500/20";
     if (status === "rejected") return "text-rose-400 bg-rose-500/10 border-rose-500/20";
     return "text-amber-400 bg-amber-500/10 border-amber-500/20";
-  }, [order?.charge_status]);
-
-  const chargeStatusLabel = useMemo(() => {
-    const status = order?.charge_status ?? "pending";
-    if (status === "accepted") return "Charges Approved";
-    if (status === "rejected") return "Charges Rejected";
-    return "Charges Pending";
   }, [order?.charge_status]);
 
   const handleConfirmCancel = async (reason: string) => {
@@ -194,14 +200,16 @@ export default function OrderCard({ order, userId, conversation }: Props) {
             <div className="min-w-0">
               <p className="text-[9px] font-black tracking-[0.22em] text-[#A68056] uppercase mb-0.5">Order Reference</p>
               <h2 className="text-[15px] font-bold text-white tracking-wide leading-tight truncate">{order.order_reference_code ?? "Pending Order"}</h2>
-              {order.created_at && (
-                <p className="text-[10px] text-white/40 mt-0.5">Ordered on {new Date(order.created_at).toLocaleDateString()}</p>
-              )}
+              <p className="text-[10px] text-white/40 mt-0.5">Ordered on {new Date(order.created_at).toLocaleDateString()}</p>
             </div>
             <span className={`flex-shrink-0 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-[0.15em] border backdrop-blur-sm bg-black/30 shadow-inner ${statusUI?.color ?? "text-white"}`}>
               {statusUI?.label ?? "Processing"}
             </span>
           </div>
+        </div>
+
+        <div className="px-5 mb-4">
+          <ProgressBar status={order.order_status} />
         </div>
 
         <div className="px-5 mb-2.5 flex-shrink-0">
@@ -227,15 +235,15 @@ export default function OrderCard({ order, userId, conversation }: Props) {
 
         <div className="flex-shrink-0 mx-5 mb-2.5">
           <div className="flex items-start gap-2.5 rounded-xl bg-[#1B120A] border border-[#38291A] px-3.5 py-2">
-            <div className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[#D4A97A] shadow-[0_0_8px_#D4A97A]" />
+            <div className={`mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[#D4A97A] shadow-[0_0_8px_#D4A97A] ${order.order_status === 'accepted' && payNowValue > 0 ? 'animate-pulse' : ''}`} />
             <p className="text-[11px] leading-relaxed text-white/70 italic">{orderMessage}</p>
           </div>
         </div>
 
         <div className="flex-shrink-0 mx-5 mb-3.5 space-y-1.5">
-          <InfoRow label="Customer" value={customerName} />
-          <InfoRow label="Contact" value={phoneNumber} />
-          <InfoRow label={isPickup ? "Pickup" : "Shipping"} value={isPickup ? pickupLocation : deliveryAddress} truncate />
+          <InfoRow label="Customer" value={order.customer_name ?? "-"} />
+          <InfoRow label="Contact" value={order.phone_number ?? "-"} />
+          <InfoRow label={isPickup ? "Pickup" : "Shipping"} value={isPickup ? (order.pickup_location ?? "-") : (order.delivery_address ?? "-")} truncate />
         </div>
 
         <div className="mt-auto border-t border-[#2A1F14] bg-[#080604] px-5 py-3.5 flex flex-col gap-3">
@@ -243,7 +251,7 @@ export default function OrderCard({ order, userId, conversation }: Props) {
             <div className="flex flex-col gap-0.5">
               <span className="text-[9px] font-black uppercase tracking-[0.18em] text-white/30">Adjustments ({safeCharges.length})</span>
               <span className={`text-[9px] font-bold uppercase tracking-wider border px-1.5 py-0.5 rounded ${chargeStatusBadge}`}>
-                {chargeStatusLabel}
+                {order.charge_status === "accepted" ? "Approved" : order.charge_status === "rejected" ? "Rejected" : "Pending"}
               </span>
             </div>
             <button onClick={() => setOpenCharges(true)} className="text-[10px] font-black uppercase tracking-wider text-[#D4A97A] hover:text-[#E5BC8E] transition-colors">
@@ -252,10 +260,10 @@ export default function OrderCard({ order, userId, conversation }: Props) {
           </div>
 
           <div className="grid grid-cols-2 gap-2 w-full">
-            <button onClick={() => setOpenDetail(true)} className="h-9 rounded-xl border border-[#38291A] bg-white/[0.04] text-[10px] font-black uppercase tracking-[0.1em] text-white/70 hover:bg-white/[0.08] hover:text-white/90 hover:border-[#4E3A25] transition-all duration-200">
+            <button onClick={() => setOpenDetail(true)} className="h-9 rounded-xl border border-[#38291A] bg-white/[0.04] text-[10px] font-black uppercase tracking-[0.1em] text-white/70 hover:bg-white/[0.08] hover:text-white/90 transition-all duration-200">
               Details
             </button>
-            <button onClick={() => setOpenChat(true)} className="relative h-9 rounded-xl bg-[#C49A6C] hover:bg-[#D4A97A] active:scale-[0.97] text-[10px] font-black uppercase tracking-[0.1em] text-[#0E0A06] shadow-[0_4px_12px_rgba(196,154,108,0.2)] transition-all duration-200">
+            <button onClick={() => setOpenChat(true)} className="relative h-9 rounded-xl bg-[#C49A6C] hover:bg-[#D4A97A] active:scale-[0.97] text-[10px] font-black uppercase tracking-[0.1em] text-[#0E0A06] transition-all duration-200">
               Chat
               {unreadCount > 0 && (
                 <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[8px] font-black text-white shadow-lg animate-pulse">
@@ -266,7 +274,7 @@ export default function OrderCard({ order, userId, conversation }: Props) {
           </div>
 
           {canPay && (
-            <button onClick={() => setOpenPay(true)} className="h-9 w-full rounded-xl bg-gradient-to-r from-[#C49A6C] via-[#D4A97A] to-[#E8C98A] text-[10px] font-black uppercase tracking-[0.12em] text-[#0E0A06] shadow-[0_4px_12px_rgba(212,169,122,0.2)] hover:shadow-[0_4px_20px_rgba(212,169,122,0.45)] hover:brightness-105 active:scale-[0.99] transition-all duration-200">
+            <button onClick={() => setOpenPay(true)} className="h-9 w-full rounded-xl bg-gradient-to-r from-[#C49A6C] via-[#D4A97A] to-[#E8C98A] text-[10px] font-black uppercase tracking-[0.12em] text-[#0E0A06] shadow-[0_4px_12px_rgba(212,169,122,0.2)] hover:shadow-[0_4px_20px_rgba(212,169,122,0.45)] transition-all duration-200">
               {payButtonLabel}
             </button>
           )}
@@ -276,7 +284,7 @@ export default function OrderCard({ order, userId, conversation }: Props) {
               <button
                 onClick={() => setOpenCancel(true)}
                 disabled={isCancelling}
-                className="text-[9px] font-black uppercase tracking-[0.18em] text-rose-400 hover:text-rose-300 disabled:opacity-40 transition-colors duration-200"
+                className="text-[9px] font-black uppercase tracking-[0.18em] text-rose-400 hover:text-rose-300 disabled:opacity-40 transition-colors"
               >
                 {isCancelling ? "Cancelling…" : "Cancel Order"}
               </button>
@@ -292,6 +300,44 @@ export default function OrderCard({ order, userId, conversation }: Props) {
       <PayModal open={openPay} onClose={() => setOpenPay(false)} order={order} totalAmount={finalTotal} />
       <CancelOrderModal open={openCancel} onClose={() => setOpenCancel(false)} order={order} mode="request" onConfirm={handleConfirmCancel} />
     </>
+  );
+}
+
+/* ── HELPER COMPONENTS ── */
+
+function ProgressBar({ status }: { status: OrderStatus }) {
+  const stages: OrderStatus[] = [
+    "requested",
+    "accepted",
+    "in_production",
+    "ready_for_shipment",
+    "completed",
+  ];
+
+  const currentStatus = status === "ready_for_pickup" ? "ready_for_shipment" : status;
+  const currentIndex = stages.indexOf(currentStatus);
+
+  return (
+    <div className="flex items-center justify-between w-full px-1 pt-2">
+      {stages.map((stage, i) => (
+        <div key={stage} className="flex items-center flex-1 last:flex-none">
+          <div
+            className={`h-1.5 w-1.5 rounded-full transition-all duration-500 ${
+              i <= currentIndex
+                ? "bg-[#D4A97A] shadow-[0_0_8px_#D4A97A]"
+                : "bg-white/10"
+            }`}
+          />
+          {i < stages.length - 1 && (
+            <div
+              className={`h-[1px] flex-1 mx-1 ${
+                i < currentIndex ? "bg-[#D4A97A]/50" : "bg-white/5"
+              }`}
+            />
+          )}
+        </div>
+      ))}
+    </div>
   );
 }
 

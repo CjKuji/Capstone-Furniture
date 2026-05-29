@@ -18,9 +18,21 @@ import {
   Environment,
 } from "@react-three/drei";
 
-import { computeRealScale } from "@/lib/3D/nomarlizeFurnitureModel";
+import { computeRealScale, computeARInfo} from "@/lib/3D/nomarlizeFurnitureModel";
 import ARModal from "./ARModal";
-import { Scan, AlertTriangle, Loader2, RotateCcw, RotateCw, ZoomIn, ZoomOut } from "lucide-react";
+import {
+  Scan,
+  AlertTriangle,
+  Loader2,
+  RotateCcw,
+  RotateCw,
+  ZoomIn,
+  ZoomOut,
+} from "lucide-react";
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
 type Dimensions = {
   width_cm?: number | null;
@@ -28,12 +40,31 @@ type Dimensions = {
   height_cm?: number | null;
 };
 
+type ModelReadyInfo = {
+  scaledHeightM: number;
+  rawScale: number;
+  /** Raw Three.js scene — needed to compute the AR scale independently. */
+  scene: THREE.Object3D;
+};
+
 type ModelProps = {
   url: string;
   textureUrl?: string | null;
   dimensions?: Dimensions;
-  onReady?: (info: { scaledHeightM: number; rawScale: number }) => void;
+  onReady?: (info: ModelReadyInfo) => void;
 };
+
+type SafeCanvasProps = {
+  modelUrl: string;
+  textureUrl?: string | null;
+  dimensions?: Dimensions;
+  controlsRef: React.MutableRefObject<any>;
+  onModelReady?: (info: ModelReadyInfo) => void;
+};
+
+// ---------------------------------------------------------------------------
+// ViewerFallback
+// ---------------------------------------------------------------------------
 
 function ViewerFallback({ message = "Loading 3D Model" }: { message?: string }) {
   return (
@@ -45,6 +76,10 @@ function ViewerFallback({ message = "Loading 3D Model" }: { message?: string }) 
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Model
+// ---------------------------------------------------------------------------
 
 function Model({ url, textureUrl, dimensions, onReady }: ModelProps) {
   const { scene } = useGLTF(url);
@@ -63,28 +98,36 @@ function Model({ url, textureUrl, dimensions, onReady }: ModelProps) {
     return clone;
   }, [scene]);
 
+  // Compute scale and positional offset so the model sits on Y=0 in the viewer.
   const { scale, offset, scaledHeightM } = useMemo(() => {
     const rawScale = dimensions ? computeRealScale(clonedScene, dimensions) : 1;
-    const box = new THREE.Box3().setFromObject(clonedScene);
-    const size = new THREE.Vector3();
-    box.getSize(size);
+
+    const box    = new THREE.Box3().setFromObject(clonedScene);
+    const size   = new THREE.Vector3();
     const center = new THREE.Vector3();
+    box.getSize(size);
     box.getCenter(center);
+
     return {
       scale: rawScale,
-      // Offset is in world space so must be pre-multiplied by scale
+      // Shift the group so the bounding-box bottom lands exactly on Y=0.
+      // Offsets are in world space, so pre-multiply by scale.
       offset: {
         x: -center.x * rawScale,
-        y: -box.min.y * rawScale,
+        y: -box.min.y * rawScale, // ← this is the floor-snap: lifts or lowers the mesh
         z: -center.z * rawScale,
       },
       scaledHeightM: size.y * rawScale,
     };
   }, [clonedScene, dimensions]);
 
+  // Fire onReady with the raw Three.js scene so the parent can independently
+  // compute the correct AR scale via computeARInfo (which needs the scene).
   useEffect(() => {
-    if (onReady) onReady({ scaledHeightM, rawScale: scale });
-  }, [scaledHeightM, scale, onReady]);
+    if (onReady) onReady({ scaledHeightM, rawScale: scale, scene: clonedScene });
+  }, [scaledHeightM, scale, clonedScene, onReady]);
+
+  // ── Texture handling ─────────────────────────────────────────────────────
 
   const originalMaps = useRef<Map<string, THREE.Texture | null>>(new Map());
 
@@ -102,95 +145,95 @@ function Model({ url, textureUrl, dimensions, onReady }: ModelProps) {
   }, [clonedScene]);
 
   useEffect(() => {
-    let disposed = false;
-    let activeTexture: THREE.Texture | null = null;
+    let disposed   = false;
+    let activeTex: THREE.Texture | null = null;
 
-    const resetOriginalTextures = () => {
+    const resetOriginal = () => {
       clonedScene.traverse((obj) => {
         const mesh = obj as THREE.Mesh;
         if (!mesh.isMesh) return;
         const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
         materials.forEach((mat, i) => {
-          const key = `${mesh.uuid}_${i}`;
+          const key      = `${mesh.uuid}_${i}`;
           const original = originalMaps.current.get(key) ?? null;
-          (mat as THREE.MeshStandardMaterial).map = original;
+          (mat as THREE.MeshStandardMaterial).map         = original;
           (mat as THREE.MeshStandardMaterial).needsUpdate = true;
         });
       });
     };
 
-    if (!textureUrl || textureUrl.trim() === "") {
-      resetOriginalTextures();
+    if (!textureUrl?.trim()) {
+      resetOriginal();
       return;
     }
 
-    const loader = new THREE.TextureLoader();
-    loader.load(
+    new THREE.TextureLoader().load(
       textureUrl,
       (texture) => {
         if (disposed) { texture.dispose(); return; }
-        activeTexture = texture;
-        texture.colorSpace = THREE.SRGBColorSpace;
-        texture.wrapS = THREE.RepeatWrapping;
-        texture.wrapT = THREE.RepeatWrapping;
+        activeTex              = texture;
+        texture.colorSpace     = THREE.SRGBColorSpace;
+        texture.wrapS          = THREE.RepeatWrapping;
+        texture.wrapT          = THREE.RepeatWrapping;
         texture.repeat.set(3, 3);
         clonedScene.traverse((obj) => {
           const mesh = obj as THREE.Mesh;
           if (!mesh.isMesh) return;
           const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
           materials.forEach((mat) => {
-            (mat as THREE.MeshStandardMaterial).map = texture;
+            (mat as THREE.MeshStandardMaterial).map         = texture;
             (mat as THREE.MeshStandardMaterial).needsUpdate = true;
           });
         });
       },
       undefined,
-      () => resetOriginalTextures()
+      () => resetOriginal()
     );
 
     return () => {
       disposed = true;
-      if (activeTexture) activeTexture.dispose();
+      activeTex?.dispose();
     };
   }, [textureUrl, clonedScene]);
+
+  // ── Cleanup ───────────────────────────────────────────────────────────────
 
   useEffect(() => {
     return () => {
       clonedScene.traverse((obj) => {
         const mesh = obj as THREE.Mesh;
         if (!mesh.isMesh) return;
-        if (mesh.geometry) mesh.geometry.dispose();
-        if (mesh.material) {
-          const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-          materials.forEach((mat) => {
-            if ((mat as any).map) (mat as any).map.dispose();
-            mat.dispose();
-          });
-        }
+        mesh.geometry?.dispose();
+        const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        materials.forEach((mat) => {
+          (mat as any).map?.dispose();
+          mat.dispose();
+        });
       });
     };
   }, [clonedScene]);
 
   return (
-    // scale={1} here — scaling is baked into the offset already via world-space multiply
     <group position={[offset.x, offset.y, offset.z]} scale={scale}>
       <primitive object={clonedScene} />
     </group>
   );
 }
 
-type SafeCanvasProps = {
-  modelUrl: string;
-  textureUrl?: string | null;
-  dimensions?: Dimensions;
-  controlsRef: React.MutableRefObject<any>;
-  onModelReady?: (info: { scaledHeightM: number; rawScale: number }) => void;
-};
+// ---------------------------------------------------------------------------
+// SafeCanvas
+// ---------------------------------------------------------------------------
 
-function SafeCanvas({ modelUrl, textureUrl, dimensions, controlsRef, onModelReady }: SafeCanvasProps) {
-  const [mounted, setMounted] = useState(false);
-  const [contextKey, setContextKey] = useState(0);
-  const [orbitTarget, setOrbitTarget] = useState<[number, number, number]>([0, 0.4, 0]);
+function SafeCanvas({
+  modelUrl,
+  textureUrl,
+  dimensions,
+  controlsRef,
+  onModelReady,
+}: SafeCanvasProps) {
+  const [mounted,      setMounted]      = useState(false);
+  const [contextKey,   setContextKey]   = useState(0);
+  const [orbitTarget,  setOrbitTarget]  = useState<[number, number, number]>([0, 0.4, 0]);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
 
   useEffect(() => {
@@ -199,41 +242,44 @@ function SafeCanvas({ modelUrl, textureUrl, dimensions, controlsRef, onModelRead
   }, []);
 
   useEffect(() => {
-    const handleVisibilityChange = () => {
+    const handleVisibility = () => {
       if (document.hidden) return;
       if (rendererRef.current?.getContext().isContextLost()) {
         setContextKey((prev) => prev + 1);
       }
     };
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, []);
 
   useEffect(() => {
     return () => {
       if (rendererRef.current) {
         const gl = rendererRef.current;
-        if ((gl as any)._cleanupContextLostListener) (gl as any)._cleanupContextLostListener();
+        (gl as any)._cleanupContextLostListener?.();
         gl.dispose();
         rendererRef.current = null;
       }
     };
   }, [contextKey]);
 
-  const handleModelReady = useCallback((info: { scaledHeightM: number; rawScale: number }) => {
-    const mid = info.scaledHeightM / 2;
-    setOrbitTarget([0, mid, 0]);
-    if (controlsRef.current) {
+  const handleModelReady = useCallback(
+    (info: ModelReadyInfo) => {
+      const mid  = info.scaledHeightM / 2;
       const dist = info.scaledHeightM * 2.5;
-      controlsRef.current.object.position.set(dist * 0.5, info.scaledHeightM * 0.8, dist);
-      controlsRef.current.target.set(0, mid, 0);
-      controlsRef.current.update();
-    }
-    if (onModelReady) onModelReady(info);
-  }, [controlsRef, onModelReady]);
+      setOrbitTarget([0, mid, 0]);
+      if (controlsRef.current) {
+        controlsRef.current.object.position.set(dist * 0.5, info.scaledHeightM * 0.8, dist);
+        controlsRef.current.target.set(0, mid, 0);
+        controlsRef.current.update();
+      }
+      onModelReady?.(info);
+    },
+    [controlsRef, onModelReady]
+  );
 
   if (!modelUrl.trim()) return <ViewerFallback message="No Model File" />;
-  if (!mounted) return <ViewerFallback message="Preparing Viewport" />;
+  if (!mounted)          return <ViewerFallback message="Preparing Viewport" />;
 
   return (
     <div style={{ width: "100%", height: "100%", touchAction: "none" }}>
@@ -250,16 +296,15 @@ function SafeCanvas({ modelUrl, textureUrl, dimensions, controlsRef, onModelRead
         onCreated={({ gl }) => {
           rendererRef.current = gl;
           gl.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-          const canvasElement = gl.domElement;
-          canvasElement.style.touchAction = "none";
-          const handleContextLost = (event: Event) => {
-            event.preventDefault();
+          const canvas = gl.domElement;
+          canvas.style.touchAction = "none";
+          const handleContextLost = (e: Event) => {
+            e.preventDefault();
             if (rendererRef.current === gl) setContextKey((prev) => prev + 1);
           };
-          canvasElement.addEventListener("webglcontextlost", handleContextLost, false);
-          (gl as any)._cleanupContextLostListener = () => {
-            canvasElement.removeEventListener("webglcontextlost", handleContextLost);
-          };
+          canvas.addEventListener("webglcontextlost", handleContextLost, false);
+          (gl as any)._cleanupContextLostListener = () =>
+            canvas.removeEventListener("webglcontextlost", handleContextLost);
         }}
       >
         <ambientLight intensity={0.5} />
@@ -295,40 +340,51 @@ function SafeCanvas({ modelUrl, textureUrl, dimensions, controlsRef, onModelRead
   );
 }
 
+// ---------------------------------------------------------------------------
+// ViewerControls
+// ---------------------------------------------------------------------------
+
 function ViewerControls({ controlsRef }: { controlsRef: React.MutableRefObject<any> }) {
-  const rotate = useCallback((direction: "left" | "right") => {
-    const controls = controlsRef.current;
-    if (!controls) return;
-    const delta = direction === "left" ? -0.3 : 0.3;
-    controls.setAzimuthalAngle(controls.getAzimuthalAngle() + delta);
-    controls.update();
-  }, [controlsRef]);
+  const rotate = useCallback(
+    (direction: "left" | "right") => {
+      const c = controlsRef.current;
+      if (!c) return;
+      c.setAzimuthalAngle(c.getAzimuthalAngle() + (direction === "left" ? -0.3 : 0.3));
+      c.update();
+    },
+    [controlsRef]
+  );
 
-  const zoom = useCallback((direction: "in" | "out") => {
-    const controls = controlsRef.current;
-    if (!controls) return;
-    const factor = direction === "in" ? 0.8 : 1.25;
-    const camera = controls.object as THREE.PerspectiveCamera;
-    const targetPos = controls.target as THREE.Vector3;
-    const currentPos = camera.position.clone();
-    const toCamera = currentPos.sub(targetPos);
-    toCamera.multiplyScalar(factor);
-    camera.position.copy(targetPos).add(toCamera);
-    controls.update();
-  }, [controlsRef]);
+  const zoom = useCallback(
+    (direction: "in" | "out") => {
+      const c = controlsRef.current;
+      if (!c) return;
+      const factor   = direction === "in" ? 0.8 : 1.25;
+      const camera   = c.object as THREE.PerspectiveCamera;
+      const toCamera = camera.position.clone().sub(c.target as THREE.Vector3);
+      toCamera.multiplyScalar(factor);
+      camera.position.copy((c.target as THREE.Vector3)).add(toCamera);
+      c.update();
+    },
+    [controlsRef]
+  );
 
-  const btnBase =
+  const btn =
     "flex items-center justify-center w-9 h-9 rounded-xl bg-black/50 backdrop-blur-sm border border-white/10 text-white/50 hover:text-white hover:border-white/30 hover:bg-black/70 transition-all active:scale-90 select-none";
 
   return (
     <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 pointer-events-auto">
-      <button className={btnBase} onPointerDown={(e) => { e.preventDefault(); rotate("left"); }} aria-label="Rotate left"><RotateCcw size={15} /></button>
-      <button className={btnBase} onPointerDown={(e) => { e.preventDefault(); zoom("out"); }} aria-label="Zoom out"><ZoomOut size={15} /></button>
-      <button className={btnBase} onPointerDown={(e) => { e.preventDefault(); zoom("in"); }} aria-label="Zoom in"><ZoomIn size={15} /></button>
-      <button className={btnBase} onPointerDown={(e) => { e.preventDefault(); rotate("right"); }} aria-label="Rotate right"><RotateCw size={15} /></button>
+      <button className={btn} onPointerDown={(e) => { e.preventDefault(); rotate("left");  }} aria-label="Rotate left" ><RotateCcw size={15} /></button>
+      <button className={btn} onPointerDown={(e) => { e.preventDefault(); zoom("out");     }} aria-label="Zoom out"    ><ZoomOut   size={15} /></button>
+      <button className={btn} onPointerDown={(e) => { e.preventDefault(); zoom("in");      }} aria-label="Zoom in"     ><ZoomIn    size={15} /></button>
+      <button className={btn} onPointerDown={(e) => { e.preventDefault(); rotate("right"); }} aria-label="Rotate right"><RotateCw  size={15} /></button>
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Furniture3DViewer (public API)
+// ---------------------------------------------------------------------------
 
 export default function Furniture3DViewer({
   modelUrl,
@@ -339,30 +395,45 @@ export default function Furniture3DViewer({
   selectedVariantTextureUrl?: string | null;
   dimensions?: Dimensions;
 }) {
-  const [arOpen, setArOpen] = useState(false);
+  const [arOpen,      setArOpen]      = useState(false);
   const [arSupported, setArSupported] = useState<boolean | null>(null);
-  const [arScale, setArScale] = useState<string>("1 1 1");
+
+  // AR-specific state computed from the actual scene geometry
+  const [arScale,      setArScale]      = useState("1 1 1");
+  const [arYOffsetM,   setArYOffsetM]   = useState(0);
+
   const controlsRef = useRef<any>(null);
 
+  // Check WebXR AR support once on mount
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const checkAR = async () => {
+    (async () => {
       try {
-        const supported = !!(
+        const ok = !!(
           navigator.xr &&
           (await (navigator.xr as any).isSessionSupported?.("immersive-ar"))
         );
-        setArSupported(supported);
+        setArSupported(ok);
       } catch {
         setArSupported(false);
       }
-    };
-    checkAR();
+    })();
   }, []);
 
-  const handleModelReady = useCallback(({ rawScale }: { scaledHeightM: number; rawScale: number }) => {
-    setArScale(`${rawScale} ${rawScale} ${rawScale}`);
-  }, []);
+  /**
+   * Called by SafeCanvas once the Three.js model has loaded and been measured.
+   * We receive the raw cloned scene and use it to compute what model-viewer
+   * actually needs — independently of the Three.js render scale.
+   */
+  const handleModelReady = useCallback(
+    ({ scene }: ModelReadyInfo) => {
+      const dims = dimensions ?? {};
+      const { arScale: scale, arYOffsetM: yOffset } = computeARInfo(scene, dims);
+      setArScale(scale);
+      setArYOffsetM(yOffset);
+    },
+    [dimensions]
+  );
 
   if (!modelUrl.trim()) {
     return (
@@ -379,6 +450,7 @@ export default function Furniture3DViewer({
         onClose={() => setArOpen(false)}
         modelUrl={modelUrl}
         arScale={arScale}
+        arYOffsetM={arYOffsetM}
         isSupported={arSupported ?? undefined}
       />
 
@@ -387,9 +459,10 @@ export default function Furniture3DViewer({
           onClick={() => arSupported !== false && setArOpen(true)}
           disabled={arSupported === false}
           className={`absolute top-3 right-3 z-10 flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-[11px] uppercase tracking-wider transition-all shadow-xl
-            ${arSupported === false
-              ? "bg-white/5 text-white/20 border border-white/5 cursor-not-allowed"
-              : "bg-[#D4A97A] hover:bg-[#C4976A] text-[#1C1209] border border-[#D4A97A]"
+            ${
+              arSupported === false
+                ? "bg-white/5 text-white/20 border border-white/5 cursor-not-allowed"
+                : "bg-[#D4A97A] hover:bg-[#C4976A] text-[#1C1209] border border-[#D4A97A]"
             }`}
         >
           {arSupported === false ? <AlertTriangle size={14} /> : <Scan size={14} />}

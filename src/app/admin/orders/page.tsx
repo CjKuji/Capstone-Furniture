@@ -18,9 +18,8 @@ import OrderAdminCard from "@/app/components/OrderAdminCard";
 import { supabase } from "@/lib/supabase";
 
 export default function AdminOrdersPage() {
-  // isFetching detects background validation calls silently
   const { data: orders = [], isLoading, isError, isFetching } = useAdminOrders();
-  const { updateStatus } = useAdminOrderActions();
+  const { updateStatus, invalidateOrders } = useAdminOrderActions();
 
   /* ================= AUTH ================= */
   const [adminId, setAdminId] = useState<string | null>(null);
@@ -28,12 +27,10 @@ export default function AdminOrdersPage() {
 
   useEffect(() => {
     let mounted = true;
-
     const getAdmin = async () => {
       try {
         const { data, error } = await supabase.auth.getUser();
         if (!mounted) return;
-
         if (error || !data.user) {
           setAdminId(null);
         } else {
@@ -46,10 +43,30 @@ export default function AdminOrdersPage() {
         if (mounted) setAuthLoading(false);
       }
     };
-
     getAdmin();
     return () => { mounted = false; };
   }, []);
+
+  /* ================= REALTIME SUBSCRIPTION ================= */
+  useEffect(() => {
+    // Listen for any changes to the orders table
+    const channel = supabase
+      .channel("admin-orders-live-sync")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "orders" },
+        (payload) => {
+          console.log("Realtime change detected:", payload);
+          // This triggers React Query to refetch the data in the background
+          invalidateOrders();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [invalidateOrders]);
 
   /* ================= CONVERSATIONS ================= */
   const { conversations } = useConversationList({
@@ -75,7 +92,6 @@ export default function AdminOrdersPage() {
   };
 
   /* ================= INITIAL HARD LOADING BLOCKS ================= */
-  // Notice that we only display the pulse layout placeholder on initial, non-cached mounting states!
   if ((isLoading && !isFetching) || authLoading) {
     return (
       <main className="min-h-screen bg-[#0F0A06] text-white p-6">
@@ -126,8 +142,6 @@ export default function AdminOrdersPage() {
   /* ================= MAIN APPLICATION UI RENDER CANVAS ================= */
   return (
     <main className="min-h-screen bg-[#0F0A06] text-white p-6 space-y-6">
-
-      {/* HEADER SECTION CONTAINER */}
       <div className="flex items-end justify-between border-b border-white/5 pb-4 relative">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-white">
@@ -139,7 +153,6 @@ export default function AdminOrdersPage() {
         </div>
 
         <div className="flex items-center gap-2 text-xs text-white/30 font-medium">
-          {/* Transparent, zero-layout-shift sync loading wheel wrapper */}
           {isFetching ? (
             <div className="flex items-center gap-1.5 text-[#D4A97A]">
               <LoaderCircle className="w-3.5 h-3.5 animate-spin" />
@@ -151,7 +164,6 @@ export default function AdminOrdersPage() {
         </div>
       </div>
 
-      {/* CONDITIONAL SYSTEM DISPLAY: EMPTY VIEW VS GRID CARDS CANVAS */}
       {orders.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-32 text-center rounded-2xl border border-dashed border-white/5 bg-[#0B0704]">
           <Box className="w-8 h-8 text-white/20 mb-3" />

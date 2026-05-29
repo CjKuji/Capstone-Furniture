@@ -5,13 +5,11 @@ import { supabase } from "@/lib/supabase";
  * =========================================================
  * PAYMONGO WEBHOOK (FINAL SOURCE OF TRUTH)
  * =========================================================
- *
- * RULES:
+ * * RULES:
  * - DB is source of truth
- * - Only "paid" is final state
- * - No calculator usage
- * - No intent logic
- * - Idempotent + safe replays
+ * - Only "paid" is a final state
+ * - No external calculator usage (re-sums DB values)
+ * - Idempotent + safe for replays
  */
 
 export async function POST(req: Request) {
@@ -19,13 +17,12 @@ export async function POST(req: Request) {
     const payload = await req.json();
 
     /**
-     * =========================================================
      * 1. EXTRACT EVENT DATA
-     * =========================================================
      */
     const eventType = payload?.data?.attributes?.type;
     const eventData = payload?.data?.attributes?.data?.attributes;
 
+    // Support both Checkout Session and Payment Intent structures
     const checkoutSessionId =
       eventData?.checkout_session_id ||
       eventData?.checkout_session?.id;
@@ -37,17 +34,15 @@ export async function POST(req: Request) {
     const paymentId = eventData?.metadata?.payment_id ?? null;
     const webhookEventId = payload?.data?.id ?? null;
 
-    console.log("🔥 PayMongo Webhook:", {
+    console.log("🔥 PayMongo Webhook Received:", {
       eventType,
+      paymentId,
       checkoutSessionId,
       paymentIntentId,
-      paymentId,
     });
 
     /**
-     * =========================================================
      * 2. FILTER ONLY SUCCESS EVENTS
-     * =========================================================
      */
     const isSuccessEvent =
       eventType === "checkout_session.payment.paid" ||
@@ -61,9 +56,7 @@ export async function POST(req: Request) {
     }
 
     /**
-     * =========================================================
      * 3. FIND PAYMENT (ROBUST MATCHING)
-     * =========================================================
      */
     let query = supabase.from("payments").select("*");
 
@@ -75,24 +68,22 @@ export async function POST(req: Request) {
       query = query.eq("payment_intent_id", paymentIntentId);
     } else {
       return NextResponse.json(
-        { error: "No identifiers found" },
+        { error: "No identifiers found in webhook payload" },
         { status: 400 }
       );
     }
 
-    const { data: payment, error } = await query.single();
+    const { data: payment, error: paymentError } = await query.single();
 
-    if (error || !payment) {
+    if (paymentError || !payment) {
       return NextResponse.json(
-        { error: "Payment not found" },
+        { error: "Payment record not found in database" },
         { status: 404 }
       );
     }
 
     /**
-     * =========================================================
      * 4. IDEMPOTENCY CHECK (CRITICAL)
-     * =========================================================
      */
     if (payment.status === "paid") {
       return NextResponse.json({
@@ -103,9 +94,7 @@ export async function POST(req: Request) {
     }
 
     /**
-     * =========================================================
      * 5. MARK PAYMENT AS PAID
-     * =========================================================
      */
     const { error: updateError } = await supabase
       .from("payments")
@@ -113,22 +102,18 @@ export async function POST(req: Request) {
         status: "paid",
         paid_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-
         raw_response: payload,
-
         webhook_event_id: webhookEventId,
         webhook_received_at: new Date().toISOString(),
       })
       .eq("id", payment.id);
 
     if (updateError) {
-      throw new Error(updateError.message);
+      throw new Error(`Failed to update payment: ${updateError.message}`);
     }
 
     /**
-     * =========================================================
-     * 6. RECALCULATE ORDER (DB ONLY)
-     * =========================================================
+     * 6. RECALCULATE ORDER TOTALS (DB ONLY)
      */
     const { data: order, error: orderError } = await supabase
       .from("orders")
@@ -137,13 +122,14 @@ export async function POST(req: Request) {
       .single();
 
     if (orderError || !order) {
-      throw new Error("Order not found");
+      throw new Error("Associated order not found");
     }
 
-    const total = Number(
+    const orderTotal = Number(
       order.final_total_price ?? order.quote_total_price ?? 0
     );
 
+    // Sum all successful payments for this order
     const { data: paidPayments, error: paidError } = await supabase
       .from("payments")
       .select("amount")
@@ -151,7 +137,7 @@ export async function POST(req: Request) {
       .eq("status", "paid");
 
     if (paidError) {
-      throw new Error(paidError.message);
+      throw new Error(`Failed to fetch paid payments: ${paidError.message}`);
     }
 
     const totalPaid =
@@ -160,27 +146,23 @@ export async function POST(req: Request) {
         0
       ) || 0;
 
-    const remaining = Math.max(total - totalPaid, 0);
+    const remaining = Math.max(orderTotal - totalPaid, 0);
 
     /**
-     * =========================================================
-     * 7. ORDER STATUS (SINGLE SOURCE OF TRUTH)
-     * =========================================================
+     * 7. DETERMINE ORDER STATUS
      */
     let paymentStatus: "unpaid" | "partially_paid" | "fully_paid";
 
     if (totalPaid <= 0) {
       paymentStatus = "unpaid";
-    } else if (totalPaid < total) {
+    } else if (totalPaid < orderTotal) {
       paymentStatus = "partially_paid";
     } else {
       paymentStatus = "fully_paid";
     }
 
     /**
-     * =========================================================
-     * 8. UPDATE ORDER
-     * =========================================================
+     * 8. UPDATE ORDER RECORD
      */
     const { error: orderUpdateError } = await supabase
       .from("orders")
@@ -191,33 +173,29 @@ export async function POST(req: Request) {
       .eq("id", payment.order_id);
 
     if (orderUpdateError) {
-      throw new Error(orderUpdateError.message);
+      throw new Error(`Order update failed: ${orderUpdateError.message}`);
     }
 
     /**
-     * =========================================================
-     * 9. RESPONSE
-     * =========================================================
+     * 9. FINAL SUCCESS RESPONSE
      */
     return NextResponse.json({
       success: true,
-
       paymentId: payment.id,
       orderId: payment.order_id,
-
-      total,
+      total: orderTotal,
       totalPaid,
       remaining,
-
       paymentStatus,
     });
+
   } catch (err: any) {
-    console.error("🔥 Webhook error:", err);
+    console.error("🔥 WEBHOOK CRITICAL ERROR:", err);
 
     return NextResponse.json(
       {
         success: false,
-        error: err.message || "Webhook failed",
+        error: err.message || "Internal Webhook Error",
       },
       { status: 500 }
     );
