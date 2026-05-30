@@ -1,96 +1,111 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  getMyOrders,
-  getMyOrderById,
-} from "@/services/orders/fetchOrderService";
-
+import { useCallback } from "react";
+import { getMyOrders, getMyOrderById } from "@/services/orders/fetchOrderService";
 import type { Order } from "@/types/order";
 
 export type OrderWithItems = Order & {
   order_items: NonNullable<Order["order_items"]>;
 };
 
+/**
+ * Helper to ensure order_items is always an array
+ */
+const transformOrder = (order: any): OrderWithItems => ({
+  ...order,
+  order_items: order.order_items ?? [],
+});
+
 export const userOrderKeys = {
   all: ["user-orders"] as const,
-  list: () => [...userOrderKeys.all, "list"] as const,
-  detail: (orderId: string) => [...userOrderKeys.all, "detail", orderId] as const,
+  lists: () => [...userOrderKeys.all, "list"] as const,
+  details: () => [...userOrderKeys.all, "detail"] as const,
+  detail: (id: string) => [...userOrderKeys.details(), id] as const,
 };
 
 /**
- * =========================================================
- * ALL CUSTOMER ORDERS (LIST)
- * =========================================================
+ * Hook: Fetch all customer orders
+ *
+ * KEY FIXES vs original:
+ *
+ * 1. gcTime: Infinity (was 15 min)
+ *    staleTime: Infinity means data is never considered stale, so React Query
+ *    won't refetch in the background. BUT if gcTime is shorter than the time
+ *    between visits, the cache entry gets garbage-collected while the user is
+ *    on another page. When they return, the cache is empty and isLoading fires
+ *    again — causing the skeleton flash. Setting gcTime to Infinity keeps the
+ *    cache alive for the entire session, matching the staleTime intent.
+ *
+ * 2. refetchOnWindowFocus: false, refetchOnReconnect: false
+ *    With staleTime: Infinity these would be no-ops anyway (data is never
+ *    stale so focus/reconnect refetches are skipped), but being explicit
+ *    prevents any future staleTime change from accidentally re-enabling them.
+ *
+ * 3. placeholderData: (prev) => prev
+ *    During any transition where React Query does fetch (e.g. manual refetch
+ *    via refetch()), this keeps the previous data visible instead of wiping
+ *    it to undefined. isLoading stays false; only isFetching goes true.
+ *    This is the "keep showing old data while refreshing" pattern.
  */
 export function useMyOrders() {
   return useQuery<OrderWithItems[], Error>({
-    queryKey: userOrderKeys.list(),
+    queryKey: userOrderKeys.lists(),
     queryFn: async () => {
       const data = await getMyOrders();
-      return (data ?? []).map((order) => ({
-        ...order,
-        order_items: order.order_items ?? [],
-      }));
+      return (data ?? []).map(transformOrder);
     },
     staleTime: Infinity,
-    gcTime: 15 * 60 * 1000, 
-    refetchOnWindowFocus: false, // 👍 Stops disappearing when shifting windows
-    refetchOnReconnect: false,   // 👍 Stops disappearing during minor network drops
+    gcTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    placeholderData: (prev) => prev,
     retry: 2,
   });
 }
 
 /**
- * =========================================================
- * SINGLE CUSTOMER ORDER (MODAL DETAILS VIEW)
- * =========================================================
+ * Hook: Fetch single order by ID (with placeholder protection)
  */
 export function useMyOrderById(orderId?: string) {
-  const safeOrderId = orderId ?? "";
-
   return useQuery<OrderWithItems, Error>({
-    queryKey: safeOrderId
-      ? userOrderKeys.detail(safeOrderId)
-      : ["user-orders", "detail", "disabled"],
-    enabled: !!safeOrderId,
+    queryKey: orderId ? userOrderKeys.detail(orderId) : ["user-orders", "disabled"],
+    enabled: !!orderId,
     queryFn: async () => {
-      if (!safeOrderId) throw new Error("Order ID is required");
-      const data = await getMyOrderById(safeOrderId);
-      return {
-        ...data,
-        order_items: data.order_items ?? [],
-      };
+      if (!orderId) throw new Error("Order ID required");
+      const data = await getMyOrderById(orderId);
+      return transformOrder(data);
     },
-    // Absolute Guard: Keeps the old snapshot visible while data re-fetches in the background.
-    // This stops React from clearing the child tree and violently unmounting the 3D Canvas.
     placeholderData: (previousData) => previousData,
     staleTime: Infinity,
-    gcTime: 15 * 60 * 1000,
-    refetchOnWindowFocus: false, // 🛠️ FIXED: Turned off to protect your WebGL canvas context on window switch
-    refetchOnReconnect: false,   // 🛠️ FIXED: Turned off to prevent context loss on unexpected connectivity changes
+    gcTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     retry: 2,
   });
 }
 
 /**
- * =========================================================
- * CUSTOMER ACTIONS & CACHE INVALIDATIONS
- * =========================================================
+ * Hook: Cache management actions
  */
 export function useUserOrderActions() {
   const queryClient = useQueryClient();
 
-  const invalidateOrders = async () => {
-    await queryClient.invalidateQueries({ queryKey: userOrderKeys.all, exact: false });
-  };
+  const invalidateAll = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: userOrderKeys.all }),
+    [queryClient]
+  );
 
-  const invalidateOrder = async (orderId: string) => {
-    await queryClient.invalidateQueries({ queryKey: userOrderKeys.detail(orderId), exact: true });
-  };
+  const invalidateList = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: userOrderKeys.lists() }),
+    [queryClient]
+  );
 
-  return {
-    invalidateOrders,
-    invalidateOrder,
-  };
+  const invalidateDetail = useCallback(
+    (orderId: string) =>
+      queryClient.invalidateQueries({ queryKey: userOrderKeys.detail(orderId) }),
+    [queryClient]
+  );
+
+  return { invalidateAll, invalidateList, invalidateDetail };
 }

@@ -1,20 +1,20 @@
-import { Suspense } from "react";
 import CustomerOrdersPage from "./CustomerOrderPage";
-import { Loader2 } from "lucide-react";
 
+/**
+ * NO Suspense wrapper here.
+ *
+ * The previous Suspense boundary was catching React suspensions triggered
+ * by createPortal commits (OrderFullDetailModal) and flashing the
+ * "Synchronizing Manifest..." fallback + remounting Navbar.
+ *
+ * CustomerOrdersPage is "use client" and handles its own loading states
+ * internally (skeleton, error boundary). The only hook that required
+ * Suspense was useSearchParams(), which is now isolated inside
+ * PaymentSuccessModal with its own <Suspense fallback={null}> inline.
+ *
+ * Removing this outer boundary means no fallback UI can flash, and
+ * Navbar never unmounts/remounts during modal transitions.
+ */
 export default function Page() {
-  return (
-    <Suspense 
-      fallback={
-        <div className="bg-[#0F0A06] min-h-screen text-white flex flex-col justify-center items-center gap-4 px-4">
-          <Loader2 className="w-8 h-8 text-[#D4A97A] animate-spin" />
-          <p className="text-white/30 text-xs font-medium tracking-widest uppercase animate-pulse">
-            Loading orders...
-          </p>
-        </div>
-      }
-    >
-      <CustomerOrdersPage />
-    </Suspense>
-  );
+  return <CustomerOrdersPage />;
 }

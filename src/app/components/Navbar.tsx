@@ -6,6 +6,7 @@ import { Search, ShoppingBag, X, Menu, LogOut, LayoutDashboard, UserCircle2, Che
 
 import { supabase } from "@/lib/supabase";
 import { useUser } from "@/hooks/useUser";
+import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 
 const NAV_ITEMS = [
   { label: "Home", route: "/" },
@@ -16,7 +17,8 @@ const NAV_ITEMS = [
 export default function Navbar() {
   const router = useRouter();
   const pathname = usePathname();
-  const { authUser, role } = useUser();
+
+  const { authUser, role, initialized } = useUser();
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -25,6 +27,15 @@ export default function Navbar() {
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+
+  // --- FIX: State adjustment during render ---
+  const [prevPathname, setPrevPathname] = useState(pathname);
+  if (pathname !== prevPathname) {
+    setPrevPathname(pathname);
+    setMenuOpen(false);
+    setDropdownOpen(false);
+  }
+  // -------------------------------------------
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -45,13 +56,7 @@ export default function Navbar() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  useEffect(() => { setMenuOpen(false); setDropdownOpen(false); }, [pathname]);
-
-  /* lock body scroll when mobile menu is open */
-  useEffect(() => {
-    document.body.style.overflow = menuOpen ? "hidden" : "";
-    return () => { document.body.style.overflow = ""; };
-  }, [menuOpen]);
+  useBodyScrollLock(menuOpen);
 
   const handleLogout = async () => {
     setDropdownOpen(false);
@@ -69,11 +74,11 @@ export default function Navbar() {
     <>
       {/* ── MAIN NAV ── */}
       <header
-        className={`sticky top-0 z-50 w-full transition-shadow duration-300 ${
+        className={`sticky top-0 w-full transition-shadow duration-300 ${
           scrolled ? "shadow-[0_2px_24px_rgba(0,0,0,0.35)]" : ""
         } bg-[#1C1209]/96 backdrop-blur-md`}
+        style={{ zIndex: 50 }}
       >
-        {/* nav row — fixed height 56px on mobile, 64px on sm+ */}
         <div className="flex justify-between items-center gap-2 sm:gap-4 mx-auto px-3 sm:px-6 max-w-7xl h-14 sm:h-16">
 
           {/* LOGO */}
@@ -122,89 +127,89 @@ export default function Navbar() {
               {searchOpen ? <X className="w-4 h-4 sm:w-5 sm:h-5" /> : <Search className="w-4 h-4 sm:w-5 sm:h-5" />}
             </button>
 
-            {/* ORDERS / CART */}
-            {authUser && (
-              <button
-                onClick={() => router.push("/orders")}
-                aria-label="My orders"
-                className="relative hover:bg-white/10 p-2 rounded-full text-white/60 hover:text-white transition"
-              >
-                <ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5" />
-                {cartCount > 0 && (
-                  <span className="top-1 right-1 absolute flex justify-center items-center bg-[#D4A97A] rounded-full w-3.5 h-3.5 sm:w-4 sm:h-4 font-bold text-[#1C1209] text-[9px] sm:text-[10px]">
-                    {cartCount}
-                  </span>
-                )}
-              </button>
-            )}
-
-            {/* USER MENU */}
-            {authUser ? (
-              <div className="relative ml-0.5 sm:ml-1" ref={dropdownRef}>
+            {!initialized ? (
+              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white/10 animate-pulse ml-0.5 sm:ml-1" />
+            ) : authUser ? (
+              <>
+                {/* ORDERS / CART */}
                 <button
-                  onClick={() => setDropdownOpen((p) => !p)}
-                  aria-expanded={dropdownOpen}
-                  aria-label="User menu"
-                  className="flex justify-center items-center bg-[#D4A97A] hover:opacity-90 rounded-full w-8 h-8 sm:w-9 sm:h-9 font-bold text-[#1C1209] text-xs sm:text-sm transition"
+                  onClick={() => router.push("/orders")}
+                  aria-label="My orders"
+                  className="relative hover:bg-white/10 p-2 rounded-full text-white/60 hover:text-white transition"
                 >
-                  {initials}
+                  <ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5" />
+                  {cartCount > 0 && (
+                    <span className="top-1 right-1 absolute flex justify-center items-center bg-[#D4A97A] rounded-full w-3.5 h-3.5 sm:w-4 sm:h-4 font-bold text-[#1C1209] text-[9px] sm:text-[10px]">
+                      {cartCount}
+                    </span>
+                  )}
                 </button>
 
-                {dropdownOpen && (
-                  <div className="right-0 absolute bg-[#241810] shadow-2xl mt-3 border border-white/10 rounded-xl ring-1 ring-black/20 w-56 sm:w-60 overflow-hidden">
-                    {/* User info */}
-                    <div className="flex items-center gap-3 px-4 py-3 border-white/10 border-b">
-                      <div className="flex justify-center items-center bg-[#D4A97A] rounded-full w-8 h-8 sm:w-9 sm:h-9 font-bold text-[#1C1209] text-xs sm:text-sm shrink-0">
-                        {initials}
+                {/* USER MENU */}
+                <div className="relative ml-0.5 sm:ml-1" ref={dropdownRef}>
+                  <button
+                    onClick={() => setDropdownOpen((p) => !p)}
+                    aria-expanded={dropdownOpen}
+                    aria-label="User menu"
+                    className="flex justify-center items-center bg-[#D4A97A] hover:opacity-90 rounded-full w-8 h-8 sm:w-9 sm:h-9 font-bold text-[#1C1209] text-xs sm:text-sm transition"
+                  >
+                    {initials}
+                  </button>
+
+                  {dropdownOpen && (
+                    <div className="right-0 absolute bg-[#241810] shadow-2xl mt-3 border border-white/10 rounded-xl ring-1 ring-black/20 w-56 sm:w-60 overflow-hidden">
+                      <div className="flex items-center gap-3 px-4 py-3 border-white/10 border-b">
+                        <div className="flex justify-center items-center bg-[#D4A97A] rounded-full w-8 h-8 sm:w-9 sm:h-9 font-bold text-[#1C1209] text-xs sm:text-sm shrink-0">
+                          {initials}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-medium text-white text-xs sm:text-sm truncate">
+                            {authUser.email}
+                          </p>
+                          {role && (
+                            <p className="text-[#D4A97A] text-[10px] sm:text-xs capitalize">{role}</p>
+                          )}
+                        </div>
                       </div>
-                      <div className="min-w-0">
-                        <p className="font-medium text-white text-xs sm:text-sm truncate">
-                          {authUser.email}
-                        </p>
-                        {role && (
-                          <p className="text-[#D4A97A] text-[10px] sm:text-xs capitalize">{role}</p>
-                        )}
+
+                      {[
+                        {
+                          label: "Profile",
+                          icon: <UserCircle2 className="w-4 h-4" />,
+                          route: "/profile",
+                        },
+                        ...(role === "admin" || role === "super_admin"
+                          ? [{
+                              label: "Admin Dashboard",
+                              icon: <LayoutDashboard className="w-4 h-4" />,
+                              route: "/admin",
+                            }]
+                          : []),
+                      ].map(({ label, icon, route }) => (
+                        <button
+                          key={label}
+                          onClick={() => { setDropdownOpen(false); router.push(route); }}
+                          className="flex items-center gap-3 hover:bg-white/5 px-4 py-3 w-full text-white/70 hover:text-white text-sm text-left transition"
+                        >
+                          <span className="text-[#D4A97A]">{icon}</span>
+                          {label}
+                          <ChevronRight className="ml-auto w-3.5 h-3.5 text-white/30" />
+                        </button>
+                      ))}
+
+                      <div className="border-white/10 border-t">
+                        <button
+                          onClick={handleLogout}
+                          className="flex items-center gap-3 hover:bg-red-950/30 px-4 py-3 w-full text-red-400 hover:text-red-300 text-sm text-left transition"
+                        >
+                          <LogOut className="w-4 h-4" />
+                          Sign out
+                        </button>
                       </div>
                     </div>
-
-                    {/* Menu items */}
-                    {[
-                      {
-                        label: "Profile",
-                        icon: <UserCircle2 className="w-4 h-4" />,
-                        route: "/profile",
-                      },
-                      ...(role === "admin" || role === "super_admin"
-                        ? [{
-                            label: "Admin Dashboard",
-                            icon: <LayoutDashboard className="w-4 h-4" />,
-                            route: "/admin",
-                          }]
-                        : []),
-                    ].map(({ label, icon, route }) => (
-                      <button
-                        key={label}
-                        onClick={() => { setDropdownOpen(false); router.push(route); }}
-                        className="flex items-center gap-3 hover:bg-white/5 px-4 py-3 w-full text-white/70 hover:text-white text-sm text-left transition"
-                      >
-                        <span className="text-[#D4A97A]">{icon}</span>
-                        {label}
-                        <ChevronRight className="ml-auto w-3.5 h-3.5 text-white/30" />
-                      </button>
-                    ))}
-
-                    <div className="border-white/10 border-t">
-                      <button
-                        onClick={handleLogout}
-                        className="flex items-center gap-3 hover:bg-red-950/30 px-4 py-3 w-full text-red-400 hover:text-red-300 text-sm text-left transition"
-                      >
-                        <LogOut className="w-4 h-4" />
-                        Sign out
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
+              </>
             ) : (
               <div className="hidden sm:flex items-center gap-2 ml-2">
                 <button
@@ -257,13 +262,12 @@ export default function Navbar() {
         )}
       </header>
 
-      {/* MOBILE SLIDE-DOWN MENU — full-screen overlay */}
+      {/* MOBILE SLIDE-DOWN MENU */}
       {menuOpen && (
         <div
           className="md:hidden fixed inset-0 z-40 bg-[#0F0A06]/95 backdrop-blur-md flex flex-col pt-14 sm:pt-16"
           style={{ top: 0 }}
         >
-          {/* close hit area at top */}
           <div className="h-14 sm:h-16 shrink-0" onClick={() => setMenuOpen(false)} />
 
           <nav className="flex-1 overflow-y-auto px-4 py-2">
@@ -285,7 +289,11 @@ export default function Navbar() {
               })}
             </ul>
 
-            {!authUser && (
+            {!initialized ? (
+              <div className="mt-6 space-y-3">
+                <div className="h-12 rounded-full bg-white/5 animate-pulse" />
+              </div>
+            ) : !authUser ? (
               <div className="flex flex-col gap-3 mt-6">
                 <button
                   onClick={() => { router.push("/auth/login"); setMenuOpen(false); }}
@@ -300,9 +308,7 @@ export default function Navbar() {
                   Get Started
                 </button>
               </div>
-            )}
-
-            {authUser && (
+            ) : (
               <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
                 <div className="flex items-center gap-3 px-4 py-4 border-b border-white/10">
                   <div className="flex justify-center items-center bg-[#D4A97A] rounded-full w-10 h-10 font-bold text-[#1C1209] shrink-0">

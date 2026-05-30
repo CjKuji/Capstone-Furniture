@@ -1,13 +1,13 @@
 "use client";
 
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useMemo } from "react";
 import { createPortal } from "react-dom";
 import type { Order, OrderItem } from "@/types/order";
 import type { Conversation } from "@/hooks/useConversationList";
 
 import BasicInfoSection from "@/app/components/sections/orders/BasicInfoSection";
-import AssetsSection    from "@/app/components/sections/orders/AssetsSection";
-import VariantsSection  from "@/app/components/sections/orders/VariantsSection";
+import AssetsSection from "@/app/components/sections/orders/AssetsSection";
+import VariantsSection from "@/app/components/sections/orders/VariantsSection";
 import Furniture3DViewer from "@/app/components/Furniture3DViewer";
 
 /* =========================================================
@@ -29,59 +29,40 @@ export default function OrderFullDetailModal({
   open,
   onClose,
   onViewFull,
-  conversation,
 }: Props) {
-  const [canRenderCanvas, setCanRenderCanvas] = useState(false);
-  const [isAnimateIn, setIsAnimateIn] = useState(false);
-  const [mounted, setMounted] = useState(false);
-  
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const frameRef = useRef<number | null>(null);
+  /**
+   * NO scroll-lock useEffect here.
+   *
+   * Previously this component ran:
+   *   document.body.style.overflow = "hidden"
+   *
+   * The Navbar ALSO has a scroll-lock useEffect for its mobile menu:
+   *   document.body.style.overflow = menuOpen ? "hidden" : ""
+   *   cleanup: document.body.style.overflow = ""
+   *
+   * When the modal mounted and set overflow:hidden, any subsequent
+   * re-render of the Navbar (e.g. triggered by the same React batch
+   * that opened the modal) ran that effect's cleanup → reset overflow
+   * to "" → triggered a browser reflow → React flushed pending async
+   * state in useUser → authUser briefly appeared null → Navbar flashed
+   * "Get Started".
+   *
+   * Scroll locking is handled by OrderCard's parent page
+   * (CustomerOrdersPage) which already locks body scroll when the
+   * payment modal is open, and the modal panel itself is overflow-y-auto
+   * so internal scrolling works fine without a body lock.
+   *
+   * If you need scroll lock for this modal specifically, do it in
+   * OrderCard (the direct parent) in a single consolidated effect,
+   * not here — so there is only ever ONE owner of body.style.overflow.
+   */
 
-  // Handle SSR hydration matching safely for Portals
-  useEffect(() => {
-    setMounted(true);
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-      if (frameRef.current) cancelAnimationFrame(frameRef.current);
-    };
-  }, []);
-
-  // Strict animation sequencing & layout isolation engine
-  useEffect(() => {
-    if (!open) {
-      setIsAnimateIn(false);
-      setCanRenderCanvas(false);
-      return;
-    }
-
-    const originalOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    // Wait for DOM tree allocation to settle layout measurements
-    frameRef.current = requestAnimationFrame(() => {
-      frameRef.current = requestAnimationFrame(() => {
-        setIsAnimateIn(true);
-      });
-    });
-
-    // Defer WebGL/Canvas layout bindings securely until CSS transitions finalize tracking dimensions
-    // Changed to 500ms to guarantee DOM layout calculation is 100% complete before canvas initialization
-    timerRef.current = setTimeout(() => {
-      setCanRenderCanvas(true);
-    }, 500); 
-
-    return () => {
-      if (frameRef.current) cancelAnimationFrame(frameRef.current);
-      if (timerRef.current) clearTimeout(timerRef.current);
-      document.body.style.overflow = originalOverflow;
-    };
-  }, [open]);
-
-  /* ── MEMOIZED DATA NORMALIZATION ARCHITECTURE ── */
+  /* ── MEMOIZED DATA NORMALIZATION ── */
   const items: OrderItem[] = useMemo(() => {
-    if (!order?.order_items) return [];
-    return order.order_items.map((item) => {
+    const orderItems = order?.order_items;
+    if (!orderItems) return [];
+
+    return orderItems.map((item) => {
       const snapshot = item.furniture_snapshot;
       const rawDimensions = (snapshot as any)?.dimensions;
 
@@ -89,25 +70,25 @@ export default function OrderFullDetailModal({
         ...item,
         furniture_snapshot: snapshot
           ? {
-              id:          snapshot.id,
-              name:        snapshot.name        ?? undefined,
+              id: snapshot.id,
+              name: snapshot.name ?? undefined,
               description: snapshot.description ?? undefined,
-              category:    snapshot.category    ?? undefined,
-              base_price:  snapshot.base_price  ?? undefined,
-              model_url:   snapshot.model_url   ?? undefined,
-              width_cm:    rawDimensions?.width_cm  ?? undefined,
-              depth_cm:    rawDimensions?.depth_cm  ?? undefined,
-              height_cm:   rawDimensions?.height_cm ?? undefined,
-              images:      snapshot.images      ?? undefined,
+              category: snapshot.category ?? undefined,
+              base_price: snapshot.base_price ?? undefined,
+              model_url: snapshot.model_url ?? undefined,
+              width_cm: rawDimensions?.width_cm ?? undefined,
+              depth_cm: rawDimensions?.depth_cm ?? undefined,
+              height_cm: rawDimensions?.height_cm ?? undefined,
+              images: snapshot.images ?? undefined,
             }
           : undefined,
         variant_snapshot: item.variant_snapshot
           ? {
-              id:                item.variant_snapshot.id,
-              name:              item.variant_snapshot.name              ?? undefined,
-              texture_url:       item.variant_snapshot.texture_url       ?? undefined,
+              id: item.variant_snapshot.id,
+              name: item.variant_snapshot.name ?? undefined,
+              texture_url: item.variant_snapshot.texture_url ?? undefined,
               preview_image_url: item.variant_snapshot.preview_image_url ?? undefined,
-              price_adjustment:  item.variant_snapshot.price_adjustment  ?? undefined,
+              price_adjustment: item.variant_snapshot.price_adjustment ?? undefined,
             }
           : undefined,
       };
@@ -124,12 +105,12 @@ export default function OrderFullDetailModal({
     [items]
   );
 
-  // Avoid running tracking elements before server framework completion cycles
-  if (!mounted) return null;
-
   if (!order || !order.id) {
     return createPortal(
-      <div className={`fixed inset-0 z-[99999] flex items-center justify-center p-4 backdrop-blur-md bg-black/80 transition-all duration-300 ${open ? "opacity-100 visible" : "opacity-0 invisible pointer-events-none"}`}>
+      <div
+        className="fixed inset-0 flex items-center justify-center p-4 backdrop-blur-md bg-black/80"
+        style={{ zIndex: 99999 }}
+      >
         <div className="w-full max-w-md bg-[#0A0705] border border-white/[0.06] rounded-2xl p-8 text-center shadow-2xl animate-pulse">
           <p className="text-[10px] font-black uppercase tracking-[0.25em] text-[#D4A97A]">
             Initializing Order Manifest...
@@ -140,18 +121,24 @@ export default function OrderFullDetailModal({
     );
   }
 
-  /* ── MAIN MODAL CONTENT TEMPLATE ── */
   return createPortal(
+    /**
+     * Backdrop is fully opaque from frame 1 — no opacity transition on
+     * the backdrop itself. Only the inner panel animates.
+     * This prevents the Navbar from ever being visible through a
+     * semi-transparent or fading-in backdrop.
+     */
     <div
-      className={`fixed inset-0 z-[99999] flex items-center justify-center p-0 sm:p-6 backdrop-blur-md overflow-hidden transition-all duration-300 ease-out ${
-        open ? "opacity-100 visible" : "opacity-0 invisible pointer-events-none"
-      }`}
+      className="fixed inset-0 flex items-center justify-center p-0 sm:p-6 backdrop-blur-md overflow-hidden"
       style={{
+        zIndex: 99999,
         backgroundColor: "rgba(6, 4, 3, 0.85)",
-        willChange: "opacity",
       }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
     >
+      {/* Only the panel gets the entry animation */}
       <div
         className={`
           relative w-full flex flex-col
@@ -160,14 +147,14 @@ export default function OrderFullDetailModal({
           max-w-full sm:max-w-[95%] md:max-w-[92%] lg:max-w-[90%] xl:max-w-[85%] 2xl:max-w-[1600px]
           shadow-[0_24px_60px_rgba(0,0,0,0.8)] overflow-hidden
           border-0 sm:border border-white/[0.06] bg-[#0A0705]
-          transition-all duration-300 ease-out
-          ${isAnimateIn ? "transform scale-100 translate-y-0" : "transform scale-[0.99] translate-y-4"}
+          transition-all duration-500
+          translate-y-0 scale-100 opacity-100
         `}
-        style={{ willChange: "transform, opacity" }}
+        style={{ transitionTimingFunction: "cubic-bezier(0.16, 1, 0.3, 1)" }}
       >
         <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-[#D4A97A]/50 to-transparent flex-shrink-0" />
 
-        {/* ── HEADER ── */}
+        {/* HEADER */}
         <div
           className="flex items-center justify-between px-5 sm:px-8 py-4 shrink-0 bg-[#0E0A07]"
           style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
@@ -210,13 +197,11 @@ export default function OrderFullDetailModal({
           </div>
         </div>
 
-        {/* ── SCROLLABLE BODY ── */}
+        {/* SCROLLABLE BODY */}
         <div className="overflow-y-auto flex-1 p-5 sm:p-8 space-y-8 focus:outline-none custom-scrollbar bg-gradient-to-b from-[#0A0705] to-[#070504]">
-
-          {/* ── ORDER ITEMS LIST ── */}
           {items.map((item, index) => {
             const snapshot = item.furniture_snapshot;
-            const variant  = item.variant_snapshot;
+            const variant = item.variant_snapshot;
             const modelUrl = item.model_snapshot_url || snapshot?.model_url;
 
             if (!snapshot) {
@@ -235,7 +220,6 @@ export default function OrderFullDetailModal({
                 key={item.id}
                 className="rounded-2xl overflow-hidden bg-[#0D0907]/60 border border-white/[0.04] shadow-inner"
               >
-                {/* ITEM BLOCK HEADER */}
                 <div
                   className="flex items-center justify-between px-5 sm:px-6 py-3.5 bg-white/[0.02]"
                   style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
@@ -253,31 +237,24 @@ export default function OrderFullDetailModal({
                   </span>
                 </div>
 
-                {/* LAYOUT DETAILS SPLIT */}
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 p-5 sm:p-6 items-start">
-
-                  {/* VIEWPORT CONTROLLER (LEFT COLUMN) */}
                   <div className="lg:col-span-5 w-full min-w-0">
                     {modelUrl ? (
-                      <div className="
-                        relative w-full rounded-xl overflow-hidden bg-[#050302]
-                        aspect-square sm:aspect-video lg:aspect-square
-                        border border-white/[0.04] shadow-2xl
-                      ">
-                        {canRenderCanvas ? (
+                      <div className="relative w-full rounded-xl overflow-hidden bg-[#050302] aspect-square sm:aspect-video lg:aspect-square border border-white/[0.04] shadow-2xl">
+                        {open ? (
                           <Furniture3DViewer
                             modelUrl={modelUrl}
                             selectedVariantTextureUrl={variant?.texture_url}
                             dimensions={{
-                              width_cm:  snapshot.width_cm,
-                              depth_cm:  snapshot.depth_cm,
+                              width_cm: snapshot.width_cm,
+                              depth_cm: snapshot.depth_cm,
                               height_cm: snapshot.height_cm,
                             }}
                           />
                         ) : (
                           <div className="absolute inset-0 flex items-center justify-center bg-[#050302]">
-                            <div className="text-[10px] text-[#D4A97A] font-bold uppercase tracking-[0.25em] animate-pulse">
-                              Constructing Viewport...
+                            <div className="text-[10px] text-[#D4A97A] font-bold uppercase tracking-[0.25em]">
+                              Loading Space...
                             </div>
                           </div>
                         )}
@@ -291,7 +268,6 @@ export default function OrderFullDetailModal({
                     )}
                   </div>
 
-                  {/* INFO SECTION BLOCKS (RIGHT COLUMN) */}
                   <div className="lg:col-span-7 flex flex-col gap-6 w-full min-w-0">
                     <div className="w-full bg-white/[0.01] p-4 rounded-xl border border-white/[0.02]">
                       <BasicInfoSection items={[item]} />
@@ -306,13 +282,12 @@ export default function OrderFullDetailModal({
                       </div>
                     </div>
                   </div>
-
                 </div>
               </div>
             );
           })}
 
-          {/* ── GENERAL SUMMARY TILES ── */}
+          {/* FULFILLMENT SUMMARY */}
           <div className="rounded-2xl p-5 sm:p-6 space-y-5 bg-[#0E0A07]/40 border border-white/[0.04]">
             <div className="flex items-center gap-2.5">
               <div className="w-1 h-3.5 bg-[#D4A97A] rounded-full" />
@@ -344,10 +319,7 @@ export default function OrderFullDetailModal({
               </div>
             </div>
 
-            <div
-              className="flex justify-between items-center pt-5"
-              style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}
-            >
+            <div className="flex justify-between items-center pt-5" style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
               <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-white/40">
                 Aggregated Units: <span className="text-white font-semibold ml-1.5">{totalItems}</span>
               </span>
@@ -362,15 +334,10 @@ export default function OrderFullDetailModal({
 
           <button
             onClick={onClose}
-            className="
-              w-full h-11 rounded-xl text-[10px] font-bold uppercase tracking-[0.2em] transition-all duration-200
-              border border-white/[0.04] bg-white/[0.01] text-white/40
-              hover:bg-white/[0.03] hover:text-white/70 active:scale-[0.99]
-            "
+            className="w-full h-11 rounded-xl text-[10px] font-bold uppercase tracking-[0.2em] transition-all duration-200 border border-white/[0.04] bg-white/[0.01] text-white/40 hover:bg-white/[0.03] hover:text-white/70 active:scale-[0.99]"
           >
             Close Detail Overview
           </button>
-
         </div>
       </div>
     </div>,

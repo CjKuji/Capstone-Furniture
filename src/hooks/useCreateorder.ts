@@ -176,7 +176,7 @@ export function useOrderCreate() {
         await queryClient.invalidateQueries(
           {
             queryKey:
-              userOrderKeys.list(),
+              userOrderKeys.lists(),
           }
         );
 

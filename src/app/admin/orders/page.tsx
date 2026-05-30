@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Box, RefreshCw, LoaderCircle } from "lucide-react";
 
 import {
@@ -18,6 +19,7 @@ import OrderAdminCard from "@/app/components/OrderAdminCard";
 import { supabase } from "@/lib/supabase";
 
 export default function AdminOrdersPage() {
+  const router = useRouter();
   const { data: orders = [], isLoading, isError, isFetching } = useAdminOrders();
   const { updateStatus, invalidateOrders } = useAdminOrderActions();
 
@@ -49,16 +51,24 @@ export default function AdminOrdersPage() {
 
   /* ================= REALTIME SUBSCRIPTION ================= */
   useEffect(() => {
-    // Listen for any changes to the orders table
+    // Listen for ALL changes (INSERT, UPDATE, DELETE) to the orders table
     const channel = supabase
       .channel("admin-orders-live-sync")
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "orders" },
+        { 
+          event: "*", 
+          schema: "public", 
+          table: "orders" 
+        },
         (payload) => {
-          console.log("Realtime change detected:", payload);
-          // This triggers React Query to refetch the data in the background
+          console.log("Realtime change detected:", payload.eventType);
+          
+          // 1. Invalidate React Query cache to refetch data
           invalidateOrders();
+          
+          // 2. Refresh Next.js Server Components/Router state
+          router.refresh();
         }
       )
       .subscribe();
@@ -66,7 +76,7 @@ export default function AdminOrdersPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [invalidateOrders]);
+  }, [invalidateOrders, router]);
 
   /* ================= CONVERSATIONS ================= */
   const { conversations } = useConversationList({

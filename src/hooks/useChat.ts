@@ -25,7 +25,6 @@ type Props = {
 export function useChat({ orderId, readerType = "customer" }: Props) {
   const queryClient = useQueryClient();
 
-  /** 1. FETCH CONVERSATION */
   const conversationQuery = useQuery({
     queryKey: chatKeys.conversation(orderId),
     queryFn: () => getConversationByOrder(orderId),
@@ -34,27 +33,20 @@ export function useChat({ orderId, readerType = "customer" }: Props) {
 
   const conversationId = conversationQuery.data?.id ?? null;
 
-  /** 2. FETCH MESSAGES */
   const messagesQuery = useQuery<Message[]>({
     queryKey: chatKeys.messages(conversationId ?? ""),
     queryFn: () => getMessages(conversationId as string),
     enabled: !!conversationId,
   });
 
-  /** 3. SYNC HELPER (With Debugging) */
   const syncMessage = useCallback(
     (msg: Message) => {
       if (!conversationId) return;
       const queryKey = chatKeys.messages(conversationId);
 
-      console.log("[DEBUG] Syncing message into cache:", msg.id);
-
       queryClient.setQueryData<Message[]>(queryKey, (old = []) => {
         const exists = old.some((m) => m.id === msg.id);
-        if (exists) {
-          console.log("[DEBUG] Message already exists in cache, skipping.");
-          return old;
-        }
+        if (exists) return old;
         return [...old, msg].sort(
           (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
         );
@@ -63,11 +55,8 @@ export function useChat({ orderId, readerType = "customer" }: Props) {
     [conversationId, queryClient]
   );
 
-  /** 4. REALTIME LISTENER (The Faucet) */
   useEffect(() => {
     if (!conversationId) return;
-
-    console.log(`[DEBUG] Initializing Realtime for: ${conversationId}`);
 
     const channel = supabase
       .channel(`chat-room-${conversationId}`)
@@ -80,28 +69,19 @@ export function useChat({ orderId, readerType = "customer" }: Props) {
           filter: `conversation_id=eq.${conversationId}`,
         },
         (payload) => {
-          console.log("[DEBUG] REALTIME PAYLOAD RECEIVED:", payload);
           syncMessage(payload.new as Message);
         }
       )
-      .subscribe((status) => {
-        console.log(`[DEBUG] Subscription status: ${status}`);
-        if (status === "CHANNEL_ERROR") {
-          console.error("[DEBUG] Realtime Channel Error. Check RLS or Publication settings.");
-        }
-      });
+      .subscribe();
 
     return () => {
-      console.log("[DEBUG] Cleaning up Realtime channel.");
       supabase.removeChannel(channel);
     };
   }, [conversationId, syncMessage]);
 
-  /** 5. SEND ACTION */
   const sendMessageMutation = useMutation({
     mutationFn: sendMessage,
     onSuccess: (newMessage) => {
-      console.log("[DEBUG] Send success, updating local cache.");
       syncMessage(newMessage);
     },
   });
@@ -122,7 +102,6 @@ export function useChat({ orderId, readerType = "customer" }: Props) {
 
     let imageUrl: string | null = null;
     if (file) {
-      console.log("[DEBUG] Uploading image...");
       imageUrl = await uploadChatImage(file, conversationId);
     }
 
@@ -138,12 +117,27 @@ export function useChat({ orderId, readerType = "customer" }: Props) {
     });
   };
 
-  /** 6. MARK AS READ */
-  const markAsRead = useCallback(() => {
+  /** * FIXED: MARK AS READ (With Optimistic Cache Update) 
+   * This immediately clears the unread count in the UI before the DB call finishes.
+   */
+  const markAsRead = useCallback(async () => {
     if (!conversationId) return;
-    markConversationAsRead({ conversationId, readerType });
-    // Invalidate locally so UI updates
-    queryClient.invalidateQueries({ queryKey: chatKeys.conversation(orderId) });
+
+    const convKey = chatKeys.conversation(orderId);
+    const unreadField = readerType === "customer" ? "customer_unread_count" : "admin_unread_count";
+
+    // Optimistically set unread count to 0
+    queryClient.setQueryData(convKey, (old: any) => {
+      if (!old) return old;
+      return { ...old, [unreadField]: 0 };
+    });
+
+    try {
+      await markConversationAsRead({ conversationId, readerType });
+    } catch (err) {
+      console.error("Failed to mark as read:", err);
+      queryClient.invalidateQueries({ queryKey: convKey });
+    }
   }, [conversationId, orderId, queryClient, readerType]);
 
   return {
