@@ -6,10 +6,10 @@ export type Message = {
   sender_id: string;
   sender_type: SenderType;
   message: string | null;
-  image_url: string | null;
+  image_url?: string | null;
   is_system: boolean;
   created_at: string;
-
+  image_urls?: string[] | null;   
   sender?: {
     id: string;
     name: string;

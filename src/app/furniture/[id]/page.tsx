@@ -1,10 +1,11 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, ChevronRight, Cpu, Maximize2 } from "lucide-react";
 
 import { useFurniturePublicById } from "@/hooks/useFurnitureById";
+import { useAIChatContext } from "@/app/context/AIChatContext";
 
 import Navbar from "@/app/components/Navbar";
 import Furniture3DViewer from "@/app/components/Furniture3DViewer";
@@ -22,11 +23,30 @@ export default function FurnitureDetailPage() {
   const id = params?.id as string;
 
   const { data: furniture, isLoading, isError } = useFurniturePublicById(id);
+  const { setFurnitureContext } = useAIChatContext();
 
   const [openOrderModal, setOpenOrderModal] = useState(false);
   const [previewVariantId, setPreviewVariantId] = useState<string | null>(null);
 
   const safeFurniture = furniture ?? null;
+
+  // Set furniture context for the global chatbot when data loads
+  useEffect(() => {
+    if (!safeFurniture) return;
+
+    setFurnitureContext({
+      name: safeFurniture.name,
+      category: safeFurniture.category?.name,
+      price: Number(safeFurniture.base_price ?? 0),
+      width: safeFurniture.dimensions?.width_cm ?? undefined,
+      depth: safeFurniture.dimensions?.depth_cm ?? undefined,
+      height: safeFurniture.dimensions?.height_cm ?? undefined,
+      description: safeFurniture.description ?? undefined,
+    });
+
+    // Clear context when leaving the page
+    return () => setFurnitureContext(null);
+  }, [safeFurniture, setFurnitureContext]);
 
   const previewVariant = useMemo(() => {
     if (!safeFurniture || !previewVariantId) return null;
@@ -107,9 +127,10 @@ export default function FurnitureDetailPage() {
     );
   }
 
-  const primaryImage = safeFurniture.images?.find((i) => i.is_primary)?.image_url
-    ?? safeFurniture.images?.[0]?.image_url
-    ?? null;
+  const primaryImage =
+    safeFurniture.images?.find((i) => i.is_primary)?.image_url ??
+    safeFurniture.images?.[0]?.image_url ??
+    null;
 
   return (
     <PageTransition>
@@ -118,16 +139,20 @@ export default function FurnitureDetailPage() {
 
         <div className="border-white/5 border-b flex-shrink-0">
           <div className="flex items-center gap-2 mx-auto px-4 sm:px-6 py-2.5 max-w-7xl text-white/30 text-[10px] sm:text-xs">
-            <button onClick={() => router.push("/catalog")} className="hover:text-[#D4A97A] transition">
+            <button
+              onClick={() => router.push("/catalog")}
+              className="hover:text-[#D4A97A] transition"
+            >
               Catalog
             </button>
             <ChevronRight className="w-3 h-3 shrink-0" />
-            <span className="max-w-[180px] sm:max-w-xs text-white/50 truncate">{safeFurniture.name}</span>
+            <span className="max-w-[180px] sm:max-w-xs text-white/50 truncate">
+              {safeFurniture.name}
+            </span>
           </div>
         </div>
 
         <div className="flex flex-col lg:flex-row gap-5 mx-auto px-4 sm:px-6 py-4 w-full max-w-7xl flex-1 min-h-0 overflow-y-auto lg:overflow-hidden">
-          
           <div className="flex flex-col flex-1 gap-3 min-h-[380px] lg:min-h-0 lg:h-full justify-between">
             <div className="relative flex-1 w-full bg-[#0A0705] border border-white/5 rounded-2xl overflow-hidden min-h-0">
               {safeFurniture.category?.name && (
@@ -148,7 +173,11 @@ export default function FurnitureDetailPage() {
                 </div>
               ) : primaryImage ? (
                 <div className="absolute inset-0 flex justify-center items-center p-6 sm:p-8">
-                  <img src={primaryImage} alt={safeFurniture.name} className="max-w-full max-h-full object-contain" />
+                  <img
+                    src={primaryImage}
+                    alt={safeFurniture.name}
+                    className="max-w-full max-h-full object-contain"
+                  />
                 </div>
               ) : (
                 <div className="absolute inset-0 flex flex-col justify-center items-center gap-3 text-white/20">
@@ -168,7 +197,9 @@ export default function FurnitureDetailPage() {
           <div className="flex flex-col gap-4 w-full lg:w-[380px] xl:w-[440px] shrink-0 lg:h-full lg:overflow-y-auto custom-scrollbar pr-0 lg:pr-1">
             <Reveal delay={0.05}>
               <div className="space-y-1">
-                <h1 className="font-bold text-white text-xl sm:text-2xl leading-tight">{safeFurniture.name}</h1>
+                <h1 className="font-bold text-white text-xl sm:text-2xl leading-tight">
+                  {safeFurniture.name}
+                </h1>
                 <div className="flex items-baseline gap-2 pt-0.5">
                   <span className="font-semibold text-[#D4A97A] text-xl sm:text-2xl">
                     ₱{Number(safeFurniture.base_price ?? 0).toLocaleString()}
@@ -192,7 +223,6 @@ export default function FurnitureDetailPage() {
                     description: safeFurniture.description ?? "",
                     categoryId: safeFurniture.category?.id ?? null,
                     basePrice: safeFurniture.base_price,
-                    // FIX: Use only camelCase as expected by BasicInfoState
                     widthCm: safeFurniture.dimensions?.width_cm,
                     depthCm: safeFurniture.dimensions?.depth_cm,
                     heightCm: safeFurniture.dimensions?.height_cm,
@@ -232,7 +262,11 @@ export default function FurnitureDetailPage() {
           </div>
         </div>
 
-        <PlaceOrderModal open={openOrderModal} onClose={() => setOpenOrderModal(false)} furniture={safeFurniture} />
+        <PlaceOrderModal
+          open={openOrderModal}
+          onClose={() => setOpenOrderModal(false)}
+          furniture={safeFurniture}
+        />
       </div>
     </PageTransition>
   );

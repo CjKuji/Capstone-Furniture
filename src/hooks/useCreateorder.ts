@@ -53,6 +53,7 @@ type LocalCreateOrderPayload = {
   request?:
     | {
         description: string;
+        imageFiles?: File[]; // ← array: up to 5 reference images
       }
     | null;
 
@@ -128,8 +129,15 @@ export function useOrderCreate() {
 
             ...(payload.request
               ? {
-                  request:
-                    payload.request,
+                  request: {
+                    description:
+                      payload.request.description,
+                    // Forward the files array — previously this
+                    // was omitted entirely, so images never reached
+                    // the service or Supabase Storage.
+                    imageFiles:
+                      payload.request.imageFiles ?? [],
+                  },
                 }
               : {}),
 

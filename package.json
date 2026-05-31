@@ -10,6 +10,7 @@
     "db:sync": "npx supabase gen types typescript --project-id havfynxlaoaieomuomzy > src/types/supabase.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.100.1",
     "@ar-js-org/ar.js": "^3.4.8",
     "@google/model-viewer": "^4.2.0",
     "@react-three/drei": "^10.7.7",
@@ -21,6 +22,7 @@
     "@tanstack/react-query": "^5.100.5",
     "aframe": "^1.7.1",
     "framer-motion": "^12.38.0",
+    "groq-sdk": "^1.2.1",
     "lucide-react": "^0.577.0",
     "next": "^16.1.6",
     "pg": "^8.20.0",

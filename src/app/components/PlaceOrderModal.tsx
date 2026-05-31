@@ -11,7 +11,7 @@ import {
   STORE_PICKUP,
 } from "@/app/components/DeliveryMethodModal";
 import type { DeliveryStepState } from "@/app/components/DeliveryMethodModal";
-import { RequestStep, isRequestStepValid } from "@/app/components/RequestModal";
+import { RequestStep } from "@/app/components/RequestModal";
 import type { RequestStepState } from "@/app/components/RequestModal";
 
 /* ── TYPES ── */
@@ -80,25 +80,25 @@ export default function PlaceOrderModal({ open, onClose, furniture }: Props) {
   const { createOrder, isPending } = useOrderCreate();
 
   /* ── STATE ── */
-  const [step, setStep]                     = useState<Step>("items");
-  const [list, setList]                     = useState<SelectedItem[]>(() => buildItems(furniture));
-  const [deliveryState, setDeliveryState]   = useState<DeliveryStepState>({ method: "pickup", phone: "", address: "" });
-  const [requestState, setRequestState]     = useState<RequestStepState>({ description: "" });
+  const [step, setStep]                   = useState<Step>("items");
+  const [list, setList]                   = useState<SelectedItem[]>(() => buildItems(furniture));
+  const [deliveryState, setDeliveryState] = useState<DeliveryStepState>({ method: "pickup", phone: "", address: "" });
+  const [requestState, setRequestState]   = useState<RequestStepState>({ description: "", imageFiles: [] });
 
   /* ── DERIVED ── */
-  const activeItems    = useMemo(() => list.filter((i) => i.quantity > 0), [list]);
-  const subtotal       = useMemo(() => activeItems.reduce((s, i) => s + i.quantity * i.unit_price, 0), [activeItems]);
-  const deliveryValid  = isDeliveryStepValid(deliveryState);
-  const canConfirm     = activeItems.length > 0 && deliveryValid;
-  const isSuccess      = step === "success";
-  const stepIndex      = WIZARD_STEPS.indexOf(step as any);
+  const activeItems   = useMemo(() => list.filter((i) => i.quantity > 0), [list]);
+  const subtotal      = useMemo(() => activeItems.reduce((s, i) => s + i.quantity * i.unit_price, 0), [activeItems]);
+  const deliveryValid = isDeliveryStepValid(deliveryState);
+  const canConfirm    = activeItems.length > 0 && deliveryValid;
+  const isSuccess     = step === "success";
+  const stepIndex     = WIZARD_STEPS.indexOf(step as Exclude<Step, "success">);
 
   /* ── ACTIONS ── */
   function reset() {
     setStep("items");
     setList(buildItems(furniture));
     setDeliveryState({ method: "pickup", phone: "", address: "" });
-    setRequestState({ description: "" });
+    setRequestState({ description: "", imageFiles: [] });
   }
 
   function handleClose() { reset(); onClose(); }
@@ -112,8 +112,8 @@ export default function PlaceOrderModal({ open, onClose, furniture }: Props) {
   }
 
   function goNext() {
-    if (step === "items" && activeItems.length > 0)   setStep("delivery");
-    else if (step === "delivery" && deliveryValid)     setStep("review");
+    if (step === "items" && activeItems.length > 0)  setStep("delivery");
+    else if (step === "delivery" && deliveryValid)    setStep("review");
   }
 
   function goPrev() {
@@ -134,8 +134,11 @@ export default function PlaceOrderModal({ open, onClose, furniture }: Props) {
         variant_id:   i.variant_id,
         quantity:     i.quantity,
       })),
-      request: requestState.description.trim()
-        ? { description: requestState.description.trim() }
+      request: (requestState.description.trim() || requestState.imageFiles.length > 0)
+        ? {
+            description: requestState.description.trim(),
+            imageFiles:  requestState.imageFiles,
+          }
         : null,
     });
     setStep("success");
@@ -151,9 +154,7 @@ export default function PlaceOrderModal({ open, onClose, furniture }: Props) {
       <div className="
         relative flex flex-col
         w-full sm:max-w-lg
-        /* mobile: bottom-sheet that fills but never overflows */
         max-h-[96dvh] sm:max-h-[90vh]
-        /* rounding: flat top on mobile sheets, fully rounded on sm+ */
         rounded-t-3xl sm:rounded-3xl
         overflow-hidden
         bg-[#0B0704]
@@ -217,7 +218,6 @@ export default function PlaceOrderModal({ open, onClose, furniture }: Props) {
                 `}>
                   {i < stepIndex ? "✓" : i + 1}
                 </span>
-                {/* label always visible — short labels fit on any width */}
                 <span>{STEP_LABELS[s]}</span>
               </div>
             ))}
@@ -259,7 +259,7 @@ export default function PlaceOrderModal({ open, onClose, furniture }: Props) {
                 ].map(({ label, value, gold, large }) => (
                   <div key={label} className="flex items-center justify-between px-4 py-3">
                     <span className="text-[9px] font-black uppercase tracking-[0.14em] text-white/25">{label}</span>
-                    <span className={`font-${large ? "bold" : "semibold"} ${large ? "text-[14px]" : "text-[12px]"} ${gold ? "text-[#D4A97A]" : "text-white/50"}`}>
+                    <span className={`${large ? "font-bold text-[14px]" : "font-semibold text-[12px]"} ${gold ? "text-[#D4A97A]" : "text-white/50"}`}>
                       {value}
                     </span>
                   </div>
@@ -354,7 +354,7 @@ export default function PlaceOrderModal({ open, onClose, furniture }: Props) {
             <>
               <DeliveryStep state={deliveryState} onChange={setDeliveryState} />
               <div className="px-4 sm:px-5 pb-5">
-                <RequestStep state={requestState} onChange={setRequestState} items={activeItems} />
+                <RequestStep state={requestState} onChange={setRequestState} />
               </div>
             </>
           )}
@@ -396,16 +396,16 @@ export default function PlaceOrderModal({ open, onClose, furniture }: Props) {
                   <p className="text-[9px] font-black uppercase tracking-[0.14em] text-white/25">Delivery</p>
                 </div>
                 <div className="px-4 py-3 space-y-2.5">
-                  {[
-                    { label: "Method", value: deliveryState.method === "pickup" ? "Store Pickup" : "Delivery", gold: true },
-                    { label: "Phone",  value: deliveryState.phone },
+                  {([
+                    { label: "Method",   value: deliveryState.method === "pickup" ? "Store Pickup" : "Delivery", gold: true },
+                    { label: "Phone",    value: deliveryState.phone,                                              gold: false },
                     ...(deliveryState.method === "delivery" && deliveryState.address
-                      ? [{ label: "Address",  value: deliveryState.address }]
+                      ? [{ label: "Address",  value: deliveryState.address,  gold: false }]
                       : []),
                     ...(deliveryState.method === "pickup"
-                      ? [{ label: "Location", value: STORE_PICKUP }]
+                      ? [{ label: "Location", value: STORE_PICKUP, gold: false }]
                       : []),
-                  ].map(({ label, value, gold }: any) => (
+                  ] as { label: string; value: string; gold: boolean }[]).map(({ label, value, gold }) => (
                     <div key={label} className="flex justify-between gap-4">
                       <span className="text-[10px] text-white/30 uppercase tracking-wide shrink-0">{label}</span>
                       <span className={`text-[11px] text-right ${gold ? "font-semibold text-[#D4A97A] uppercase tracking-wide" : "text-white/60"}`}>
@@ -417,13 +417,39 @@ export default function PlaceOrderModal({ open, onClose, furniture }: Props) {
               </div>
 
               {/* CUSTOM REQUEST */}
-              {requestState.description.trim() && (
+              {(requestState.description.trim() || requestState.imageFiles.length > 0) && (
                 <div className="rounded-2xl border border-[#2A1F14] bg-[#160F08] divide-y divide-[#2A1F14] overflow-hidden">
                   <div className="px-4 py-2.5">
                     <p className="text-[9px] font-black uppercase tracking-[0.14em] text-white/25">Custom Request</p>
                   </div>
-                  <div className="px-4 py-3">
-                    <p className="text-[12px] text-white/60 leading-relaxed">{requestState.description}</p>
+                  <div className="px-4 py-3 space-y-3">
+                    {requestState.description.trim() && (
+                      <p className="text-[12px] text-white/60 leading-relaxed">
+                        {requestState.description}
+                      </p>
+                    )}
+                    {requestState.imageFiles.length > 0 && (
+                      <div className="space-y-1.5">
+                        <p className="text-[10px] text-white/25 uppercase tracking-wide">
+                          Reference images ({requestState.imageFiles.length})
+                        </p>
+                        <div className="grid grid-cols-5 gap-1.5">
+                          {requestState.imageFiles.map((file, i) => {
+                            const url = URL.createObjectURL(file);
+                            return (
+                              <div key={i} className="aspect-square rounded-xl overflow-hidden border border-[#2A1F14]">
+                                <img
+                                  src={url}
+                                  alt={file.name}
+                                  className="w-full h-full object-cover"
+                                  onLoad={() => URL.revokeObjectURL(url)}
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -434,7 +460,6 @@ export default function PlaceOrderModal({ open, onClose, furniture }: Props) {
         {/* ── FOOTER ── */}
         {!isSuccess && (
           <div className="shrink-0 border-t border-[#2A1F14] bg-[#0E0B06]/60 px-4 sm:px-5 py-3.5">
-            {/* Safe area padding for mobile home-bar */}
             <div className="flex gap-2.5 pb-[env(safe-area-inset-bottom)]">
 
               {/* BACK / CANCEL */}

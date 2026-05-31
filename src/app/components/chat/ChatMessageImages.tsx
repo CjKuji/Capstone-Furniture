@@ -1,18 +1,23 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight, X, ZoomIn } from "lucide-react";
 
 type Props = {
-  imageUrl?: string | null;
+  imageUrls?: string[] | null;
   onClick?: (url: string) => void;
 };
 
-export default function ChatImageMessage({ imageUrl, onClick }: Props) {
-  const [open, setOpen] = useState(false);
+export default function ChatImageMessage({ imageUrls, onClick }: Props) {
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const dragging = useRef(false);
   const lastPos = useRef({ x: 0, y: 0 });
+
+  const isOpen = lightboxIndex !== null;
+  const urls = imageUrls ?? [];
+  const count = urls.length;
 
   const resetView = useCallback(() => {
     setScale(1);
@@ -20,24 +25,44 @@ export default function ChatImageMessage({ imageUrl, onClick }: Props) {
   }, []);
 
   const handleClose = useCallback(() => {
-    setOpen(false);
+    setLightboxIndex(null);
     resetView();
   }, [resetView]);
 
-  /* ESC CLOSE — must be before early return */
+  const handlePrev = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    resetView();
+    setLightboxIndex((i) => (i === null || i === 0 ? count - 1 : i - 1));
+  }, [count, resetView]);
+
+  const handleNext = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    resetView();
+    setLightboxIndex((i) => (i === null || i === count - 1 ? 0 : i + 1));
+  }, [count, resetView]);
+
   useEffect(() => {
-    if (!open) return;
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") handleClose(); };
+    if (!isOpen) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") handleClose();
+      if (e.key === "ArrowLeft") { resetView(); setLightboxIndex((i) => (i === null || i === 0 ? count - 1 : i - 1)); }
+      if (e.key === "ArrowRight") { resetView(); setLightboxIndex((i) => (i === null || i === count - 1 ? 0 : i + 1)); }
+    };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [open, handleClose]);
+  }, [isOpen, handleClose, count, resetView]);
 
-  if (!imageUrl) return null;
+  if (!count) return null;
 
-  const handleOpen = () => {
+  const gridClass =
+    count === 1 ? "grid-cols-1" :
+    count === 2 ? "grid-cols-2" :
+    "grid-cols-3";
+
+  const handleOpen = (index: number) => {
     resetView();
-    setOpen(true);
-    onClick?.(imageUrl);
+    setLightboxIndex(index);
+    onClick?.(urls[index]);
   };
 
   const handleWheel = (e: React.WheelEvent) => {
@@ -66,42 +91,48 @@ export default function ChatImageMessage({ imageUrl, onClick }: Props) {
     setPosition({ x: 0, y: 0 });
   };
 
+  const currentUrl = lightboxIndex !== null ? urls[lightboxIndex] : null;
+
   return (
     <>
-      {/* THUMBNAIL */}
-      <div className="mt-2 flex justify-start">
-        <button
-          onClick={handleOpen}
-          className="
-            group overflow-hidden rounded-xl
-            border border-[#2A1F14] bg-[#0B0704]
-            transition-all hover:border-[#D4A97A]/30
-            hover:shadow-[0_4px_20px_rgba(0,0,0,0.5)]
-          "
-        >
-          <div className="relative aspect-[4/3] w-full max-w-[260px] overflow-hidden bg-[#0B0704]">
-            <img
-              src={imageUrl}
-              alt="Chat attachment"
-              className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
-            />
-            <div className="absolute inset-0 bg-black/0 transition group-hover:bg-black/10" />
-          </div>
-
-          {/* Footer */}
-          <div className="flex items-center justify-between border-t border-[#2A1F14] px-3 py-2">
-            <span className="text-[10px] font-black uppercase tracking-[0.12em] text-white/25">
-              Image attachment
-            </span>
-            <span className="text-[10px] font-bold text-[#D4A97A]/60 group-hover:text-[#D4A97A] transition-colors">
-              Open →
-            </span>
-          </div>
-        </button>
+      {/* GRID */}
+      <div className={`mt-2 grid gap-1 ${gridClass} ${count === 1 ? "max-w-[260px]" : "max-w-[320px]"}`}>
+        {urls.map((url, i) => (
+          <button
+            key={url + i}
+            onClick={() => handleOpen(i)}
+            className="
+              group relative overflow-hidden rounded-xl
+              border border-[#2A1F14] bg-[#0B0704]
+              transition-all hover:border-[#D4A97A]/30
+              hover:shadow-[0_4px_20px_rgba(0,0,0,0.5)]
+            "
+          >
+            <div className={`relative overflow-hidden bg-[#0B0704] ${count === 1 ? "aspect-[4/3]" : "aspect-square"}`}>
+              <img
+                src={url}
+                alt={`Image ${i + 1}`}
+                className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.05]"
+              />
+              <div className="absolute inset-0 bg-black/0 transition group-hover:bg-black/20 flex items-center justify-center">
+                <ZoomIn
+                  size={18}
+                  className="text-white opacity-0 group-hover:opacity-80 transition-opacity drop-shadow-lg"
+                />
+              </div>
+              {/* Count badge on last tile when overflow */}
+              {count > 9 && i === 8 && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/60 text-white font-bold text-lg">
+                  +{count - 8}
+                </div>
+              )}
+            </div>
+          </button>
+        ))}
       </div>
 
-      {/* FULLSCREEN VIEWER */}
-      {open && (
+      {/* LIGHTBOX */}
+      {isOpen && currentUrl && (
         <div
           className="fixed inset-0 z-[99999] bg-black/95 backdrop-blur-sm"
           onClick={handleClose}
@@ -110,19 +141,16 @@ export default function ChatImageMessage({ imageUrl, onClick }: Props) {
           <div className="absolute left-0 right-0 top-0 z-20 flex items-center justify-between border-b border-white/[0.06] bg-black/40 px-5 py-4 backdrop-blur">
             <div>
               <p className="text-[12px] font-bold text-white/80">Image Preview</p>
-              <p className="text-[10px] text-white/30">Scroll to zoom · Drag to pan · Double-click to toggle</p>
+              <p className="text-[10px] text-white/30">
+                {count > 1 ? `${(lightboxIndex ?? 0) + 1} / ${count} · ` : ""}
+                Scroll to zoom · Drag to pan · Double-click to toggle
+              </p>
             </div>
             <button
               onClick={handleClose}
-              className="
-                flex h-9 w-9 items-center justify-center
-                rounded-full border border-white/10 bg-white/[0.05]
-                text-white/50 text-sm
-                hover:bg-white/[0.10] hover:text-white/80
-                transition-all
-              "
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.05] text-white/50 text-sm hover:bg-white/[0.10] hover:text-white/80 transition-all"
             >
-              ✕
+              <X size={14} />
             </button>
           </div>
 
@@ -138,7 +166,7 @@ export default function ChatImageMessage({ imageUrl, onClick }: Props) {
             onDoubleClick={handleDoubleClick}
           >
             <img
-              src={imageUrl}
+              src={currentUrl}
               alt="Expanded image"
               draggable={false}
               className="select-none object-contain transition-transform duration-100 rounded-xl"
@@ -151,10 +179,41 @@ export default function ChatImageMessage({ imageUrl, onClick }: Props) {
             />
           </div>
 
-          {/* BOTTOM HINT */}
-          <div className="absolute bottom-5 left-1/2 -translate-x-1/2 rounded-full border border-white/[0.07] bg-black/50 px-4 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-white/30 backdrop-blur">
-            Double click to toggle zoom
-          </div>
+          {/* PREV / NEXT */}
+          {count > 1 && (
+            <>
+              <button
+                onClick={handlePrev}
+                className="absolute left-4 top-1/2 -translate-y-1/2 z-20 flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-black/50 text-white/60 hover:bg-black/80 hover:text-white transition-all backdrop-blur"
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <button
+                onClick={handleNext}
+                className="absolute right-4 top-1/2 -translate-y-1/2 z-20 flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-black/50 text-white/60 hover:bg-black/80 hover:text-white transition-all backdrop-blur"
+              >
+                <ChevronRight size={18} />
+              </button>
+
+              {/* DOT INDICATORS */}
+              <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-20 flex gap-1.5">
+                {urls.slice(0, 9).map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={(e) => { e.stopPropagation(); resetView(); setLightboxIndex(i); }}
+                    className={`h-1.5 rounded-full transition-all ${i === lightboxIndex ? "w-5 bg-[#D4A97A]" : "w-1.5 bg-white/25 hover:bg-white/50"}`}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* HINT (single image) */}
+          {count === 1 && (
+            <div className="absolute bottom-5 left-1/2 -translate-x-1/2 rounded-full border border-white/[0.07] bg-black/50 px-4 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-white/30 backdrop-blur">
+              Double click to toggle zoom
+            </div>
+          )}
         </div>
       )}
     </>

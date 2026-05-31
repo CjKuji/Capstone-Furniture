@@ -17,15 +17,10 @@ type Props = {
   senderType?: "customer" | "admin";
 };
 
-export default function ChatModal({
-  open,
-  onClose,
-  order,
-  currentUserId,
-  senderType = "customer",
-}: Props) {
+export default function ChatModal({ open, onClose, order, currentUserId, senderType = "customer" }: Props) {
   const [message, setMessage] = useState("");
   const [files, setFiles] = useState<File[]>([]);
+  const [isSending, setIsSending] = useState(false);
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
@@ -35,59 +30,53 @@ export default function ChatModal({
     readerType: senderType,
   });
 
-  /**
-   * FIXED: CONTINUOUS MARK AS READ
-   * Triggers when modal opens AND whenever new messages arrive while open.
-   */
   useEffect(() => {
     if (open && messages.length > 0) {
       const lastMessage = messages[messages.length - 1];
-      // Only mark as read if the last message came from the OTHER person
-      if (lastMessage.sender_id !== currentUserId) {
-        markAsRead();
-      }
+      if (lastMessage.sender_id !== currentUserId) markAsRead();
     } else if (open) {
-      // Still trigger on open even if messages are empty (initial sync)
       markAsRead();
     }
   }, [open, messages, markAsRead, currentUserId]);
 
-  /** ── AUTO SCROLL ── */
   useEffect(() => {
     if (!open) return;
-    const scrollTimeout = setTimeout(() => {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, 100);
-    return () => clearTimeout(scrollTimeout);
+    const t = setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+    return () => clearTimeout(t);
   }, [messages, open]);
 
-  /** ── ESCAPE KEY ── */
   useEffect(() => {
     if (!open) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [open, onClose]);
 
   const handleSend = async () => {
     const text = message.trim();
-    const selectedFiles = files;
+    const selectedFiles = [...files];
     if (!text && selectedFiles.length === 0) return;
 
     setMessage("");
     setFiles([]);
+    setIsSending(true);
 
     try {
-      await send({
-        message: text || undefined,
-        file: selectedFiles[0] ?? null,
-        senderType,
-      });
+      // Send text message first (if any)
+      if (text) {
+        await send({ message: text, file: null, senderType });
+      }
+
+      // Send each image as its own message
+      for (const file of selectedFiles) {
+        await send({ message: undefined, file, senderType });
+      }
     } catch (err) {
+      // Restore on failure
       setMessage(text);
       setFiles(selectedFiles);
+    } finally {
+      setIsSending(false);
     }
   };
 
@@ -96,7 +85,7 @@ export default function ChatModal({
   return createPortal(
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
       <div className="w-full max-w-3xl h-[88vh] flex flex-col rounded-3xl overflow-hidden bg-[#0B0704] border border-[#2A1F14] shadow-[0_32px_80px_rgba(0,0,0,0.8)]">
-        
+
         <header className="flex items-center justify-between px-5 py-4 bg-[#0E0B06]/80 backdrop-blur border-b border-[#2A1F14] flex-shrink-0">
           <div className="space-y-0.5">
             <div className="flex items-center gap-2">
@@ -115,8 +104,14 @@ export default function ChatModal({
         </main>
 
         <footer className="border-t border-[#2A1F14] bg-[#0E0B06]/60 px-4 py-3 space-y-3 flex-shrink-0">
-          <ChatImagePreview files={files} onRemove={(idx) => setFiles(prev => prev.filter((_, i) => i !== idx))} />
-          <ChatInput message={message} setMessage={setMessage} files={files} setFiles={setFiles} onSend={handleSend} />
+          <ChatImagePreview files={files} onRemove={(idx) => setFiles((prev) => prev.filter((_, i) => i !== idx))} />
+          <ChatInput
+            message={message}
+            setMessage={setMessage}
+            files={files}
+            setFiles={setFiles}
+            onSend={handleSend}
+          />
         </footer>
       </div>
     </div>,
