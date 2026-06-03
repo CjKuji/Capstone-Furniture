@@ -1,4 +1,5 @@
 import type { PublishStatus } from "./enums";
+import type { ARReadiness } from "./modelValidation";
 
 /* =========================================================
    DATABASE CORE TABLE (READ ONLY - CAN USE NULL)
@@ -21,6 +22,8 @@ export type FurnitureDB = {
   width_cm: number | null;
   depth_cm: number | null;
   height_cm: number | null;
+
+  model_ar_status: ARReadiness | null;  // Step 10
 
   created_at: string;
   updated_at: string;

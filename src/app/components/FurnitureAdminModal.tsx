@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import Furniture3DViewer from "@/app/components/Furniture3DViewer";
 
@@ -51,12 +51,13 @@ export default function FurnitureModalContainer({
     state,
     variants,
     submitting,
+    isAnalyzing,
     modelPreviewUrl,
     activeVariantTexture,
     activeVariantId,
     setBasicInfoField,
     setActiveVariantId,
-    setField,
+    setModelFile,
     addImages,
     removeImage,
     setPrimaryImage,
@@ -69,45 +70,60 @@ export default function FurnitureModalContainer({
     getKey,
   } = controller;
 
-  /* ── LAYOUT ISOLATION & TIMING STATES ── */
-  const [canRenderCanvas, setCanRenderCanvas] = useState(false);
-  const [isAnimateIn, setIsAnimateIn] = useState(false);
+  /* ── DERIVED: dimension gate ── */
+  const dimensionsFilled =
+    Number(state.widthCm) > 0 &&
+    Number(state.depthCm) > 0 &&
+    Number(state.heightCm) > 0;
+
+  /* ── SSR HYDRATION GATE ── */
+  // We need to know we're on the client before calling createPortal.
+  // useLayoutEffect never runs on the server, so this is the safest signal.
+  // We do NOT return null when !mounted — we return null only on the server
+  // (before hydration). Once mounted is true it stays true forever.
   const [mounted, setMounted] = useState(false);
-  
+  useLayoutEffect(() => {
+    setMounted(true);
+  }, []);
+
+  /* ── ANIMATION STATES ── */
+  const [canRenderCanvas, setCanRenderCanvas] = useState(false);
+  const [isAnimateIn, setIsAnimateIn]         = useState(false);
+
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const frameRef = useRef<number | null>(null);
 
-  // Handle SSR hydration matching safely for Portals
+  // Cleanup on unmount
   useEffect(() => {
-    setMounted(true);
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
       if (frameRef.current) cancelAnimationFrame(frameRef.current);
     };
   }, []);
 
-  // Strict animation sequencing & layout isolation engine
   useEffect(() => {
     if (!isOpen) {
-      setIsAnimateIn(false);
-      setCanRenderCanvas(false);
-      return;
+      frameRef.current = requestAnimationFrame(() => {
+        setIsAnimateIn(false);
+        setCanRenderCanvas(false);
+      });
+      return () => {
+        if (frameRef.current) cancelAnimationFrame(frameRef.current);
+      };
     }
 
     const originalOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
 
-    // Wait for DOM tree allocation to settle layout measurements
     frameRef.current = requestAnimationFrame(() => {
       frameRef.current = requestAnimationFrame(() => {
         setIsAnimateIn(true);
       });
     });
 
-    // Defer WebGL/Canvas layout bindings securely until CSS transitions finalize tracking dimensions
     timerRef.current = setTimeout(() => {
       setCanRenderCanvas(true);
-    }, 400); 
+    }, 400);
 
     return () => {
       if (frameRef.current) cancelAnimationFrame(frameRef.current);
@@ -116,13 +132,19 @@ export default function FurnitureModalContainer({
     };
   }, [isOpen]);
 
-  /* ================= GUARDS ================= */
-
+  /* ── SERVER GUARD — only blocks on SSR, never on client ── */
   if (!mounted) return null;
 
+  /* ── EDIT MODE WITH NO ITEM ── */
   if (!item && mode === "edit") {
     return createPortal(
-      <div className={`fixed inset-0 z-[99999] flex items-center justify-center p-4 backdrop-blur-md bg-black/80 transition-all duration-300 ${isOpen ? "opacity-100 visible" : "opacity-0 invisible pointer-events-none"}`}>
+      <div
+        className={`fixed inset-0 z-[99999] flex items-center justify-center p-4 backdrop-blur-md bg-black/80 transition-all duration-300 ${
+          isOpen
+            ? "opacity-100 visible"
+            : "opacity-0 invisible pointer-events-none"
+        }`}
+      >
         <div className="w-full max-w-md bg-[#0A0705] border border-white/[0.06] rounded-2xl p-8 text-center shadow-2xl">
           <p className="text-sm font-medium text-white/60">Furniture not found</p>
         </div>
@@ -131,18 +153,22 @@ export default function FurnitureModalContainer({
     );
   }
 
-  /* ================= UI ================= */
+  /* ================= MAIN PORTAL ================= */
 
   return createPortal(
     <div
       className={`fixed inset-0 z-[99999] flex items-center justify-center p-0 sm:p-3 backdrop-blur-md overflow-hidden transition-all duration-300 ease-out ${
-        isOpen ? "opacity-100 visible" : "opacity-0 invisible pointer-events-none"
+        isOpen
+          ? "opacity-100 visible"
+          : "opacity-0 invisible pointer-events-none"
       }`}
       style={{
         backgroundColor: "rgba(6, 4, 3, 0.85)",
         willChange: "opacity",
       }}
-      onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) handleClose();
+      }}
     >
       <div
         className={`
@@ -153,7 +179,9 @@ export default function FurnitureModalContainer({
           shadow-[0_24px_60px_rgba(0,0,0,0.8)] overflow-hidden
           border-0 sm:border border-white/[0.06] bg-[#0A0705]
           transition-all duration-300 ease-out
-          ${isAnimateIn ? "transform scale-100 translate-y-0" : "transform scale-[0.99] translate-y-4"}
+          ${isAnimateIn
+            ? "scale-100 translate-y-0"
+            : "scale-[0.99] translate-y-4"}
         `}
         style={{ willChange: "transform, opacity" }}
       >
@@ -178,28 +206,27 @@ export default function FurnitureModalContainer({
             </p>
           </div>
 
-          <div className="flex items-center gap-3 shrink-0">
-            <button
-              onClick={handleClose}
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-white/40 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/[0.06] transition-all duration-200 text-xs"
-            >
-              ✕
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={handleClose}
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-white/40 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/[0.06] transition-all duration-200 text-xs"
+          >
+            ✕
+          </button>
         </div>
 
-        {/* ── SCROLLABLE INTERNAL SPLIT BODY ── */}
+        {/* ── SPLIT BODY ── */}
         <div className="flex flex-1 min-h-0 overflow-hidden bg-gradient-to-b from-[#0A0705] to-[#070504]">
           <div className="w-full h-full flex flex-col lg:flex-row divide-y lg:divide-y-0 lg:divide-x divide-white/[0.04] overflow-y-auto lg:overflow-hidden">
 
-            {/* ── LEFT COLUMN: 3D SPACE INTERFACE VIEWPORT ── */}
+            {/* ── LEFT: 3D VIEWPORT ── */}
             <div className="w-full lg:w-[46%] h-[50vh] lg:h-full flex flex-col shrink-0 bg-[#050302]">
               <div
                 className="px-5 sm:px-6 py-3.5 bg-white/[0.02] flex items-center justify-between shrink-0"
                 style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-1 h-4 rounded-full shrink-0" style={{ background: "#D4A97A" }} />
+                  <div className="w-1 h-4 rounded-full shrink-0 bg-[#D4A97A]" />
                   <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/70">
                     Spatial Live Environment
                   </span>
@@ -209,7 +236,6 @@ export default function FurnitureModalContainer({
                 </span>
               </div>
 
-              {/* FULL-BLEED VIEWPORT BOX */}
               <div className="flex-1 w-full h-full relative overflow-hidden">
                 {modelPreviewUrl ? (
                   <div className="absolute inset-0 w-full h-full bg-[#050302]">
@@ -232,14 +258,17 @@ export default function FurnitureModalContainer({
                       className="w-16 h-16 rounded-2xl flex items-center justify-center border border-white/[0.04] shadow-inner"
                       style={{ background: "rgba(212,169,122,0.04)" }}
                     >
-                      <span className="text-2xl filter drop-shadow-[0_4px_12px_rgba(212,169,122,0.3)]">📦</span>
+                      <span className="text-2xl filter drop-shadow-[0_4px_12px_rgba(212,169,122,0.3)]">
+                        📦
+                      </span>
                     </div>
                     <div className="max-w-xs">
                       <p className="text-xs font-bold uppercase tracking-wider text-white/40 mb-1">
                         No Core Engine Assets Loaded
                       </p>
                       <p className="text-[11px] text-white/20 leading-relaxed">
-                        Upload standard production ready .glb or .gltf files inside the assets pipeline config panel to populate layout space.
+                        Upload standard production ready .glb or .gltf files
+                        inside the assets pipeline config panel to populate layout space.
                       </p>
                     </div>
                   </div>
@@ -247,19 +276,19 @@ export default function FurnitureModalContainer({
               </div>
             </div>
 
-            {/* ── RIGHT COLUMN: INPUT FORMS AND SPECIFICATIONS CONTROLS ── */}
+            {/* ── RIGHT: FORMS ── */}
             <div className="w-full lg:w-[54%] h-auto lg:h-full overflow-y-auto p-4 sm:p-6 space-y-5 focus:outline-none custom-scrollbar">
-              
+
               <div className="w-full bg-white/[0.01] p-5 rounded-2xl border border-white/[0.03] shadow-inner">
                 <BasicInfoSection
                   state={{
-                    name: state.name,
+                    name:        state.name,
                     description: state.description,
-                    categoryId: state.categoryId,
-                    basePrice: state.basePrice,
-                    widthCm: state.widthCm,
-                    depthCm: state.depthCm,
-                    heightCm: state.heightCm,
+                    categoryId:  state.categoryId,
+                    basePrice:   state.basePrice,
+                    widthCm:     state.widthCm,
+                    depthCm:     state.depthCm,
+                    heightCm:    state.heightCm,
                   }}
                   setField={setBasicInfoField}
                   categories={categories}
@@ -270,12 +299,15 @@ export default function FurnitureModalContainer({
                 <AssetsSection
                   state={{
                     modelFile: state.modelFile,
-                    images: state.images,
+                    images:    state.images,
                   }}
-                  setModelFile={(file) => setField("modelFile", file)}
+                  setModelFile={setModelFile}
                   addImages={addImages}
                   removeImage={removeImage}
                   setPrimaryImage={setPrimaryImage}
+                  dimensionsFilled={dimensionsFilled}
+                  isAnalyzing={isAnalyzing}
+                  validationReport={state.validationReport}
                 />
               </div>
 
@@ -293,16 +325,16 @@ export default function FurnitureModalContainer({
               </div>
 
             </div>
-
           </div>
         </div>
 
-        {/* ── FOOTER ACTIONS ── */}
+        {/* ── FOOTER ── */}
         <div
           className="shrink-0 flex justify-end items-center gap-3 px-6 py-4 bg-[#0E0A07]"
           style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}
         >
           <button
+            type="button"
             onClick={handleClose}
             className="px-5 h-10 rounded-xl text-[10px] font-bold uppercase tracking-[0.15em] transition-all duration-200 border border-white/[0.04] bg-white/[0.01] text-white/40 hover:bg-white/[0.03] hover:text-white/70 active:scale-[0.98]"
           >
@@ -310,11 +342,18 @@ export default function FurnitureModalContainer({
           </button>
 
           <button
+            type="button"
             onClick={handleSubmit}
-            disabled={submitting}
+            disabled={submitting || isAnalyzing}
             className="px-6 h-10 rounded-xl text-[10px] font-bold uppercase tracking-[0.15em] transition-all duration-200 bg-[#D4A97A] text-[#1C1209] hover:bg-[#E5BA8B] active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none shadow-[0_4px_20px_rgba(212,169,122,0.15)]"
           >
-            {submitting ? "Saving System Manifest…" : mode === "edit" ? "Commit Changes" : "Create Product Entry"}
+            {isAnalyzing
+              ? "Analyzing Model…"
+              : submitting
+              ? "Saving System Manifest…"
+              : mode === "edit"
+              ? "Commit Changes"
+              : "Create Product Entry"}
           </button>
         </div>
 

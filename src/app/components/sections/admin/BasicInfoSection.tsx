@@ -32,8 +32,21 @@ const labelClass = "text-xs font-medium text-white/40 tracking-wide uppercase";
 
 /* ========================================================= */
 
+/** True when all three dimension fields have a positive value. */
+function dimensionsFilled(
+  w: number | null,
+  d: number | null,
+  h: number | null
+): boolean {
+  return w != null && w > 0 && d != null && d > 0 && h != null && h > 0;
+}
+
+/* ========================================================= */
+
 export default function BasicInfoSection({ state, setField, categories }: Props) {
   const { name, description, categoryId, basePrice, widthCm, depthCm, heightCm } = state;
+
+  const dimsReady = dimensionsFilled(widthCm, depthCm, heightCm);
 
   return (
     <div
@@ -117,7 +130,53 @@ export default function BasicInfoSection({ state, setField, categories }: Props)
 
         {/* DIMENSIONS */}
         <div>
-          <label className={labelClass}>Dimensions — W × D × H (cm)</label>
+          {/* Label row — dimensions label + model-unlock badge */}
+          <div className="flex items-center justify-between">
+            <label className={labelClass}>Dimensions — W × D × H (cm)</label>
+
+            {/* Visual gate indicator */}
+            <span
+              className="flex items-center gap-1 text-[10px] font-medium tracking-wide transition-all duration-300"
+              style={{
+                color: dimsReady ? "rgba(212,169,122,0.75)" : "rgba(255,255,255,0.22)",
+              }}
+            >
+              {dimsReady ? (
+                /* Unlocked — open padlock SVG */
+                <svg
+                  width="11"
+                  height="11"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                  {/* shackle open to the right */}
+                  <path d="M7 11V7a5 5 0 0 1 9.9-1" />
+                </svg>
+              ) : (
+                /* Locked — closed padlock SVG */
+                <svg
+                  width="11"
+                  height="11"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+              )}
+              {dimsReady ? "3D upload unlocked" : "Unlocks 3D upload"}
+            </span>
+          </div>
+
           <div className="grid grid-cols-3 gap-3 mt-1.5">
             {(
               [
@@ -137,6 +196,45 @@ export default function BasicInfoSection({ state, setField, categories }: Props)
                 className={inputClass}
               />
             ))}
+          </div>
+
+          {/* Subtle progress dots — one per field */}
+          <div className="flex items-center gap-1.5 mt-2">
+            {(
+              [
+                { key: "widthCm", value: widthCm, label: "W" },
+                { key: "depthCm", value: depthCm, label: "D" },
+                { key: "heightCm", value: heightCm, label: "H" },
+              ] as const
+            ).map(({ key, value, label }) => {
+              const filled = value != null && value > 0;
+              return (
+                <span
+                  key={key}
+                  className="flex items-center gap-1 transition-all duration-200"
+                >
+                  <span
+                    className="block w-1.5 h-1.5 rounded-full transition-all duration-300"
+                    style={{
+                      background: filled
+                        ? "#D4A97A"
+                        : "rgba(255,255,255,0.12)",
+                      boxShadow: filled ? "0 0 4px rgba(212,169,122,0.5)" : "none",
+                    }}
+                  />
+                  <span
+                    className="text-[10px] font-medium transition-colors duration-200"
+                    style={{
+                      color: filled
+                        ? "rgba(212,169,122,0.6)"
+                        : "rgba(255,255,255,0.18)",
+                    }}
+                  >
+                    {label}
+                  </span>
+                </span>
+              );
+            })}
           </div>
         </div>
 
