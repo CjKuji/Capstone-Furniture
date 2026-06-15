@@ -62,7 +62,7 @@ export default function FurnitureCard({
           </span>
         </div>
 
-        {/* Delete — top right */}
+        {/* Delete — top right: opens the confirm modal via onDelete prop */}
         <button
           type="button"
           onClick={(e) => {

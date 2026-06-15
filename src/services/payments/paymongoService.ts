@@ -21,17 +21,21 @@ const PAYMONGO_BASE_URL = "https://api.paymongo.com/v1";
 
 /**
  * DYNAMIC APP_URL HELPER
- * Ensures redirects point to localhost in dev and Vercel in prod.
+ * Ensures redirects point to the correct domain based on environment.
  */
 const getBaseUrl = () => {
+  // 1. If we have an explicit APP_URL env (like in Vercel settings), use it
+  if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
+
+  // 2. Client-side fallback
   if (typeof window !== "undefined") return window.location.origin;
 
-  // Check if we are on Vercel
+  // 3. Vercel specific fallbacks
   if (process.env.VERCEL_ENV === "production") return `https://woodforge.vercel.app`;
   if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
 
-  // Fallback to local environment variable or localhost
-  return process.env.NEXT_PUBLIC_APP_URL || "https://drivable-equipment-dart.ngrok-free.dev";
+  // 4. Local dev fallback
+  return "https://drivable-equipment-dart.ngrok-free.dev";
 };
 
 const APP_URL = getBaseUrl();
@@ -58,7 +62,7 @@ function getAuthHeader() {
 export async function createPaymongoCheckout({
   paymentId,
   customerEmail,
-  description = "Furniture Order Payment",
+  description,
 }: CreateCheckoutParams) {
   /**
    * 1. FETCH PAYMENT (SOURCE OF TRUTH)
@@ -69,6 +73,7 @@ export async function createPaymongoCheckout({
       `
       id,
       order_id,
+      inquiry_id,
       amount,
       status,
       checkout_url,
@@ -92,6 +97,8 @@ export async function createPaymongoCheckout({
 
   /**
    * 3. OPTIONAL SAFE REUSE (UI OPTIMIZATION ONLY)
+   * Note: If you changed the redirect URLs, you might want to comment this out 
+   * once to force a fresh session creation with the new URLs.
    */
   if (
     payment.status === "pending" &&
@@ -116,17 +123,22 @@ export async function createPaymongoCheckout({
   const amountInCentavos = Math.round(amount * 100);
 
   /**
-   * 5. DYNAMIC ROUTES
+   * 5. DETERMINISTIC CONTEXT & DYNAMIC ROUTES
+   * Fixed: Pointing success/cancel URLs to the main /inquiry landing page.
    */
-  const successUrl =
-    `${APP_URL}/orders?payment=success` +
-    `&paymentId=${paymentId}` +
-    `&orderId=${payment.order_id}`;
+  const isInquiry = !!payment.inquiry_id;
+  
+  const defaultName = isInquiry ? "Custom Inquiry Design Fee" : "Furniture Order Payment";
+  const finalDescription = description || (isInquiry ? "Custom Workshop Adjustment Charges" : "Furniture Order Payment");
 
-  const cancelUrl =
-    `${APP_URL}/orders?payment=cancelled` +
-    `&paymentId=${paymentId}` +
-    `&orderId=${payment.order_id}`;
+  // REDIRECT LOGIC: Points to /inquiry instead of deep profile links
+  const successUrl = isInquiry
+    ? `${APP_URL}/inquiry?payment=success&paymentId=${paymentId}&inquiryId=${payment.inquiry_id}`
+    : `${APP_URL}/orders?payment=success&paymentId=${paymentId}&orderId=${payment.order_id}`;
+
+  const cancelUrl = isInquiry
+    ? `${APP_URL}/inquiry?payment=cancelled&paymentId=${paymentId}&inquiryId=${payment.inquiry_id}`
+    : `${APP_URL}/orders?payment=cancelled&paymentId=${paymentId}&orderId=${payment.order_id}`;
 
   /**
    * 6. CREATE PAYMONGO CHECKOUT SESSION
@@ -139,36 +151,30 @@ export async function createPaymongoCheckout({
       body: JSON.stringify({
         data: {
           attributes: {
-            billing: customerEmail
-              ? { email: customerEmail }
-              : undefined,
-
+            billing: customerEmail ? { email: customerEmail } : undefined,
             send_email_receipt: true,
             show_description: true,
-            description,
+            description: finalDescription,
 
             line_items: [
               {
                 currency: "PHP",
                 amount: amountInCentavos,
-                name: "Furniture Order Payment",
-                description,
+                name: defaultName,
+                description: finalDescription,
                 quantity: 1,
               },
             ],
 
-            payment_method_types: [
-              "gcash",
-              "paymaya",
-              "card",
-            ],
+            payment_method_types: ["gcash", "paymaya", "card"],
 
             success_url: successUrl,
             cancel_url: cancelUrl,
 
             metadata: {
               payment_id: paymentId,
-              order_id: payment.order_id,
+              order_id: payment.order_id || "",
+              inquiry_id: payment.inquiry_id || "",
             },
           },
         },
@@ -183,8 +189,7 @@ export async function createPaymongoCheckout({
    */
   if (!response.ok) {
     throw new Error(
-      result?.errors?.[0]?.detail ||
-        "Failed to create checkout session"
+      result?.errors?.[0]?.detail || "Failed to create checkout session"
     );
   }
 
@@ -201,7 +206,7 @@ export async function createPaymongoCheckout({
   const checkoutUrl = checkout.attributes.checkout_url;
 
   /**
-   * 9. SAVE CHECKOUT DATA (NO BUSINESS LOGIC)
+   * 9. SAVE CHECKOUT DATA
    */
   const { error: updateError } = await supabase
     .from("payments")

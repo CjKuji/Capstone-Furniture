@@ -2,6 +2,7 @@
 
 import {
   useCallback,
+  useEffect,
   useState,
 } from "react";
 
@@ -15,13 +16,19 @@ import type {
   VariantUI,
 } from "@/types/furniture-ui";
 
-import type { ValidationReport } from "@/types/modelValidation";
+import type { ValidationReport, FurnitureSizePreset } from "@/types/modelValidation";
 
 /* ========================================================= */
 
 type Params = {
   mode: "create" | "edit";
   item?: FurnitureItemAdmin | null;
+  /**
+   * Pass the modal's isOpen flag here so the form can re-initialise
+   * every time the modal opens — the hook itself is never unmounted,
+   * so the useState lazy initialiser only fires once without this.
+   */
+  isOpen?: boolean;
 };
 
 /* ========================================================= */
@@ -30,6 +37,8 @@ export type FormState = {
   name: string;
   description: string;
   categoryId: string;
+  /** Resolved category slug/name used for preset generation, e.g. "dining_table" */
+  categorySlug: string;
   basePrice: number | null;
 
   modelFile?: File;
@@ -41,7 +50,14 @@ export type FormState = {
   depthCm: number | null;
   heightCm: number | null;
 
-  // ── GLB pipeline state (must live on state so controller can read them) ──
+  /**
+   * Tracks which preset chip the admin last clicked ("Small" | "Medium" | "Large"),
+   * or null if the admin has manually typed their own dimensions.
+   * Used purely for UI highlight state — does not affect the pipeline.
+   */
+  activePreset: FurnitureSizePreset["label"] | null;
+
+  // ── GLB pipeline state ──────────────────────────────────────────────────
   isAnalyzing: boolean;
   cleanedModelFile: File | null;
   validationReport: ValidationReport | null;
@@ -49,10 +65,14 @@ export type FormState = {
 
 /* ========================================================= */
 
-type FormErrors = {
+export type FormErrors = {
   name?: string;
   categoryId?: string;
-  images?: string;
+  /**
+   * Shown when no product images have been provided.
+   * The 3D model is optional — at least one image is required.
+   */
+  assets?: string;
   basePrice?: string;
   dimensions?: string;
   general?: string;
@@ -66,11 +86,12 @@ function buildInitial(
 ): FormState {
   if (mode === "edit" && item) {
     return {
-      name:        item.name        ?? "",
-      description: item.description ?? "",
-      categoryId:  item.category_id ?? "",
-      basePrice:   item.base_price  ?? null,
-      modelFile:   undefined,
+      name:         item.name        ?? "",
+      description:  item.description ?? "",
+      categoryId:   item.category_id ?? "",
+      categorySlug: "",
+      basePrice:    item.base_price  ?? null,
+      modelFile:    undefined,
 
       images: (item.images ?? []).map((img) => ({
         id:        img.id,
@@ -96,7 +117,7 @@ function buildInitial(
       depthCm:  item.depth_cm  ?? null,
       heightCm: item.height_cm ?? null,
 
-      // Pipeline state always starts clean
+      activePreset:     null,
       isAnalyzing:      false,
       cleanedModelFile: null,
       validationReport: null,
@@ -104,17 +125,19 @@ function buildInitial(
   }
 
   return {
-    name:        "",
-    description: "",
-    categoryId:  "",
-    basePrice:   null,
-    modelFile:   undefined,
-    images:      [],
-    variants:    [],
-    widthCm:     null,
-    depthCm:     null,
-    heightCm:    null,
+    name:         "",
+    description:  "",
+    categoryId:   "",
+    categorySlug: "",
+    basePrice:    null,
+    modelFile:    undefined,
+    images:       [],
+    variants:     [],
+    widthCm:      null,
+    depthCm:      null,
+    heightCm:     null,
 
+    activePreset:     null,
     isAnalyzing:      false,
     cleanedModelFile: null,
     validationReport: null,
@@ -123,12 +146,34 @@ function buildInitial(
 
 /* ========================================================= */
 
-export function useFurnitureForm({ mode, item }: Params) {
+export function useFurnitureForm({ mode, item, isOpen }: Params) {
   const [form, setForm] = useState<FormState>(() => buildInitial(mode, item));
   const [errors, setErrors] = useState<FormErrors>({});
 
   /* =========================================================
-     RESET
+     RE-INITIALISE ON OPEN
+     -------------------------------------------------------
+     The modal is always mounted (never torn down between opens)
+     so the useState lazy initialiser above only ever runs once.
+     Whenever the modal opens we rebuild the form from the
+     current `item` so edit mode always shows fresh data and
+     create mode always starts blank.
+
+     We key on `isOpen` transitioning to true AND on `item?.id`
+     so switching from one item to another while the modal is
+     already open also re-populates correctly.
+  ========================================================= */
+  useEffect(() => {
+    if (!isOpen) return;
+    setForm(buildInitial(mode, item));
+    setErrors({});
+  // item?.id covers the "different item opened" case without
+  // re-running on every render caused by a new object reference.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, item?.id, mode]);
+
+  /* =========================================================
+     RESET (manual, e.g. after save)
   ========================================================= */
 
   const resetForm = useCallback(() => {
@@ -156,9 +201,52 @@ export function useFurnitureForm({ mode, item }: Params) {
   );
 
   /* =========================================================
+     DIMENSION AUTO-POPULATE
+  ========================================================= */
+
+  const applyDetectedDimensions = useCallback(
+    (widthCm: number, depthCm: number, heightCm: number) => {
+      setForm((prev) => ({
+        ...prev,
+        widthCm,
+        depthCm,
+        heightCm,
+        activePreset: null,
+      }));
+      setErrors((prev) => ({ ...prev, dimensions: undefined }));
+    },
+    []
+  );
+
+  /* =========================================================
+     PRESET CHIP HANDLER
+  ========================================================= */
+
+  const applyPreset = useCallback((preset: FurnitureSizePreset) => {
+    setForm((prev) => ({
+      ...prev,
+      widthCm:      preset.dimensions.widthCm,
+      depthCm:      preset.dimensions.depthCm,
+      heightCm:     preset.dimensions.heightCm,
+      activePreset: preset.label,
+    }));
+    setErrors((prev) => ({ ...prev, dimensions: undefined }));
+  }, []);
+
+  /* =========================================================
+     MANUAL DIMENSION EDIT
+  ========================================================= */
+
+  const setDimensionField = useCallback(
+    (key: "widthCm" | "depthCm" | "heightCm", value: number | null) => {
+      setForm((prev) => ({ ...prev, [key]: value, activePreset: null }));
+      setErrors((prev) => ({ ...prev, dimensions: undefined }));
+    },
+    []
+  );
+
+  /* =========================================================
      PIPELINE SETTERS
-     These write directly into form state so the controller
-     can read them via state.isAnalyzing / state.validationReport
   ========================================================= */
 
   const setIsAnalyzing = useCallback((value: boolean) => {
@@ -189,20 +277,27 @@ export function useFurnitureForm({ mode, item }: Params) {
   );
 
   /* =========================================================
-     MODEL FILE — clears pipeline state when removed
+     MODEL FILE
+     The model is optional — clearing it resets pipeline state
+     but does NOT affect image validation.
   ========================================================= */
 
   const setModelFile = useCallback((file: File | undefined) => {
     setForm((prev) => ({
       ...prev,
       modelFile: file,
-      // Clearing the file resets all downstream pipeline state
       ...(!file && {
         isAnalyzing:      false,
         cleanedModelFile: null,
         validationReport: null,
+        widthCm:          null,
+        depthCm:          null,
+        heightCm:         null,
+        activePreset:     null,
       }),
     }));
+    // Model file changes do NOT clear the assets error — only adding
+    // images clears that error, since images are required.
   }, []);
 
   /* =========================================================
@@ -225,7 +320,8 @@ export function useFurnitureForm({ mode, item }: Params) {
       images: [...prev.images, ...newImages],
     }));
 
-    setErrors((prev) => ({ ...prev, images: undefined }));
+    // Clear the assets error once the user adds at least one image
+    setErrors((prev) => ({ ...prev, assets: undefined }));
   }, []);
 
   const removeImage = useCallback((key: string) => {
@@ -292,6 +388,13 @@ export function useFurnitureForm({ mode, item }: Params) {
 
   /* =========================================================
      VALIDATION
+     -------------------------------------------------------
+     Rules:
+       - name is required
+       - categoryId is required
+       - at least one (non-deleted) image is required
+       - 3D model file is OPTIONAL
+       - all three dimensions are required
   ========================================================= */
 
   const validate = useCallback((): boolean => {
@@ -305,9 +408,10 @@ export function useFurnitureForm({ mode, item }: Params) {
       newErrors.categoryId = "Category is required";
     }
 
+    // Images are required; the 3D model is optional.
     const activeImages = form.images.filter((i) => !i.isDeleted);
     if (activeImages.length === 0) {
-      newErrors.images = "At least one image is required";
+      newErrors.assets = "At least one product image is required";
     }
 
     if (
@@ -315,7 +419,7 @@ export function useFurnitureForm({ mode, item }: Params) {
       form.depthCm  == null ||
       form.heightCm == null
     ) {
-      newErrors.dimensions = "Dimensions are required";
+      newErrors.dimensions = "All three dimensions (W × D × H) are required";
     }
 
     setErrors(newErrors);
@@ -348,9 +452,9 @@ export function useFurnitureForm({ mode, item }: Params) {
     if (!validate()) return null;
 
     if (
-      form.widthCm  == null ||
-      form.depthCm  == null ||
-      form.heightCm == null ||
+      form.widthCm   == null ||
+      form.depthCm   == null ||
+      form.heightCm  == null ||
       form.basePrice == null
     ) {
       return null;
@@ -364,7 +468,7 @@ export function useFurnitureForm({ mode, item }: Params) {
       categoryId:  form.categoryId  || undefined,
       basePrice:   form.basePrice,
 
-      // Prefer cleaned GLB from pipeline; fall back to raw upload
+      // Model file is optional — may be undefined
       modelFile: form.cleanedModelFile ?? form.modelFile ?? undefined,
 
       images: safeImages.map((img) => ({
@@ -396,15 +500,16 @@ export function useFurnitureForm({ mode, item }: Params) {
   /* ========================================================= */
 
   return {
-    // The entire form state — controller reads isAnalyzing,
-    // validationReport, widthCm etc. directly from here
     state: form,
     errors,
 
     setField,
     setModelFile,
+    setDimensionField,
+    applyDetectedDimensions,
+    applyPreset,
 
-    // Pipeline setters (called by controller, stored in form state)
+    // Pipeline setters
     isAnalyzing:         form.isAnalyzing,
     setIsAnalyzing,
     cleanedModelFile:    form.cleanedModelFile,

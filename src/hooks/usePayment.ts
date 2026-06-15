@@ -6,7 +6,7 @@ import { useState } from "react";
  * =========================================================
  * TYPES (ALIGNED WITH BACKEND)
  * =========================================================
- */
+ * */
 
 export type PaymentType = "full" | "partial";
 
@@ -19,9 +19,11 @@ export type PaymentStatus =
  * =========================================================
  * REQUEST (MATCHES API)
  * =========================================================
+ * DUAL PIPELINE UPDATE: Made orderId and inquiryId mutually exclusive/optional
  */
 type CreateCheckoutParams = {
-  orderId: string;
+  orderId?: string;     // Optional to support inquiry pipeline
+  inquiryId?: string;   // Added to support custom inquiry pipeline
   userId: string;
   type: PaymentType;
 };

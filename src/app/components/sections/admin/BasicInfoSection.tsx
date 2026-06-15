@@ -16,7 +16,13 @@ type BasicInfoState = {
 
 type Props = {
   state: BasicInfoState;
-  setField: <K extends keyof BasicInfoState>(key: K, value: BasicInfoState[K]) => void;
+  /**
+   * Accepts any key of BasicInfoState (including the dimension keys).
+   * Using `any` for value avoids union-narrowing issues at call-sites
+   * that pass a controller's `setBasicInfoField` which is typed more
+   * broadly — TypeScript still catches wrong key names.
+   */
+  setField: (key: keyof BasicInfoState, value: any) => void;
   categories: FurnitureCategory[];
 };
 
@@ -180,8 +186,8 @@ export default function BasicInfoSection({ state, setField, categories }: Props)
           <div className="grid grid-cols-3 gap-3 mt-1.5">
             {(
               [
-                { key: "widthCm", value: widthCm, placeholder: "Width" },
-                { key: "depthCm", value: depthCm, placeholder: "Depth" },
+                { key: "widthCm",  value: widthCm,  placeholder: "Width"  },
+                { key: "depthCm",  value: depthCm,  placeholder: "Depth"  },
                 { key: "heightCm", value: heightCm, placeholder: "Height" },
               ] as const
             ).map(({ key, value, placeholder }) => (
@@ -202,8 +208,8 @@ export default function BasicInfoSection({ state, setField, categories }: Props)
           <div className="flex items-center gap-1.5 mt-2">
             {(
               [
-                { key: "widthCm", value: widthCm, label: "W" },
-                { key: "depthCm", value: depthCm, label: "D" },
+                { key: "widthCm",  value: widthCm,  label: "W" },
+                { key: "depthCm",  value: depthCm,  label: "D" },
                 { key: "heightCm", value: heightCm, label: "H" },
               ] as const
             ).map(({ key, value, label }) => {

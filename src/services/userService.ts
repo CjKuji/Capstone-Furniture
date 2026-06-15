@@ -8,7 +8,9 @@ import type { UserRole } from "@/types/enums";
 
 type ProfileRow = {
   id: string;
-  full_name: string | null;
+  first_name: string | null;
+  middle_initial: string | null;
+  last_name: string | null;
   role: UserRole | null;
   created_at: string | null;
 };
@@ -19,11 +21,10 @@ type ProfileRow = {
 function normalizeProfile(p: ProfileRow): Profile {
   return {
     id: p.id,
-    full_name: p.full_name ?? null,
-
+    first_name: p.first_name ?? null,
+    middle_initial: p.middle_initial ?? null,
+    last_name: p.last_name ?? null,
     role: (p.role ?? "customer") as UserRole,
-
-    // 🔥 FIX HERE
     created_at: p.created_at ?? "",
   };
 }
@@ -35,11 +36,11 @@ function normalizeProfile(p: ProfileRow): Profile {
 export async function getUsers(): Promise<Profile[]> {
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, full_name, role, created_at");
+    .select("id, first_name, middle_initial, last_name, role, created_at");
 
   if (error) throw error;
 
-  return (data ?? []).map(normalizeProfile);
+  return (data as ProfileRow[] ?? []).map(normalizeProfile);
 }
 
 /* =========================================================
@@ -49,7 +50,7 @@ export async function getUsers(): Promise<Profile[]> {
 export async function getUserById(id: string): Promise<Profile> {
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, full_name, role, created_at")
+    .select("id, first_name, middle_initial, last_name, role, created_at")
     .eq("id", id)
     .single();
 
@@ -66,11 +67,19 @@ export async function updateUser(
   id: string,
   payload: Partial<Profile>
 ): Promise<Profile> {
+  // Map frontend profile payload keys back to the DB profile columns if needed
+  const dbPayload = {
+    ...(payload.first_name !== undefined && { first_name: payload.first_name }),
+    ...(payload.middle_initial !== undefined && { middle_initial: payload.middle_initial }),
+    ...(payload.last_name !== undefined && { last_name: payload.last_name }),
+    ...(payload.role !== undefined && { role: payload.role }),
+  };
+
   const { data, error } = await supabase
     .from("profiles")
-    .update(payload)
+    .update(dbPayload)
     .eq("id", id)
-    .select("id, full_name, role, created_at")
+    .select("id, first_name, middle_initial, last_name, role, created_at")
     .single();
 
   if (error) throw error;

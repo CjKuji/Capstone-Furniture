@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { Box, RefreshCw, LoaderCircle } from "lucide-react";
 
 import {
@@ -19,8 +18,12 @@ import OrderAdminCard from "@/app/components/OrderAdminCard";
 import { supabase } from "@/lib/supabase";
 
 export default function AdminOrdersPage() {
-  const router = useRouter();
-  const { data: orders = [], isLoading, isError, isFetching } = useAdminOrders();
+  const {
+    data: orders = [],
+    isLoading,
+    isError,
+    isFetching,
+  } = useAdminOrders();
   const { updateStatus, invalidateOrders } = useAdminOrderActions();
 
   /* ================= AUTH ================= */
@@ -46,29 +49,41 @@ export default function AdminOrdersPage() {
       }
     };
     getAdmin();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   /* ================= REALTIME SUBSCRIPTION ================= */
   useEffect(() => {
-    // Listen for ALL changes (INSERT, UPDATE, DELETE) to the orders table
     const channel = supabase
       .channel("admin-orders-live-sync")
       .on(
         "postgres_changes",
-        { 
-          event: "*", 
-          schema: "public", 
-          table: "orders" 
+        {
+          event: "*",
+          schema: "public",
+          table: "orders",
         },
         (payload) => {
           console.log("Realtime change detected:", payload.eventType);
-          
-          // 1. Invalidate React Query cache to refetch data
+
+          /**
+           * FIX: removed router.refresh() that was here before.
+           *
+           * router.refresh() invalidates the *entire* Next.js cache and forces
+           * every Server Component on the page to re-render from scratch. This
+           * causes isFetching to spike, which triggered the loading guard and
+           * flashed the skeleton every time any order changed — even if the
+           * admin was looking at the grid.
+           *
+           * invalidateOrders() only invalidates the ["admin-orders"] React
+           * Query cache key, which triggers a background refetch. Thanks to
+           * placeholderData: (prev) => prev in useAdminOrders, the existing
+           * grid stays visible during the refetch and only isFetching goes
+           * true (shown as the subtle "Syncing…" indicator in the header).
+           */
           invalidateOrders();
-          
-          // 2. Refresh Next.js Server Components/Router state
-          router.refresh();
         }
       )
       .subscribe();
@@ -76,7 +91,7 @@ export default function AdminOrdersPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [invalidateOrders, router]);
+  }, [invalidateOrders]);
 
   /* ================= CONVERSATIONS ================= */
   const { conversations } = useConversationList({
@@ -101,8 +116,31 @@ export default function AdminOrdersPage() {
     }
   };
 
-  /* ================= INITIAL HARD LOADING BLOCKS ================= */
-  if ((isLoading && !isFetching) || authLoading) {
+  /* ================= LOADING GUARD ================= */
+  /**
+   * FIX: corrected the loading condition.
+   *
+   * The original guard was `(isLoading && !isFetching)`. In TanStack Query v5,
+   * isLoading is shorthand for (isPending && isFetching), so
+   * `isLoading && !isFetching` is always false — skeletons never showed.
+   *
+   * The correct pattern (matching the customer page) is:
+   *   orders.length === 0 && (isLoading || authLoading)
+   *
+   * Why include `orders.length === 0`:
+   * With placeholderData: (prev) => prev, React Query keeps the previous array
+   * in place during any refetch/invalidation. This means orders is never empty
+   * once it has loaded at least once, so the skeleton only shows on genuine
+   * first load (empty cache + no prior data).
+   *
+   * Why NOT use `isFetching`:
+   * isFetching is true during background syncs triggered by the realtime
+   * subscription. Using it here would flash the skeleton over perfectly good
+   * rendered cards every time an order changes.
+   */
+  const showInitialLoading = orders.length === 0 && (isLoading || authLoading);
+
+  if (showInitialLoading) {
     return (
       <main className="min-h-screen bg-[#0F0A06] text-white p-6">
         <div className="animate-pulse space-y-6">
@@ -121,11 +159,13 @@ export default function AdminOrdersPage() {
   }
 
   /* ================= ERROR ================= */
-  if (isError) {
+  if (isError && orders.length === 0) {
     return (
       <main className="min-h-screen bg-[#0F0A06] text-white p-6 flex items-center justify-center">
         <div className="text-center text-rose-400">
-          <p className="text-sm font-medium">Failed to synchronize application layout data records.</p>
+          <p className="text-sm font-medium">
+            Failed to synchronize application layout data records.
+          </p>
           <button
             onClick={() => window.location.reload()}
             className="mt-4 inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-wider bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 px-4 py-2.5 rounded-xl transition"
@@ -143,13 +183,15 @@ export default function AdminOrdersPage() {
     return (
       <main className="min-h-screen bg-[#0F0A06] text-white flex items-center justify-center">
         <div className="text-center text-white/40">
-          <p className="text-sm tracking-wide font-medium">Security Clearance Exception: Access Denied</p>
+          <p className="text-sm tracking-wide font-medium">
+            Security Clearance Exception: Access Denied
+          </p>
         </div>
       </main>
     );
   }
 
-  /* ================= MAIN APPLICATION UI RENDER CANVAS ================= */
+  /* ================= MAIN UI ================= */
   return (
     <main className="min-h-screen bg-[#0F0A06] text-white p-6 space-y-6">
       <div className="flex items-end justify-between border-b border-white/5 pb-4 relative">
@@ -177,9 +219,12 @@ export default function AdminOrdersPage() {
       {orders.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-32 text-center rounded-2xl border border-dashed border-white/5 bg-[#0B0704]">
           <Box className="w-8 h-8 text-white/20 mb-3" />
-          <p className="text-white/50 text-sm font-semibold tracking-tight">No active orders discovered</p>
+          <p className="text-white/50 text-sm font-semibold tracking-tight">
+            No active orders discovered
+          </p>
           <p className="text-white/25 text-xs mt-1 max-w-[280px] sm:max-w-none leading-relaxed">
-            Database pipelines are active. Orders will display instantly when checkout routines trigger.
+            Database pipelines are active. Orders will display instantly when
+            checkout routines trigger.
           </p>
         </div>
       ) : (

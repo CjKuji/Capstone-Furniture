@@ -25,6 +25,9 @@ export interface SanitizeDimensions {
  *  8. Floor-align Y
  *
  * Returns the mutated scene and an autoFixLog describing every change made.
+ *
+ * IMPORTANT: This function mutates the scene in-place.
+ * Always pass a cloned scene: originalScene.clone(true)
  */
 export function sanitizeModel(
   scene: THREE.Group,
@@ -38,7 +41,7 @@ export function sanitizeModel(
     if (node instanceof THREE.Light) lights.push(node);
   });
   lights.forEach((light) => {
-    const typeName = light.type; // e.g. "DirectionalLight"
+    const typeName = light.type;
     light.parent?.remove(light);
     autoFixLog.push(`Removed ${typeName} ("${light.name || light.uuid.slice(0, 8)}")`);
   });
@@ -61,22 +64,15 @@ export function sanitizeModel(
   }
 
   // ─── 3. Prune Empty Nodes ───────────────────────────────────────────────────
-  /**
-   * A node is considered "empty" if it has no children AND no geometry
-   * (i.e. it is not a Mesh/Line/Points itself). We do a bottom-up pass
-   * so parent nodes that become empty after child removal are also pruned.
-   */
   let prunedCount = 0;
 
   function pruneEmpty(node: THREE.Object3D): boolean {
-    // Recurse children first (bottom-up)
     const childrenToRemove: THREE.Object3D[] = [];
     node.children.forEach((child) => {
       if (pruneEmpty(child)) childrenToRemove.push(child);
     });
     childrenToRemove.forEach((child) => node.remove(child));
 
-    // Determine if this node itself is empty
     const hasMesh =
       node instanceof THREE.Mesh ||
       node instanceof THREE.Line ||
@@ -87,7 +83,7 @@ export function sanitizeModel(
     if (!hasMesh && !hasChildren && node !== scene) {
       autoFixLog.push(`Pruned empty node ("${node.name || node.uuid.slice(0, 8)}")`);
       prunedCount++;
-      return true; // signal parent to remove this node
+      return true;
     }
     return false;
   }
@@ -101,7 +97,7 @@ export function sanitizeModel(
   scene.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(scene);
   const modelSize = new THREE.Vector3();
-  box.getSize(modelSize); // x=width, y=height, z=depth  (Three.js axes)
+  box.getSize(modelSize);
 
   autoFixLog.push(
     `Bounding box computed — ` +
@@ -111,34 +107,23 @@ export function sanitizeModel(
   );
 
   // ─── 5. Scale Normalize ─────────────────────────────────────────────────────
-  /**
-   * Three.js GLB units are metres. Target dimensions are in centimetres.
-   * We find the largest axis of the model, compare it to the corresponding
-   * real-world dimension, and apply a uniform scale so the model fits exactly.
-   */
   const { widthCm, depthCm, heightCm } = dimensions;
 
-  // Map Three.js axes → provided dimensions (also in metres)
   const targetWidth  = widthCm  / 100;
   const targetDepth  = depthCm  / 100;
   const targetHeight = heightCm / 100;
 
-  // Pick the axis pair (model size vs target size) that produces the
-  // largest required scale — i.e. normalise by the dominant axis.
   const candidates = [
     { axis: "X (width)",  modelDim: modelSize.x, targetDim: targetWidth  },
     { axis: "Y (height)", modelDim: modelSize.y, targetDim: targetHeight },
     { axis: "Z (depth)",  modelDim: modelSize.z, targetDim: targetDepth  },
   ];
 
-  // Guard against degenerate (zero-size) models
   const validCandidates = candidates.filter((c) => c.modelDim > 0.00001);
 
   if (validCandidates.length === 0) {
     autoFixLog.push("WARNING: Model has zero or near-zero bounding box — scale skipped");
   } else {
-    // Find the axis whose ratio between model size and target size is largest
-    // (i.e. the axis that "overflows" the most — we scale to fit that one).
     const dominant = validCandidates.reduce((prev, curr) =>
       curr.modelDim / curr.targetDim > prev.modelDim / prev.targetDim ? curr : prev
     );
@@ -168,10 +153,6 @@ export function sanitizeModel(
   );
 
   // ─── 7. Center Pivot on XZ ──────────────────────────────────────────────────
-  /**
-   * Translate the scene so the bounding-box centre lies at X=0, Z=0.
-   * Y is intentionally left alone here — floor-alignment handles it next.
-   */
   const center = new THREE.Vector3();
   box.getCenter(center);
 
@@ -184,10 +165,6 @@ export function sanitizeModel(
   );
 
   // ─── 8. Floor Align Y ───────────────────────────────────────────────────────
-  /**
-   * Shift the scene vertically so its lowest point (box.min.y) sits at Y=0.
-   * We recompute the box after the XZ shift to get the correct Y min.
-   */
   box.setFromObject(scene);
   const yFloorOffset = -box.min.y;
   scene.position.y += yFloorOffset;

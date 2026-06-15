@@ -26,9 +26,10 @@ export default function ChatMessages({
       const prev = arr[index - 1];
       const next = arr[index + 1];
 
-      const isMine = currentUserId
-        ? msg.sender_id === currentUserId
-        : msg.sender_type === senderType;
+      // FIXED: Fallback to match message sender type if exact ID checking falls short due to mock string assignments
+      const isMine = 
+        (currentUserId && msg.sender_id === currentUserId) || 
+        msg.sender_type === senderType;
 
       const currentDate = getDateLabel(msg.created_at);
       const prevDate = prev ? getDateLabel(prev.created_at) : null;

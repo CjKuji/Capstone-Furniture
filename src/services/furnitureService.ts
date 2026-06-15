@@ -11,10 +11,8 @@ import type {
 } from "@/types/furniture";
 
 import type { Database } from "@/types/supabase";
-
 import type { ARReadiness } from "@/types/modelValidation";
-
-import { upload, buildPaths, removeFiles } from "@/services/storageService";
+import { upload, buildPaths } from "@/services/storageService";
 
 import {
   createImages,
@@ -31,7 +29,6 @@ import {
 /* =========================================================
    DEBUG
 ========================================================= */
-
 const DEBUG = true;
 
 const log = (step: string, data?: any) => {
@@ -44,11 +41,10 @@ const err = (step: string, error: any, extra?: any) => {
 };
 
 /* =========================================================
-   EXTENDED PAYLOAD (Step 10)
+   EXTENDED PAYLOAD
    Adds cleanedModelFile and arReadiness on top of the base
    FurnitureFormPayload without touching furniture.ts types.
 ========================================================= */
-
 export type FurnitureServicePayload = FurnitureFormPayload & {
   /** Sanitized GLB from modelExporter — preferred over modelFile when present */
   cleanedModelFile?: File | null;
@@ -64,7 +60,6 @@ export type FurnitureServicePayload = FurnitureFormPayload & {
    We intersect the three generated variants locally so the
    rest of this file compiles without touching supabase.ts.
 ========================================================= */
-
 type FurnitureRow =
   Database["public"]["Tables"]["furniture"]["Row"] & {
     model_ar_status: ARReadiness | null;
@@ -86,7 +81,6 @@ type FurnitureUpdate =
    Uses the augmented FurnitureRow so model_ar_status is
    present, satisfying FurnitureDB's required field.
 ========================================================= */
-
 type FurnitureQueryResult = FurnitureRow & {
   furniture_categories: FurnitureCategory | null;
   furniture_images: FurnitureImage[] | null;
@@ -104,7 +98,6 @@ type FurnitureQueryResult = FurnitureRow & {
    satisfies FurnitureItemAdmin without disabling type checks
    elsewhere.
 ========================================================= */
-
 function normalize(data: FurnitureQueryResult): FurnitureItemAdmin {
   return {
     // ── spread all raw columns first ──────────────────────
@@ -119,7 +112,7 @@ function normalize(data: FurnitureQueryResult): FurnitureItemAdmin {
 
     // ── join relations ────────────────────────────────────
     category: data.furniture_categories ?? null,
-    images:   data.furniture_images     ?? [],
+    images:   data.furniture_images   ?? [],
     variants: data.furniture_variants   ?? [],
   };
 }
@@ -127,7 +120,6 @@ function normalize(data: FurnitureQueryResult): FurnitureItemAdmin {
 /* =========================================================
    GET ALL
 ========================================================= */
-
 export async function getFurniture(): Promise<FurnitureItemAdmin[]> {
   log("GET_ALL_START");
 
@@ -157,7 +149,6 @@ export async function getFurniture(): Promise<FurnitureItemAdmin[]> {
 /* =========================================================
    GET BY ID
 ========================================================= */
-
 export async function getFurnitureById(id: string) {
   log("GET_BY_ID", id);
 
@@ -185,7 +176,6 @@ export async function getFurnitureById(id: string) {
 /* =========================================================
    CREATE
 ========================================================= */
-
 export async function createFurniture(
   payload: FurnitureServicePayload,
   userId: string
@@ -215,7 +205,6 @@ export async function createFurniture(
        Uses the augmented FurnitureInsert type so
        model_ar_status is a known, accepted property.
     --------------------------------------------------------- */
-
     const insertPayload: FurnitureInsert = {
       name,
       slug,
@@ -253,7 +242,6 @@ export async function createFurniture(
        MODEL UPLOAD
        Prefer cleanedModelFile (sanitized GLB) over raw modelFile.
     --------------------------------------------------------- */
-
     const modelFile = payload.cleanedModelFile ?? payload.modelFile;
 
     if (modelFile instanceof File) {
@@ -276,7 +264,6 @@ export async function createFurniture(
     /* ---------------------------------------------------------
        CHILD TABLES
     --------------------------------------------------------- */
-
     await createImages(id, payload.images ?? [], false);
     await createVariants(id, payload.variants ?? []);
 
@@ -290,7 +277,6 @@ export async function createFurniture(
 /* =========================================================
    UPDATE
 ========================================================= */
-
 export async function updateFurniture(
   id: string,
   payload: FurnitureServicePayload
@@ -305,7 +291,6 @@ export async function updateFurniture(
      model_ar_status is a known property — no more
      Record<string, unknown> / index-signature conflict.
   --------------------------------------------------------- */
-
   const updateData: FurnitureUpdate = {
     name:         payload.name,
     description:  payload.description  ?? null,
@@ -357,21 +342,14 @@ export async function updateFurniture(
 }
 
 /* =========================================================
-   DELETE
+   DELETE (Safe — Database Row Eviction Only)
 ========================================================= */
-
 export async function deleteFurniture(id: string) {
   log("DELETE_START", id);
 
-  const item = await getFurnitureById(id);
-
-  const urls = [
-    item.model_url,
-    ...(item.images  ?? []).map((i) => i.image_url),
-    ...(item.variants ?? []).map((v) => v.texture_url),
-  ].filter(Boolean) as string[];
-
-  if (urls.length) await removeFiles(urls);
+  // NOTE: removeFiles(urls) was removed here to bypass storage destruction.
+  // Physical model, texture, and image payloads will stay alive inside your
+  // bucket buckets so legacy/cancelled order canvas instances never throw 400.
 
   const { error } = await supabase
     .from("furniture")
@@ -389,7 +367,6 @@ export async function deleteFurniture(id: string) {
 /* =========================================================
    CATEGORIES
 ========================================================= */
-
 export async function getCategories(): Promise<FurnitureCategory[]> {
   const { data, error } = await supabase
     .from("furniture_categories")
@@ -402,4 +379,4 @@ export async function getCategories(): Promise<FurnitureCategory[]> {
   }
 
   return data ?? [];
-} 
+}

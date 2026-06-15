@@ -197,7 +197,9 @@ export async function getAdminOrders(): Promise<OrderAdmin[]> {
 
       profiles:user_id!inner (
         id,
-        full_name,
+        first_name,
+        middle_initial,
+        last_name,
         created_at,
         role
       ),
@@ -233,12 +235,29 @@ export async function getAdminOrders(): Promise<OrderAdmin[]> {
     throw new Error(error.message || "Failed to fetch admin orders");
   }
 
-  return (data ?? []).map((item: any) => ({
-    ...item,
-    user: Array.isArray(item.profiles)
-      ? item.profiles[0]
-      : item.profiles ?? null,
-  })) as unknown as OrderAdmin[];
+  return (data ?? []).map((item: any) => {
+    const rawProfile = Array.isArray(item.profiles) ? item.profiles[0] : item.profiles;
+    
+    // Stitch dynamic full name for consistency within front-end UI structures
+    let computedFullName = null;
+    if (rawProfile) {
+      const formattedMI = rawProfile.middle_initial ? `${rawProfile.middle_initial.trim().replace('.', '')}.` : "";
+      computedFullName = [rawProfile.first_name, formattedMI, rawProfile.last_name]
+        .filter(Boolean)
+        .join(" ")
+        .trim();
+    }
+
+    return {
+      ...item,
+      user: rawProfile
+        ? {
+            ...rawProfile,
+            full_name: computedFullName || "Unknown Customer"
+          }
+        : null,
+    };
+  }) as unknown as OrderAdmin[];
 }
 
 /**
@@ -276,7 +295,9 @@ export async function getAdminOrderById(
 
       profiles:user_id!inner (
         id,
-        full_name,
+        first_name,
+        middle_initial,
+        last_name,
         created_at,
         role
       ),
@@ -321,10 +342,24 @@ export async function getAdminOrderById(
     throw new Error(error.message || "Admin order not found");
   }
 
+  const rawProfile = Array.isArray(data.profiles) ? data.profiles[0] : data.profiles;
+  
+  let computedFullName = null;
+  if (rawProfile) {
+    const formattedMI = rawProfile.middle_initial ? `${rawProfile.middle_initial.trim().replace('.', '')}.` : "";
+    computedFullName = [rawProfile.first_name, formattedMI, rawProfile.last_name]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+  }
+
   return {
     ...data,
-    user: Array.isArray(data.profiles)
-      ? data.profiles[0]
-      : data.profiles ?? null,
+    user: rawProfile
+      ? {
+          ...rawProfile,
+          full_name: computedFullName || "Unknown Customer"
+        }
+      : null,
   } as unknown as OrderAdmin;
 }

@@ -8,8 +8,8 @@ import {
   ShoppingBag,
   RefreshCw,
   CheckCircle2,
-  XCircle,
   LoaderCircle,
+  LogIn,
 } from "lucide-react";
 
 import Navbar from "@/app/components/Navbar";
@@ -40,13 +40,6 @@ function PaymentSuccessModal() {
   useBodyScrollLock(hasPaymentModal);
 
   const closeModal = () => {
-    /**
-     * DO NOT call router.refresh() here.
-     * router.refresh() invalidates the entire Next.js cache and causes
-     * isLoading/isFetching to spike, triggering the loading guard and
-     * flashing the skeleton behind the modal closing.
-     * The Supabase realtime subscription in OrderCard keeps data fresh.
-     */
     const url = new URL(window.location.href);
     url.searchParams.delete("payment");
     url.searchParams.delete("orderId");
@@ -95,13 +88,13 @@ function PaymentSuccessModal() {
 ───────────────────────────────────────────────────────────── */
 function CustomerOrdersContent() {
   const router = useRouter();
-
   const { user } = useUser();
 
   const {
     data: orders = [],
     isLoading,
     isError,
+    error,
     isFetching,
     refetch,
   } = useMyOrders();
@@ -118,29 +111,15 @@ function CustomerOrdersContent() {
   /* ── LOADING & AUTH GUARDS ── */
   const isAuthLoading = user === undefined;
 
-  /**
-   * SHOW SKELETON ONLY ON TRUE FIRST LOAD
-   *
-   * Guard: orders.length === 0 && (isLoading || isAuthLoading)
-   *
-   * Why include `orders.length === 0`:
-   * With placeholderData: (prev) => prev in the hook, React Query keeps
-   * the previous data array in place during any refetch/invalidation, so
-   * `orders` will never be empty once it has loaded at least once.
-   * This means the skeleton only shows when we genuinely have no data yet.
-   *
-   * Why NOT use `isFetching`:
-   * isFetching is true during background syncs (realtime invalidations,
-   * manual refetch calls) even when orders.length > 0. Using it here
-   * would flash the skeleton over perfectly good rendered cards.
-   *
-   * Why `isLoading` is safe here:
-   * React Query sets isLoading true only when fetching with an empty cache
-   * (no prior data). Once the first fetch completes, isLoading is
-   * permanently false for this query key — even across re-renders,
-   * navigations, or background refetches triggered by invalidation.
-   */
-  const showInitialLoading = orders.length === 0 && (isLoading || isAuthLoading);
+  // Track if the request dropped due to missing profile synchronization tokens or an expired JWT session context
+  const isUnauthenticated = (isError && error instanceof Error && 
+    (error.message.toLowerCase().includes("auth") || 
+     error.message.toLowerCase().includes("jwt") || 
+     error.message.toLowerCase().includes("user_id") ||
+     error.message.toLowerCase().includes("not logged in"))) || 
+    (!isAuthLoading && !user);
+
+  const showInitialLoading = orders.length === 0 && (isLoading || isAuthLoading) && !isUnauthenticated;
 
   if (showInitialLoading) {
     return (
@@ -160,18 +139,46 @@ function CustomerOrdersContent() {
     );
   }
 
+  /* GUEST OR EXPIRED SESSION FALLBACK STATE */
+  if (isUnauthenticated) {
+    return (
+      <main className="min-h-screen bg-[#0F0A06] text-white">
+        <Navbar />
+        <div className="flex flex-col justify-center items-center px-4 h-[75vh] text-center max-w-2xl mx-auto">
+          <div className="bg-[#D4A97A]/10 p-4 border border-[#D4A97A]/20 rounded-full text-[#D4A97A] mb-4">
+            <LogIn className="w-8 h-8" />
+          </div>
+          <h2 className="font-bold text-xl text-white tracking-tight">Session Expired</h2>
+          <p className="text-xs text-white/40 mt-2 max-w-sm leading-relaxed">
+            Your active craftsman profile session has timed out or you are not signed in. Please authenticate to view your custom order manifest pipeline.
+          </p>
+          <button
+            onClick={() => router.push("/login")}
+            className="mt-6 flex items-center gap-2 text-[10px] font-black uppercase bg-[#D4A97A] text-[#0F0A06] hover:bg-white px-6 py-3 rounded-xl transition-all shadow-md active:scale-95"
+          >
+            Sign In to Account
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  /* CRITICAL INFRASTRUCTURE / BACKEND CONNECTION SERVICE BLOCKS */
   if (isError && orders.length === 0) {
     return (
       <main className="min-h-screen bg-[#0F0A06] text-white">
         <Navbar />
         <div className="flex flex-col justify-center items-center px-4 h-[75vh] text-center gap-5">
           <div className="bg-rose-500/10 p-4 border border-rose-500/20 rounded-full">
-            <XCircle className="w-7 h-7 text-rose-500" />
+            <RefreshCw className="w-7 h-7 text-rose-500" />
           </div>
           <h2 className="font-bold text-xl text-white">Connection Error</h2>
+          <p className="text-xs text-white/40 max-w-xs font-mono">
+            {error instanceof Error ? error.message : "Error connecting to your remote inquiry database channels."}
+          </p>
           <button
             onClick={() => refetch()}
-            className="flex items-center gap-2 text-[10px] font-black uppercase bg-rose-500/10 text-rose-400 border border-rose-500/20 px-5 py-2.5 rounded-xl"
+            className="flex items-center gap-2 text-[10px] font-black uppercase bg-rose-500/10 text-rose-400 border border-rose-500/20 px-5 py-2.5 rounded-xl transition-all"
           >
             <RefreshCw className="w-3 h-3" /> Retry Connection
           </button>
@@ -250,12 +257,6 @@ function CustomerOrdersContent() {
           </section>
         </main>
 
-        {/*
-          PaymentSuccessModal is the ONLY consumer of useSearchParams.
-          Its own Suspense fallback={null} means if it suspends, nothing
-          visible happens — no outer Suspense boundary can catch it and
-          flash "Synchronizing Manifest..." or remount the Navbar.
-        */}
         <Suspense fallback={null}>
           <PaymentSuccessModal />
         </Suspense>

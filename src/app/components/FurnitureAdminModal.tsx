@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useLayoutEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import Furniture3DViewer from "@/app/components/Furniture3DViewer";
 
@@ -37,7 +37,8 @@ export default function FurnitureModalContainer({
   onSave,
   categories,
 }: Props) {
-  const form = useFurnitureForm({ mode, item });
+  /* ── Pass isOpen so the hook re-initialises on every open ── */
+  const form = useFurnitureForm({ mode, item, isOpen });
 
   const controller = useFurnitureModalController({
     form,
@@ -45,6 +46,7 @@ export default function FurnitureModalContainer({
     isOpen,
     onClose,
     onSave,
+    categories,
   });
 
   const {
@@ -76,73 +78,99 @@ export default function FurnitureModalContainer({
     Number(state.depthCm) > 0 &&
     Number(state.heightCm) > 0;
 
-  /* ── SSR HYDRATION GATE ── */
-  // We need to know we're on the client before calling createPortal.
-  // useLayoutEffect never runs on the server, so this is the safest signal.
-  // We do NOT return null when !mounted — we return null only on the server
-  // (before hydration). Once mounted is true it stays true forever.
-  const [mounted, setMounted] = useState(false);
-  useLayoutEffect(() => {
-    setMounted(true);
-  }, []);
+  /* ── VALIDATION ERRORS ──────────────────────────────────────
+     `submitAttempted` drives the error banner. It is set when the
+     user clicks Save and validation fails, and is reset when the
+     modal closes (handled inside the isOpen useEffect below).
+     `showErrors` is fully derived — no setState inside an effect.
+  ── */
+  const [submitAttempted, setSubmitAttempted] = useState(false);
 
-  /* ── ANIMATION STATES ── */
+  const errors = form.errors;
+
+  const errorMessages = [
+    errors.name,
+    errors.categoryId,
+    errors.assets,
+    errors.dimensions,
+    errors.basePrice,
+    errors.general,
+  ].filter(Boolean) as string[];
+
+  const showErrors = submitAttempted && errorMessages.length > 0;
+
+  /* ── SUBMIT WRAPPER ── */
+  const onSubmitClick = useCallback(async () => {
+    const ok = await handleSubmit();
+    if (!ok) setSubmitAttempted(true);
+  }, [handleSubmit]);
+
+  /* ── SSR HYDRATION GATE ── */
+  const isBrowser = typeof window !== "undefined";
+
+  /* ── ANIMATION + CANVAS STATES ────────────────────────────
+     isAnimateIn     – drives CSS scale/translate transition
+     canRenderCanvas – gates the heavy WebGL canvas mount
+
+     On OPEN:
+       1. Two rAF ticks → isAnimateIn = true
+       2. 250 ms later  → canRenderCanvas = true
+
+     On CLOSE:
+       All flags and submitAttempted reset immediately so the
+       next open always starts from a clean, consistent state.
+  ── */
   const [canRenderCanvas, setCanRenderCanvas] = useState(false);
   const [isAnimateIn, setIsAnimateIn]         = useState(false);
 
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const frameRef = useRef<number | null>(null);
+  const timerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const frame1Ref = useRef<number | null>(null);
+  const frame2Ref = useRef<number | null>(null);
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-      if (frameRef.current) cancelAnimationFrame(frameRef.current);
-    };
+  const clearPending = useCallback(() => {
+    if (timerRef.current  !== null) { clearTimeout(timerRef.current);          timerRef.current  = null; }
+    if (frame1Ref.current !== null) { cancelAnimationFrame(frame1Ref.current); frame1Ref.current = null; }
+    if (frame2Ref.current !== null) { cancelAnimationFrame(frame2Ref.current); frame2Ref.current = null; }
   }, []);
 
+  useEffect(() => () => { clearPending(); }, [clearPending]);
+
   useEffect(() => {
+    clearPending();
+
     if (!isOpen) {
-      frameRef.current = requestAnimationFrame(() => {
-        setIsAnimateIn(false);
-        setCanRenderCanvas(false);
-      });
-      return () => {
-        if (frameRef.current) cancelAnimationFrame(frameRef.current);
-      };
+      setIsAnimateIn(false);
+      setCanRenderCanvas(false);
+      setSubmitAttempted(false);
+      return;
     }
 
     const originalOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
 
-    frameRef.current = requestAnimationFrame(() => {
-      frameRef.current = requestAnimationFrame(() => {
+    frame1Ref.current = requestAnimationFrame(() => {
+      frame2Ref.current = requestAnimationFrame(() => {
         setIsAnimateIn(true);
+        timerRef.current = setTimeout(() => setCanRenderCanvas(true), 250);
       });
     });
 
-    timerRef.current = setTimeout(() => {
-      setCanRenderCanvas(true);
-    }, 400);
-
     return () => {
-      if (frameRef.current) cancelAnimationFrame(frameRef.current);
-      if (timerRef.current) clearTimeout(timerRef.current);
+      clearPending();
       document.body.style.overflow = originalOverflow;
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
-  /* ── SERVER GUARD — only blocks on SSR, never on client ── */
-  if (!mounted) return null;
+  /* ── SERVER GUARD ── */
+  if (!isBrowser) return null;
 
   /* ── EDIT MODE WITH NO ITEM ── */
   if (!item && mode === "edit") {
     return createPortal(
       <div
         className={`fixed inset-0 z-[99999] flex items-center justify-center p-4 backdrop-blur-md bg-black/80 transition-all duration-300 ${
-          isOpen
-            ? "opacity-100 visible"
-            : "opacity-0 invisible pointer-events-none"
+          isOpen ? "opacity-100 visible" : "opacity-0 invisible pointer-events-none"
         }`}
       >
         <div className="w-full max-w-md bg-[#0A0705] border border-white/[0.06] rounded-2xl p-8 text-center shadow-2xl">
@@ -158,17 +186,10 @@ export default function FurnitureModalContainer({
   return createPortal(
     <div
       className={`fixed inset-0 z-[99999] flex items-center justify-center p-0 sm:p-3 backdrop-blur-md overflow-hidden transition-all duration-300 ease-out ${
-        isOpen
-          ? "opacity-100 visible"
-          : "opacity-0 invisible pointer-events-none"
+        isOpen ? "opacity-100 visible" : "opacity-0 invisible pointer-events-none"
       }`}
-      style={{
-        backgroundColor: "rgba(6, 4, 3, 0.85)",
-        willChange: "opacity",
-      }}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) handleClose();
-      }}
+      style={{ backgroundColor: "rgba(6, 4, 3, 0.85)", willChange: "opacity" }}
+      onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}
     >
       <div
         className={`
@@ -179,9 +200,7 @@ export default function FurnitureModalContainer({
           shadow-[0_24px_60px_rgba(0,0,0,0.8)] overflow-hidden
           border-0 sm:border border-white/[0.06] bg-[#0A0705]
           transition-all duration-300 ease-out
-          ${isAnimateIn
-            ? "scale-100 translate-y-0"
-            : "scale-[0.99] translate-y-4"}
+          ${isAnimateIn ? "scale-100 translate-y-0" : "scale-[0.99] translate-y-4"}
         `}
         style={{ willChange: "transform, opacity" }}
       >
@@ -328,6 +347,53 @@ export default function FurnitureModalContainer({
           </div>
         </div>
 
+        {/* ── VALIDATION ERROR BANNER ── */}
+        <div
+          className={`
+            shrink-0 overflow-hidden transition-all duration-300 ease-out
+            ${showErrors
+              ? "max-h-40 opacity-100"
+              : "max-h-0 opacity-0 pointer-events-none"}
+          `}
+          style={{ borderTop: showErrors ? "1px solid rgba(239,68,68,0.15)" : undefined }}
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          <div className="px-6 py-3 bg-red-950/40 flex items-start gap-3">
+            <span className="mt-0.5 shrink-0 w-4 h-4 rounded-full bg-red-500/20 border border-red-500/40 flex items-center justify-center text-red-400 text-[10px] font-bold leading-none select-none">
+              !
+            </span>
+
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-red-400/80 mb-1.5">
+                {errorMessages.length === 1
+                  ? "Please fix the following before saving"
+                  : `${errorMessages.length} issues must be resolved before saving`}
+              </p>
+              <ul className="space-y-0.5">
+                {errorMessages.map((msg, i) => (
+                  <li
+                    key={i}
+                    className="text-[11px] text-red-300/70 leading-relaxed flex items-start gap-1.5"
+                  >
+                    <span className="mt-1 w-1 h-1 rounded-full bg-red-500/50 shrink-0" />
+                    {msg}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setSubmitAttempted(false)}
+              className="shrink-0 text-red-500/40 hover:text-red-400 transition-colors text-xs leading-none mt-0.5"
+              aria-label="Dismiss errors"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+
         {/* ── FOOTER ── */}
         <div
           className="shrink-0 flex justify-end items-center gap-3 px-6 py-4 bg-[#0E0A07]"
@@ -343,7 +409,7 @@ export default function FurnitureModalContainer({
 
           <button
             type="button"
-            onClick={handleSubmit}
+            onClick={onSubmitClick}
             disabled={submitting || isAnalyzing}
             className="px-6 h-10 rounded-xl text-[10px] font-bold uppercase tracking-[0.15em] transition-all duration-200 bg-[#D4A97A] text-[#1C1209] hover:bg-[#E5BA8B] active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none shadow-[0_4px_20px_rgba(212,169,122,0.15)]"
           >

@@ -2,16 +2,23 @@
 
 import { useRouter } from "next/navigation";
 import {
-  ArrowRight, Scan, Box, MessageSquare,
-  Sparkles, CheckCircle2, Layers, Cpu,
+  ArrowRight,
+  Scan,
+  Box,
+  MessageSquare,
+  Sparkles,
+  CheckCircle2,
+  Layers,
+  Cpu,
+  HelpCircle,
 } from "lucide-react";
 
 import Navbar from "@/app/components/Navbar";
 import CustomerFurnitureCard from "@/app/components/CustomerCard";
 import Reveal from "@/app/components/Reveal";
 import PageTransition from "@/app/components/PageTransition";
+import TutorialWidget from "@/app/components/TutorialWidget";
 import { useFurniturePublicList } from "@/hooks/useFurniture";
-// Import the type to use for casting
 import type { FurniturePublicListItem } from "@/types/furniture-public";
 
 export default function HomePage() {
@@ -24,13 +31,22 @@ export default function HomePage() {
 
   return (
     <PageTransition>
-      <div className="bg-[#0F0A06] min-h-screen font-sans text-white">
-        <Navbar />
+      <div className="relative bg-[#0F0A06] min-h-screen font-sans text-white overflow-x-hidden">
+        
+        {/* ═══════════════════════════════════════════════════════
+            FIXED NAVBAR
+            Added: fixed, top-0, left-0, w-full, and z-50 
+        ═══════════════════════════════════════════════════════ */}
+        <div className="fixed top-0 left-0 w-full z-50">
+          <Navbar />
+        </div>
 
         {/* ═══════════════════════════════════════════════════════
-            HERO
+            HERO 
+            Added: pt-20 (padding-top) so the content starts 
+            below the fixed Navbar.
         ═══════════════════════════════════════════════════════ */}
-        <section className="relative flex flex-col justify-center items-center px-4 sm:px-6 min-h-[92dvh] overflow-hidden text-center">
+        <section className="relative flex flex-col justify-center items-center px-4 sm:px-6 min-h-[92dvh] pt-20 overflow-hidden text-center">
           {/* glow blobs */}
           <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden>
             <div className="top-20 -left-40 absolute bg-[#7A4E2D]/20 blur-[120px] rounded-full w-[400px] sm:w-[500px] h-[400px] sm:h-[500px]" />
@@ -97,16 +113,14 @@ export default function HomePage() {
           </Reveal>
 
           {/* SCROLL CUE */}
-          <div className="bottom-6 sm:bottom-8 left-1/2 absolute -translate-x-1/2 animate-bounce" aria-hidden>
+          <div className="bottom-3 sm:bottom-4 left-1/2 absolute -translate-x-1/2 animate-bounce" aria-hidden>
             <div className="flex justify-center items-start pt-1.5 border-2 border-white/20 rounded-full w-6 h-10">
               <div className="bg-[#D4A97A] rounded-full w-1 h-2" />
             </div>
           </div>
         </section>
 
-        {/* ═══════════════════════════════════════════════════════
-            STATS STRIP
-        ═══════════════════════════════════════════════════════ */}
+        {/* STATS STRIP */}
         <section className="bg-white/[0.03] px-4 sm:px-6 py-8 sm:py-10 border-white/5 border-y">
           <div className="gap-6 sm:gap-8 grid grid-cols-2 md:grid-cols-4 mx-auto max-w-5xl text-center">
             {[
@@ -125,11 +139,35 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* ═══════════════════════════════════════════════════════
-            FEATURED COLLECTION
-        ═══════════════════════════════════════════════════════ */}
+        {/* FEATURED COLLECTION */}
         <section className="px-4 sm:px-6 py-16 sm:py-24">
           <div className="mx-auto max-w-7xl">
+            <Reveal from="bottom" delay={0.05}>
+              <div 
+                id="inquiry-highlight-card"
+                className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-gradient-to-r from-[#1C1209] via-[#160E07] to-transparent mb-12 p-6 sm:p-8 border border-white/5 rounded-2xl scroll-mt-24"
+              >
+                <div className="max-w-2xl">
+                  <div className="inline-flex items-center gap-1.5 bg-[#D4A97A]/10 mb-3 px-2.5 py-1 rounded-md text-[#D4A97A] text-xs font-semibold tracking-wider uppercase">
+                    <HelpCircle className="w-3.5 h-3.5" /> Have a Specific Blueprint?
+                  </div>
+                  <h3 className="font-bold text-white text-lg sm:text-xl">
+                    Looking for dimensions or wood profiles not shown below?
+                  </h3>
+                  <p className="mt-2 text-white/50 text-xs sm:text-sm leading-relaxed">
+                    Every piece on WoodForge serves as a launching pad. Submit an inquiry for explicit custom configurations, sizing alternatives, or custom architectural project quotes.
+                  </p>
+                </div>
+                <button
+                  onClick={() => router.push("/inquire")}
+                  className="group flex items-center justify-center gap-2 bg-[#D4A97A]/10 hover:bg-[#D4A97A] border border-[#D4A97A]/30 hover:border-transparent px-5 py-3 rounded-full font-medium text-[#D4A97A] hover:text-[#1C1209] text-xs uppercase tracking-wider transition shrink-0 whitespace-nowrap"
+                >
+                  Start Custom Inquiry
+                  <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
+                </button>
+              </div>
+            </Reveal>
+
             <Reveal>
               <div className="mb-3 sm:mb-4 font-semibold text-[#D4A97A] text-xs uppercase tracking-widest">
                 Featured Designs
@@ -164,7 +202,6 @@ export default function HomePage() {
 
             <div className="gap-4 sm:gap-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 mt-8 sm:mt-10">
               {(isLoading ? Array.from({ length: 6 }) : items.slice(0, 6)).map((item, idx) => {
-                // If loading or item doesn't exist, show Skeleton
                 if (isLoading || !item) {
                   return (
                     <div key={idx} className="bg-white/[0.03] border border-white/5 rounded-2xl overflow-hidden">
@@ -176,10 +213,7 @@ export default function HomePage() {
                     </div>
                   );
                 }
-
-                // Cast item to the correct type for the component
                 const furnitureItem = item as FurniturePublicListItem;
-
                 return (
                   <Reveal key={furnitureItem.id} delay={idx * 0.07}>
                     <CustomerFurnitureCard item={furnitureItem} />
@@ -190,15 +224,12 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* ═══════════════════════════════════════════════════════
-            AI + TECHNOLOGY SECTION
-        ═══════════════════════════════════════════════════════ */}
+        {/* AI + TECHNOLOGY SECTION */}
         <section className="px-4 sm:px-6 py-16 sm:py-24">
           <div className="mx-auto max-w-7xl">
             <Reveal>
               <div className="bg-gradient-to-br from-[#1C1209] to-[#0F0A06] border border-white/5 rounded-2xl sm:rounded-3xl overflow-hidden">
                 <div className="grid md:grid-cols-2">
-                  {/* LEFT TEXT */}
                   <div className="flex flex-col justify-center p-6 sm:p-10 lg:p-14">
                     <div className="inline-flex items-center gap-2 bg-[#D4A97A]/10 mb-4 px-3 py-1 rounded-full w-fit font-medium text-[#D4A97A] text-xs uppercase tracking-widest">
                       <Sparkles className="w-3 h-3" /> AI-Powered
@@ -211,7 +242,6 @@ export default function HomePage() {
                     <p className="mt-4 text-white/50 text-sm leading-relaxed">
                       Our platform uses 3D rendering and Augmented Reality so you can place
                       your future furniture in your actual room — before a single nail is hammered.
-                      Tweak finishes, swap materials, and confirm dimensions in real time.
                     </p>
 
                     <ul className="space-y-3 mt-6 sm:mt-8">
@@ -239,7 +269,6 @@ export default function HomePage() {
                     </button>
                   </div>
 
-                  {/* RIGHT VISUAL */}
                   <div className="relative flex justify-center items-center bg-[#D4A97A]/5 p-6 sm:p-10 min-h-[260px] sm:min-h-[340px]">
                     <div className="absolute inset-0 flex justify-center items-center pointer-events-none" aria-hidden>
                       <div className="bg-[#D4A97A]/10 blur-3xl rounded-full w-48 sm:w-64 h-48 sm:h-64" />
@@ -279,9 +308,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* ═══════════════════════════════════════════════════════
-            HOW IT WORKS
-        ═══════════════════════════════════════════════════════ */}
+        {/* HOW IT WORKS */}
         <section className="px-4 sm:px-6 py-16 sm:py-24">
           <div className="mx-auto max-w-7xl">
             <Reveal>
@@ -340,9 +367,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* ═══════════════════════════════════════════════════════
-            CTA BANNER
-        ═══════════════════════════════════════════════════════ */}
+        {/* CTA BANNER */}
         <section className="px-4 sm:px-6 py-16 sm:py-24">
           <Reveal from="bottom">
             <div className="bg-[#D4A97A] mx-auto px-5 sm:px-8 py-10 sm:py-14 lg:py-16 rounded-2xl sm:rounded-3xl max-w-4xl text-center">
@@ -371,13 +396,10 @@ export default function HomePage() {
           </Reveal>
         </section>
 
-        {/* ═══════════════════════════════════════════════════════
-            FOOTER
-        ═══════════════════════════════════════════════════════ */}
+        {/* FOOTER */}
         <footer className="bg-[#0F0A06] px-4 sm:px-6 py-10 sm:py-14 border-white/5 border-t">
           <div className="mx-auto max-w-7xl">
             <div className="gap-8 sm:gap-10 grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4">
-              {/* BRAND */}
               <div className="col-span-2 lg:col-span-2">
                 <p className="font-bold text-[#D4A97A] text-xl tracking-widest">
                   WOOD<span className="text-white">FORGE</span>
@@ -386,8 +408,6 @@ export default function HomePage() {
                   Made-to-order furniture crafted with precision and powered by 3D & AR technology.
                 </p>
               </div>
-
-              {/* SHOP LINKS */}
               <div>
                 <p className="mb-3 sm:mb-4 font-semibold text-white/30 text-xs uppercase tracking-widest">Shop</p>
                 <ul className="space-y-2 text-white/50 text-sm">
@@ -400,8 +420,6 @@ export default function HomePage() {
                   ))}
                 </ul>
               </div>
-
-              {/* COMPANY LINKS */}
               <div>
                 <p className="mb-3 sm:mb-4 font-semibold text-white/30 text-xs uppercase tracking-widest">Company</p>
                 <ul className="space-y-2 text-white/50 text-sm">
@@ -413,10 +431,9 @@ export default function HomePage() {
                 </ul>
               </div>
             </div>
-
             <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mt-10 sm:mt-12 pt-6 sm:pt-8 border-white/5 border-t">
               <p className="text-white/20 text-xs text-center sm:text-left">
-                © {new Date().getFullYear()} WoodForge. All rights reserved.
+                &copy; {new Date().getFullYear()} WoodForge. All rights reserved.
               </p>
               <div className="flex gap-4 sm:gap-5 text-white/30 text-xs">
                 {["Instagram", "Pinterest", "Facebook"].map((s) => (
@@ -426,6 +443,8 @@ export default function HomePage() {
             </div>
           </div>
         </footer>
+
+        <TutorialWidget />
       </div>
     </PageTransition>
   );

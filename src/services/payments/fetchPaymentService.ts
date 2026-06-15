@@ -1,4 +1,4 @@
-// services/payments/fetchPaymentsService.ts
+// services/payments/fetchPaymentService.ts
 
 import { supabase } from "@/lib/supabase";
 
@@ -16,7 +16,8 @@ export type PaymentStatus =
 
 export type PaymentRow = {
   id: string;
-  order_id: string;
+  order_id: string | null;   // Nullable to support custom inquiries
+  inquiry_id: string | null; // Added to support custom inquiries
   user_id: string;
   amount: number;
   status: PaymentStatus;
@@ -32,9 +33,7 @@ export type PaymentRow = {
 
 export type PaymentSummary = {
   payments: PaymentRow[];
-
   latestPayment: PaymentRow | null;
-
   totalPaid: number;
   totalPending: number;
   totalFailed: number;
@@ -48,9 +47,7 @@ export type PaymentSummary = {
 
 export const EMPTY_PAYMENT_SUMMARY: PaymentSummary = {
   payments: [],
-
   latestPayment: null,
-
   totalPaid: 0,
   totalPending: 0,
   totalFailed: 0,
@@ -74,35 +71,38 @@ function toSafeAmount(value: unknown): number {
 
 /**
  * =========================================================
- * FETCH PAYMENTS BY ORDER
+ * CORE FETCH & AGGREGATE LOGIC (REUSABLE PIPELINE)
  * =========================================================
  */
 
-export async function fetchPaymentsByOrder(
-  orderId: string
-): Promise<PaymentSummary> {
+export async function fetchPayments({
+  orderId,
+  inquiryId,
+}: {
+  orderId?: string;
+  inquiryId?: string;
+}): Promise<PaymentSummary> {
   /**
-   * ---------------------------------------------------------
-   * VALIDATION
-   * ---------------------------------------------------------
+   * 1. VALIDATION
    */
-
-  if (!orderId || typeof orderId !== "string") {
+  if (!orderId && !inquiryId) {
     return EMPTY_PAYMENT_SUMMARY;
   }
 
-  /**
-   * ---------------------------------------------------------
-   * FETCH PAYMENTS
-   * ---------------------------------------------------------
-   */
+  // Choose the column target and its corresponding record identification key
+  const targetField: "order_id" | "inquiry_id" = orderId ? "order_id" : "inquiry_id";
+  const targetId = orderId || inquiryId;
 
+  /**
+   * 2. FETCH PAYMENTS
+   */
   const { data, error } = await supabase
     .from("payments")
     .select(
       `
       id,
       order_id,
+      inquiry_id,
       user_id,
       amount,
       status,
@@ -110,50 +110,37 @@ export async function fetchPaymentsByOrder(
       paid_at
       `
     )
-    .eq("order_id", orderId)
+    .eq(targetField, targetId ?? "")
     .order("created_at", { ascending: false });
 
   /**
-   * ---------------------------------------------------------
-   * HANDLE ERROR
-   * ---------------------------------------------------------
+   * 3. HANDLE ERROR
    */
-
   if (error) {
     console.error(
-      "[fetchPaymentsByOrder] Failed to fetch payments:",
+      `[fetchPayments] Failed to fetch payments for ${targetField}:`,
       error.message
     );
-
     throw new Error(error.message);
   }
 
   /**
-   * ---------------------------------------------------------
-   * NORMALIZE PAYMENTS
-   * ---------------------------------------------------------
+   * 4. NORMALIZE PAYMENTS
    */
-
   const payments: PaymentRow[] = Array.isArray(data)
     ? (data as PaymentRow[])
     : [];
 
   /**
-   * ---------------------------------------------------------
-   * INITIAL TOTALS
-   * ---------------------------------------------------------
+   * 5. INITIAL TOTALS
    */
-
   let totalPaid = 0;
   let totalPending = 0;
   let totalFailed = 0;
 
   /**
-   * ---------------------------------------------------------
-   * AGGREGATE TOTALS
-   * ---------------------------------------------------------
+   * 6. AGGREGATE TOTALS
    */
-
   for (const payment of payments) {
     const amount = toSafeAmount(payment.amount);
 
@@ -177,21 +164,31 @@ export async function fetchPaymentsByOrder(
   }
 
   /**
-   * ---------------------------------------------------------
-   * RETURN CLEAN SUMMARY
-   * ---------------------------------------------------------
+   * 7. RETURN CLEAN SUMMARY
    */
-
   return {
     payments,
-
-    latestPayment:
-      payments.length > 0
-        ? payments[0]
-        : null,
-
+    latestPayment: payments.length > 0 ? payments[0] : null,
     totalPaid,
     totalPending,
     totalFailed,
   };
+}
+
+/**
+ * =========================================================
+ * BACKWARDS COMPATIBLE / WORKFLOW SPECIFIC WRAPPERS
+ * =========================================================
+ * FIX: Updated parameter typing definitions to cleanly accept string | undefined 
+ * to handle loading states in your visual components seamlessly.
+ */
+
+export async function fetchPaymentsByOrder(orderId?: string | undefined): Promise<PaymentSummary> {
+  if (!orderId) return EMPTY_PAYMENT_SUMMARY;
+  return fetchPayments({ orderId });
+}
+
+export async function fetchPaymentsByInquiry(inquiryId?: string | undefined): Promise<PaymentSummary> {
+  if (!inquiryId) return EMPTY_PAYMENT_SUMMARY;
+  return fetchPayments({ inquiryId });
 }

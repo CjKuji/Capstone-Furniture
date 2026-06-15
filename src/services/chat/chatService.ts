@@ -1,3 +1,5 @@
+// services/chat/chatService.ts
+
 import { supabase } from "@/lib/supabase";
 
 /**
@@ -14,19 +16,14 @@ export type MessageMetadata = {
 
 export type Message = {
   id: string;
-
   conversation_id: string;
   sender_id: string;
-
   message: string | null;
   image_url: string | null;
-
   sender_type: SenderType;
   created_at: string;
   is_system: boolean;
-
   metadata?: MessageMetadata;
-
   sender?: {
     id: string;
     name: string;
@@ -36,17 +33,21 @@ export type Message = {
 
 /**
  * =========================================================
- * METADATA SAFETY (FIX FOR YOUR ERROR)
+ * METADATA SAFETY
  * =========================================================
  */
-function isMessageMetadata(value: unknown): value is { type?: string; scope?: string } {
+function isMessageMetadata(
+  value: unknown
+): value is { type?: string; scope?: string } {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-
   const obj = value as Record<string, unknown>;
-
   return (
-    ("type" in obj ? typeof obj.type === "string" || obj.type === undefined : true) &&
-    ("scope" in obj ? typeof obj.scope === "string" || obj.scope === undefined : true)
+    ("type" in obj
+      ? typeof obj.type === "string" || obj.type === undefined
+      : true) &&
+    ("scope" in obj
+      ? typeof obj.scope === "string" || obj.scope === undefined
+      : true)
   );
 }
 
@@ -57,43 +58,57 @@ function normalizeMetadata(value: unknown): MessageMetadata {
 
 /**
  * =========================================================
- * DEBUG
+ * SHAPE RAW ROW → Message
  * =========================================================
  */
-const DEBUG_CHAT = true;
+function shapeMessage(msg: any): Message {
+  const base: Message = {
+    id: msg.id,
+    conversation_id: msg.conversation_id,
+    sender_id: msg.sender_id,
+    sender_type: msg.sender_type ?? "customer",
+    is_system: msg.is_system ?? false,
+    created_at: msg.created_at ?? new Date().toISOString(),
+    message: msg.message ?? null,
+    image_url: msg.image_url ?? null,
+    metadata: normalizeMetadata(msg.metadata),
+  };
 
-function debug(...args: any[]) {
-  if (DEBUG_CHAT) console.log("[CHAT SERVICE]", ...args);
-}
+  if (base.is_system || base.sender_type === "system") {
+    return { ...base, sender: { id: "system", name: "System", role: "system" } };
+  }
 
-/**
- * =========================================================
- * USER RESOLVER
- * =========================================================
- */
-async function resolveSender(senderId: string) {
-  if (!senderId) return null;
+  const p = msg.profiles as {
+    id: string;
+    first_name: string | null;
+    middle_initial: string | null;
+    last_name: string | null;
+    role: string | null;
+  } | null;
 
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("id, full_name, role")
-    .eq("id", senderId)
-    .single();
-
-  if (error || !data) return null;
+  let dynamicName = "Unknown";
+  if (p) {
+    const formattedMI = p.middle_initial ? `${p.middle_initial.trim().replace('.', '')}.` : "";
+    dynamicName = [p.first_name, formattedMI, p.last_name]
+      .filter(Boolean)
+      .join(" ")
+      .trim() || "Unknown";
+  }
 
   return {
-    id: data.id,
-    name: data.full_name ?? "Unknown",
-    role: data.role ?? "customer",
+    ...base,
+    sender: p
+      ? { id: p.id, name: dynamicName, role: p.role ?? base.sender_type }
+      : { id: base.sender_id, name: "Unknown", role: base.sender_type },
   };
 }
 
 /**
  * =========================================================
- * CONVERSATION
+ * CONVERSATION RESOLVERS (Polymorphic Support)
  * =========================================================
  */
+
 export async function getConversationByOrder(orderId: string) {
   const { data, error } = await supabase
     .from("conversations")
@@ -102,8 +117,66 @@ export async function getConversationByOrder(orderId: string) {
     .maybeSingle();
 
   if (error) throw new Error(error.message);
-
   return data;
+}
+
+export async function getConversationByInquiry(inquiryId: string) {
+  const { data, error } = await supabase
+    .from("conversations")
+    .select("*")
+    .eq("inquiry_id", inquiryId)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+/**
+ * Unified Upsert Channel Fetcher
+ * Lazily spawns a new conversation bridge row if a participant interacts with the chat frame
+ */
+export async function getOrCreateConversation({
+  userId,
+  adminId,
+  orderId = null,
+  inquiryId = null,
+}: {
+  userId: string;
+  adminId: string;
+  orderId?: string | null;
+  inquiryId?: string | null;
+}) {
+  if (!orderId && !inquiryId) {
+    throw new Error("Cannot orchestrate a message pipeline without an Order or Inquiry reference constraint.");
+  }
+
+  let query = supabase.from("conversations").select("*");
+  if (orderId) {
+    query = query.eq("order_id", orderId);
+  } else if (inquiryId) {
+    query = query.eq("inquiry_id", inquiryId);
+  }
+
+  const { data: existing, error: fetchError } = await query.maybeSingle();
+  if (fetchError) throw new Error(fetchError.message);
+  if (existing) return existing;
+
+  // ⭐ FIX: Explicitly type and struct the payload so it completely satisfies Supabase's RejectExcessProperties checker
+  const { data: created, error: insertError } = await supabase
+    .from("conversations")
+    .insert({
+      user_id: userId,
+      admin_id: adminId,
+      customer_unread_count: 0,
+      admin_unread_count: 0,
+      order_id: orderId || null,
+      inquiry_id: inquiryId || null
+    })
+    .select("*")
+    .single();
+
+  if (insertError) throw new Error(insertError.message);
+  return created;
 }
 
 /**
@@ -118,21 +191,15 @@ export async function markConversationAsRead({
   conversationId: string;
   readerType: "customer" | "admin";
 }) {
-  const payload =
-    readerType === "customer"
-      ? {
-          customer_unread_count: 0,
-          customer_last_read_at: new Date().toISOString(),
-        }
-      : {
-          admin_unread_count: 0,
-          admin_last_read_at: new Date().toISOString(),
-        };
+  const rpcMethod = 
+    readerType === "customer" 
+      ? "mark_customer_conversation_read" 
+      : "mark_admin_conversation_read";
 
-  const { error } = await supabase
-    .from("conversations")
-    .update(payload)
-    .eq("id", conversationId);
+  // Calls the postgres stored procedure passing the unified parameter mapping identity 
+  const { error } = await supabase.rpc(rpcMethod, {
+    conv_id: conversationId,
+  });
 
   if (error) throw new Error(error.message);
 }
@@ -149,57 +216,63 @@ export async function getMessages(
 ): Promise<Message[]> {
   const { data, error } = await supabase
     .from("messages")
-    .select("*")
+    .select(`
+      *,
+      profiles (
+        id,
+        first_name,
+        middle_initial,
+        last_name,
+        role
+      )
+    `)
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);
 
   if (error) throw new Error(error.message);
 
-  const messages = (data ?? []).slice().reverse();
+  return (data ?? []).slice().reverse().map(shapeMessage);
+}
 
-  return Promise.all(
-    messages.map(async (msg) => {
-      const normalized: Message = {
-        id: msg.id,
+/**
+ * =========================================================
+ * GET MESSAGES PAGINATED (used by useInfiniteQuery)
+ * =========================================================
+ */
+export async function getMessagesPaginated({
+  conversationId,
+  before,
+  limit = 30,
+}: {
+  conversationId: string;
+  before?: string;
+  limit?: number;
+}): Promise<Message[]> {
+  let query = supabase
+    .from("messages")
+    .select(`
+      *,
+      profiles (
+        id,
+        first_name,
+        middle_initial,
+        last_name,
+        role
+      )
+    `)
+    .eq("conversation_id", conversationId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
 
-        conversation_id: msg.conversation_id,
-        sender_id: msg.sender_id,
+  if (before) {
+    query = query.lt("created_at", before);
+  }
 
-        sender_type: msg.sender_type ?? "customer",
-        is_system: msg.is_system ?? false,
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
 
-        created_at: msg.created_at ?? new Date().toISOString(),
-
-        message: msg.message ?? null,
-        image_url: msg.image_url ?? null,
-
-        metadata: normalizeMetadata(msg.metadata),
-      };
-
-      if (normalized.sender_type === "system" || normalized.is_system) {
-        return {
-          ...normalized,
-          sender: {
-            id: "system",
-            name: "System",
-            role: "system",
-          },
-        };
-      }
-
-      const sender = await resolveSender(normalized.sender_id);
-
-      return {
-        ...normalized,
-        sender: sender ?? {
-          id: normalized.sender_id,
-          name: "Unknown",
-          role: normalized.sender_type,
-        },
-      };
-    })
-  );
+  return (data ?? []).slice().reverse().map(shapeMessage);
 }
 
 /**
@@ -239,26 +312,21 @@ export async function sendMessage({
       is_system: isSystem,
       metadata: normalizeMetadata(metadata),
     })
-    .select("*")
+    .select(`
+      *,
+      profiles (
+        id,
+        first_name,
+        middle_initial,
+        last_name,
+        role
+      )
+    `)
     .single();
 
   if (error) throw new Error(error.message);
 
-  return {
-    id: data.id,
-    conversation_id: data.conversation_id,
-    sender_id: data.sender_id,
-
-    sender_type: data.sender_type ?? "customer",
-    is_system: data.is_system ?? false,
-
-    created_at: data.created_at ?? new Date().toISOString(),
-
-    message: data.message ?? null,
-    image_url: data.image_url ?? null,
-
-    metadata: normalizeMetadata(data.metadata),
-  };
+  return shapeMessage(data);
 }
 
 /**
@@ -298,6 +366,5 @@ export async function getLastMessage(conversationId: string) {
     .maybeSingle();
 
   if (error) throw new Error(error.message);
-
   return data ?? null;
 }

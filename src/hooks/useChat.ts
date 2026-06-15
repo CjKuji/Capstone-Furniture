@@ -1,56 +1,138 @@
 "use client";
 
 import { useEffect, useCallback } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { chatKeys } from "@/lib/chatKeys";
 import {
-  getConversationByOrder,
-  getMessages,
+  getOrCreateConversation,
+  getMessagesPaginated,
   sendMessage,
   uploadChatImage,
   markConversationAsRead,
 } from "@/services/chat/chatService";
 
-import type { Message } from "@/types/chat";
+import type { Message, SenderType } from "@/services/chat/chatService";
 
-type SenderType = "customer" | "admin" | "system";
 type ReaderType = "customer" | "admin";
 
 type Props = {
-  orderId: string;
+  orderId?: string | null;
+  inquiryId?: string | null;
   readerType?: ReaderType;
+  fallbackAdminId?: string;
 };
 
-export function useChat({ orderId, readerType = "customer" }: Props) {
+export const MESSAGES_PAGE_SIZE = 30;
+
+export function useChat({ 
+  orderId = null, 
+  inquiryId = null, 
+  readerType = "customer",
+  fallbackAdminId = "00000000-0000-0000-0000-000000000000"
+}: Props) {
   const queryClient = useQueryClient();
 
+  // Enforce validation to prevent deadlock requests
+  const hasValidContext = !!orderId || !!inquiryId;
+
+  // Build a dynamic context descriptor key to safely isolate cache entries inside React Query
+  const contextCacheKey = orderId ? `order-${orderId}` : `inquiry-${inquiryId}`;
+
+  /* ─────────────────────────────────────────────────────────
+      STEP 1: Fetch or Create Polymorphic Conversation Thread
+  ───────────────────────────────────────────────────────── */
   const conversationQuery = useQuery({
-    queryKey: chatKeys.conversation(orderId),
-    queryFn: () => getConversationByOrder(orderId),
-    enabled: !!orderId,
+    queryKey: chatKeys.conversation(contextCacheKey),
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Authentication required to build chat streams.");
+
+      return getOrCreateConversation({
+        userId: user.id,
+        adminId: fallbackAdminId,
+        orderId,
+        inquiryId,
+      });
+    },
+    enabled: hasValidContext,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
   });
 
   const conversationId = conversationQuery.data?.id ?? null;
 
-  const messagesQuery = useQuery<Message[]>({
-    queryKey: chatKeys.messages(conversationId ?? ""),
-    queryFn: () => getMessages(conversationId as string),
+  /* ─────────────────────────────────────────────────────────
+      STEP 2: Paginated messages
+  ───────────────────────────────────────────────────────── */
+  const messagesQuery = useInfiniteQuery<Message[]>({
+    queryKey: chatKeys.messagesPaginated(conversationId ?? ""),
+    queryFn: ({ pageParam }) =>
+      getMessagesPaginated({
+        conversationId: conversationId as string,
+        before: pageParam as string | undefined,
+        limit: MESSAGES_PAGE_SIZE,
+      }),
     enabled: !!conversationId,
+    initialPageParam: undefined,
+    getPreviousPageParam: (firstPage) => {
+      if (!firstPage || firstPage.length < MESSAGES_PAGE_SIZE) return undefined;
+      return firstPage[0]?.created_at;
+    },
+    getNextPageParam: () => undefined,
+    staleTime: Infinity,
+    gcTime: 10 * 60 * 1000,
+    placeholderData: (prev) => prev,
   });
 
+  const messages: Message[] = (messagesQuery.data?.pages ?? []).flat();
+
+  /* ─────────────────────────────────────────────────────────
+      REALTIME — Sync messages (Replaces matching temp message)
+  ───────────────────────────────────────────────────────── */
   const syncMessage = useCallback(
     (msg: Message) => {
       if (!conversationId) return;
-      const queryKey = chatKeys.messages(conversationId);
+      const queryKey = chatKeys.messagesPaginated(conversationId);
 
-      queryClient.setQueryData<Message[]>(queryKey, (old = []) => {
-        const exists = old.some((m) => m.id === msg.id);
-        if (exists) return old;
-        return [...old, msg].sort(
-          (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-        );
-      });
+      queryClient.setQueryData<{ pages: Message[][]; pageParams: any[] }>(
+        queryKey,
+        (old) => {
+          if (!old) return old;
+
+          const updatedPages = old.pages.map((page, index) => {
+            if (index === old.pages.length - 1) {
+              if (page.some((m) => m.id === msg.id)) {
+                return page;
+              }
+
+              const tempIndex = page.findIndex(
+                (m) =>
+                  String(m.id).startsWith("temp-") &&
+                  m.sender_id === msg.sender_id &&
+                  ((msg.message && m.message === msg.message) ||
+                    (msg.image_url && m.image_url === msg.image_url))
+              );
+
+              if (tempIndex !== -1) {
+                const newPage = [...page];
+                newPage[tempIndex] = msg;
+                return newPage;
+              }
+
+              return [...page, msg].sort(
+                (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+              );
+            }
+            return page;
+          });
+
+          return {
+            ...old,
+            pages: updatedPages,
+          };
+        }
+      );
     },
     [conversationId, queryClient]
   );
@@ -62,14 +144,10 @@ export function useChat({ orderId, readerType = "customer" }: Props) {
       .channel(`chat-room-${conversationId}`)
       .on(
         "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "messages",
-          filter: `conversation_id=eq.${conversationId}`,
-        },
+        { event: "INSERT", schema: "public", table: "messages", filter: `conversation_id=eq.${conversationId}` },
         (payload) => {
           syncMessage(payload.new as Message);
+          queryClient.invalidateQueries({ queryKey: chatKeys.conversation(contextCacheKey) });
         }
       )
       .subscribe();
@@ -77,74 +155,106 @@ export function useChat({ orderId, readerType = "customer" }: Props) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [conversationId, syncMessage]);
+  }, [conversationId, contextCacheKey, syncMessage, queryClient]);
 
+  /* ─────────────────────────────────────────────────────────
+      SEND — Optimized with Optimistic Updates
+  ───────────────────────────────────────────────────────── */
   const sendMessageMutation = useMutation({
     mutationFn: sendMessage,
-    onSuccess: (newMessage) => {
-      syncMessage(newMessage);
+    onMutate: async (newMsg) => {
+      await queryClient.cancelQueries({ queryKey: chatKeys.messagesPaginated(conversationId!) });
+      const previous = queryClient.getQueryData(chatKeys.messagesPaginated(conversationId!));
+
+      syncMessage({
+        id: "temp-" + Date.now(),
+        conversation_id: conversationId!,
+        sender_id: newMsg.senderId,
+        message: newMsg.message || null,
+        image_url: newMsg.imageUrl || null,
+        sender_type: newMsg.senderType,
+        created_at: new Date().toISOString(),
+        is_system: false,
+      } as Message);
+
+      return { previous };
+    },
+    onError: (err, newMsg, context) => {
+      queryClient.setQueryData(chatKeys.messagesPaginated(conversationId!), context?.previous);
     },
   });
 
-  const send = async ({
-    message,
-    file,
-    senderType = "customer",
-  }: {
-    message?: string;
-    file?: File | null;
+  // FIXED: Destructured both naming variations and used initialized readerType to block casing/undefined bugs
+  const send = async ({ 
+    message, 
+    file, 
+    senderType,
+    sender_type 
+  }: { 
+    message?: string; 
+    file?: File | null; 
     senderType?: SenderType;
+    sender_type?: SenderType;
   }) => {
     if (!conversationId) throw new Error("Conversation not found");
-
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Not authenticated");
 
     let imageUrl: string | null = null;
-    if (file) {
-      imageUrl = await uploadChatImage(file, conversationId);
-    }
+    if (file) imageUrl = await uploadChatImage(file, conversationId);
 
     const trimmed = message?.trim() ?? "";
     if (!trimmed && !imageUrl) return;
+
+    // Direct fallback hierarchy resolution engine
+    const resolvedSenderType = senderType || sender_type || readerType || "customer";
 
     return sendMessageMutation.mutateAsync({
       conversationId,
       senderId: user.id,
       message: trimmed,
       imageUrl: imageUrl ?? null,
-      senderType: senderType ?? "customer",
+      senderType: resolvedSenderType,
     });
   };
 
-  /** * FIXED: MARK AS READ (With Optimistic Cache Update) 
-   * This immediately clears the unread count in the UI before the DB call finishes.
-   */
+  /* ─────────────────────────────────────────────────────────
+      MARK AS READ (Using chatService Mutation Layer Explicitly)
+  ───────────────────────────────────────────────────────── */
   const markAsRead = useCallback(async () => {
     if (!conversationId) return;
-
-    const convKey = chatKeys.conversation(orderId);
+    const convKey = chatKeys.conversation(contextCacheKey);
     const unreadField = readerType === "customer" ? "customer_unread_count" : "admin_unread_count";
 
-    // Optimistically set unread count to 0
+    // 1. Instantly target and clear the reader's counter inside the client-side cache
     queryClient.setQueryData(convKey, (old: any) => {
       if (!old) return old;
-      return { ...old, [unreadField]: 0 };
+      return { 
+        ...old, 
+        [unreadField]: 0 
+      };
     });
 
     try {
+      // 2. Correctly use the chatService function to match your database parameter layout (conv_id)
       await markConversationAsRead({ conversationId, readerType });
+      
+      // 3. Keep cache states strictly synchronized with your database records
+      queryClient.invalidateQueries({ queryKey: convKey });
     } catch (err) {
-      console.error("Failed to mark as read:", err);
+      console.error("Failed to update conversation unread row indicators:", err);
       queryClient.invalidateQueries({ queryKey: convKey });
     }
-  }, [conversationId, orderId, queryClient, readerType]);
+  }, [conversationId, contextCacheKey, queryClient, readerType]);
 
   return {
     conversation: conversationQuery.data ?? null,
-    messages: messagesQuery.data ?? [],
+    messages,
     isLoading: conversationQuery.isLoading || messagesQuery.isLoading,
     isSending: sendMessageMutation.isPending,
+    isFetchingOlder: messagesQuery.isFetchingPreviousPage,
+    hasOlderMessages: messagesQuery.hasPreviousPage ?? false,
+    loadOlderMessages: messagesQuery.fetchPreviousPage,
     send,
     markAsRead,
     conversationId,

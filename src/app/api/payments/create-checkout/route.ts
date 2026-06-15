@@ -11,7 +11,8 @@ import type { PaymentType } from "@/utils/paymentCalculator";
  * =========================================================
  */
 type CreateCheckoutBody = {
-  orderId: string;
+  orderId?: string;    // Optional to support inquiries
+  inquiryId?: string;  // Added to support inquiries
   userId: string;
   type: PaymentType;
 };
@@ -56,16 +57,16 @@ export async function POST(req: Request) {
       );
     }
 
-    const { orderId, userId, type } = body;
+    const { orderId, inquiryId, userId, type } = body;
 
     /**
      * ---------------------------------------------------------
      * 2. VALIDATION
      * ---------------------------------------------------------
      */
-    if (!orderId || !userId || !type) {
+    if ((!orderId && !inquiryId) || !userId || !type) {
       return NextResponse.json(
-        { success: false, error: "Missing required fields" },
+        { success: false, error: "Missing required fields (provide orderId or inquiryId)" },
         { status: 400 }
       );
     }
@@ -81,14 +82,10 @@ export async function POST(req: Request) {
      * ---------------------------------------------------------
      * 3. CREATE PAYMENT (ALWAYS NEW ROW ON RETRY)
      * ---------------------------------------------------------
-     *
-     * IMPORTANT RULE:
-     * - No reuse logic here
-     * - Every retry = new payment row
-     * - Calculator only determines amount
      */
     const { payment, breakdown } = await createPayment({
       orderId,
+      inquiryId,
       userId,
       type,
     });
@@ -99,19 +96,25 @@ export async function POST(req: Request) {
 
     /**
      * ---------------------------------------------------------
-     * 4. CREATE PAYMONGO CHECKOUT
+     * 4. GENERATE DISTINCT TEXTS & CREATE PAYMONGO CHECKOUT
      * ---------------------------------------------------------
-     *
-     * IMPORTANT:
-     * - PayMongo NEVER calculates amount
-     * - It only reads payment.amount
      */
-    const checkout = await createPaymongoCheckout({
-      paymentId: payment.id,
-      description:
+    let customDescription = "";
+    if (inquiryId) {
+      customDescription =
+        type === "partial"
+          ? "Custom Workshop Milestone Fee (50%)"
+          : "Custom Workshop Full Invoice Payment";
+    } else {
+      customDescription =
         type === "partial"
           ? "Furniture Order Downpayment (50%)"
-          : "Furniture Order Full Payment",
+          : "Furniture Order Full Payment";
+    }
+
+    const checkout = await createPaymongoCheckout({
+      paymentId: payment.id,
+      description: customDescription,
     });
 
     if (!checkout?.checkoutUrl) {

@@ -2,13 +2,15 @@ import type { UserRole } from "@/types/enums";
 
 export type Profile = {
   id: string;
-  full_name: string | null;
+  first_name: string | null;
+  middle_initial: string | null;
+  last_name: string | null;
   role: UserRole;
   created_at: string;
 };
 
 /* =========================================================
-   ROLE HELPERS (ADD THIS)
+   ROLE HELPERS
 ========================================================= */
 
 export const ROLE_HIERARCHY: Record<UserRole, number> = {

@@ -1,15 +1,16 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 /**
  * =========================================================
  * PAYMONGO WEBHOOK (FINAL SOURCE OF TRUTH)
  * =========================================================
- * * RULES:
+ * RULES:
  * - DB is source of truth
  * - Only "paid" is a final state
  * - No external calculator usage (re-sums DB values)
  * - Idempotent + safe for replays
+ * - Bypasses RLS utilizing supabaseAdmin
  */
 
 export async function POST(req: Request) {
@@ -58,7 +59,7 @@ export async function POST(req: Request) {
     /**
      * 3. FIND PAYMENT (ROBUST MATCHING)
      */
-    let query = supabase.from("payments").select("*");
+    let query = supabaseAdmin.from("payments").select("*");
 
     if (paymentId) {
       query = query.eq("id", paymentId);
@@ -96,7 +97,7 @@ export async function POST(req: Request) {
     /**
      * 5. MARK PAYMENT AS PAID
      */
-    const { error: updateError } = await supabase
+    const { error: updateError } = await supabaseAdmin
       .from("payments")
       .update({
         status: "paid",
@@ -105,7 +106,7 @@ export async function POST(req: Request) {
         raw_response: payload,
         webhook_event_id: webhookEventId,
         webhook_received_at: new Date().toISOString(),
-      })
+      } as any)
       .eq("id", payment.id);
 
     if (updateError) {
@@ -113,80 +114,140 @@ export async function POST(req: Request) {
     }
 
     /**
-     * 6. RECALCULATE ORDER TOTALS (DB ONLY)
+     * 6. ATTACHMENT REFERENCE VERIFICATION
      */
-    const { data: order, error: orderError } = await supabase
-      .from("orders")
-      .select("id, final_total_price, quote_total_price")
-      .eq("id", payment.order_id)
-      .single();
-
-    if (orderError || !order) {
-      throw new Error("Associated order not found");
-    }
-
-    const orderTotal = Number(
-      order.final_total_price ?? order.quote_total_price ?? 0
-    );
-
-    // Sum all successful payments for this order
-    const { data: paidPayments, error: paidError } = await supabase
-      .from("payments")
-      .select("amount")
-      .eq("order_id", payment.order_id)
-      .eq("status", "paid");
-
-    if (paidError) {
-      throw new Error(`Failed to fetch paid payments: ${paidError.message}`);
-    }
-
-    const totalPaid =
-      paidPayments?.reduce(
-        (sum, p) => sum + Number(p.amount || 0),
-        0
-      ) || 0;
-
-    const remaining = Math.max(orderTotal - totalPaid, 0);
-
-    /**
-     * 7. DETERMINE ORDER STATUS
-     */
-    let paymentStatus: "unpaid" | "partially_paid" | "fully_paid";
-
-    if (totalPaid <= 0) {
-      paymentStatus = "unpaid";
-    } else if (totalPaid < orderTotal) {
-      paymentStatus = "partially_paid";
-    } else {
-      paymentStatus = "fully_paid";
+    if (!payment.order_id && !payment.inquiry_id) {
+      throw new Error("Payment record is missing a valid relation to an order_id or inquiry_id");
     }
 
     /**
-     * 8. UPDATE ORDER RECORD
+     * 7. DYNAMIC PIPELINE SPLIT: RECALCULATE STATE FROM SOURCE OF TRUTH
      */
-    const { error: orderUpdateError } = await supabase
-      .from("orders")
-      .update({
-        payment_status: paymentStatus,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", payment.order_id);
+    let finalCalculatedTotal = 0;
+    let totalPaidSum = 0;
+    let computedPaymentStatus: "unpaid" | "partially_paid" | "fully_paid" = "unpaid";
 
-    if (orderUpdateError) {
-      throw new Error(`Order update failed: ${orderUpdateError.message}`);
+    if (payment.order_id) {
+      // --- WORKFLOW BRANCH: STANDARD ORDER ---
+      const { data: order, error: orderError } = await supabaseAdmin
+        .from("orders")
+        .select("id, final_total_price, quote_total_price")
+        .eq("id", payment.order_id)
+        .single();
+
+      if (orderError || !order) {
+        throw new Error("Associated order not found");
+      }
+
+      finalCalculatedTotal = Number(order.final_total_price ?? order.quote_total_price ?? 0);
+
+      const { data: paidPayments, error: paidError } = await supabaseAdmin
+        .from("payments")
+        .select("amount")
+        .eq("order_id", payment.order_id)
+        .eq("status", "paid");
+
+      if (paidError) {
+        throw new Error(`Failed to fetch paid payments for order: ${paidError.message}`);
+      }
+
+      totalPaidSum = paidPayments?.reduce((sum, p) => sum + Number(p.amount || 0), 0) || 0;
+
+      // Determine Order Status Assignment
+      if (totalPaidSum <= 0) {
+        computedPaymentStatus = "unpaid";
+      } else if (totalPaidSum < finalCalculatedTotal) {
+        computedPaymentStatus = "partially_paid";
+      } else {
+        computedPaymentStatus = "fully_paid";
+      }
+
+      const { error: orderUpdateError } = await supabaseAdmin
+        .from("orders")
+        .update({
+          payment_status: computedPaymentStatus,
+          updated_at: new Date().toISOString(),
+        } as any)
+        .eq("id", payment.order_id);
+
+      if (orderUpdateError) {
+        throw new Error(`Order update failed: ${orderUpdateError.message}`);
+      }
+
+    } else if (payment.inquiry_id) {
+      // --- WORKFLOW BRANCH: CUSTOM WORKSHOP INQUIRY ---
+      // FIXED: Cast via 'as any' to allow selecting 'final_total_price' even if local definitions are stale
+      const { data: inquiryData, error: inquiryError } = await supabaseAdmin
+        .from("inquiries")
+        .select("id, final_total_price" as any)
+        .eq("id", payment.inquiry_id)
+        .single();
+
+      if (inquiryError || !inquiryData) {
+        throw new Error("Associated custom workshop inquiry not found");
+      }
+
+      const inquiry = inquiryData as any;
+
+      // Now evaluating directly against your absolute source of truth database column!
+      finalCalculatedTotal = Number(inquiry.final_total_price ?? 0);
+
+      const { data: paidPayments, error: paidError } = await supabaseAdmin
+        .from("payments")
+        .select("amount")
+        .eq("inquiry_id", payment.inquiry_id)
+        .eq("status", "paid");
+
+      if (paidError) {
+        throw new Error(`Failed to fetch paid payments for inquiry: ${paidError.message}`);
+      }
+
+      totalPaidSum = paidPayments?.reduce((sum, p) => sum + Number(p.amount || 0), 0) || 0;
+
+      // Determine Inquiry Status Assignment
+      if (totalPaidSum <= 0) {
+        computedPaymentStatus = "unpaid";
+      } else if (totalPaidSum < finalCalculatedTotal) {
+        computedPaymentStatus = "partially_paid";
+      } else {
+        computedPaymentStatus = "fully_paid";
+      }
+
+      // Dynamic workflow phase router matching the target layout conditions
+      let dynamicWorkflowStatus = "awaiting_payment";
+      if (computedPaymentStatus === "fully_paid") {
+        dynamicWorkflowStatus = "in_production";
+      }
+
+      const { error: inquiryUpdateError } = await supabaseAdmin
+        .from("inquiries")
+        .update({
+          payment_status: computedPaymentStatus,
+          status: dynamicWorkflowStatus, 
+          charge_status: "accepted",     
+          updated_at: new Date().toISOString(),
+        } as any)
+        .eq("id", payment.inquiry_id);
+
+      if (inquiryUpdateError) {
+        throw new Error(`Inquiry update failed: ${inquiryUpdateError.message}`);
+      }
     }
 
+    const remaining = Math.max(finalCalculatedTotal - totalPaidSum, 0);
+
     /**
-     * 9. FINAL SUCCESS RESPONSE
+     * 8. FINAL SUCCESS RESPONSE
      */
     return NextResponse.json({
       success: true,
       paymentId: payment.id,
-      orderId: payment.order_id,
-      total: orderTotal,
-      totalPaid,
+      orderId: payment.order_id || null,
+      inquiryId: payment.inquiry_id || null,
+      total: finalCalculatedTotal,
+      totalPaid: totalPaidSum,
       remaining,
-      paymentStatus,
+      paymentStatus: computedPaymentStatus,
     });
 
   } catch (err: any) {

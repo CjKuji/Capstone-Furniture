@@ -8,7 +8,9 @@ import { useRouter } from "next/navigation";
 type FormData = {
   email: string;
   password: string;
-  name: string;
+  firstName: string;
+  middleInitial: string;
+  lastName: string;
 };
 
 export default function Register() {
@@ -25,11 +27,26 @@ export default function Register() {
     setLoading(true);
     setError(null);
 
+    // Format names to ensure correct capitalization before saving
+    const formattedFirstName = data.firstName.trim()
+      ? data.firstName.trim().charAt(0).toUpperCase() + data.firstName.trim().slice(1)
+      : "";
+      
+    const formattedLastName = data.lastName.trim()
+      ? data.lastName.trim().charAt(0).toUpperCase() + data.lastName.trim().slice(1)
+      : "";
+
+    const formattedMiddleInitial = data.middleInitial.trim()
+      ? data.middleInitial.trim().charAt(0).toUpperCase()
+      : "";
+
     try {
       const { user } = await authService.signUp(
         data.email,
         data.password,
-        data.name
+        formattedFirstName,
+        formattedMiddleInitial,
+        formattedLastName
       );
 
       if (!user) {
@@ -138,32 +155,89 @@ export default function Register() {
 
             <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-y-2">
               
-              {/* NAME FIELD */}
-              <div className="space-y-1">
-                <label className="block text-[10px] font-black uppercase tracking-[0.18em] text-white/40">
-                  Full Name
-                </label>
-                <input
-                  type="text"
-                  {...register("name", { 
-                    required: "Name is required.",
-                    validate: {
-                      startsWithLetter: (v) => /^[A-Za-z]/.test(v) || "Must start with a letter.",
-                      noNumbers: (v) => /^([^0-9]*)$/.test(v) || "Numbers are not allowed."
-                    }
-                  })}
-                  placeholder="John Doe"
-                  className={`
-                    w-full rounded-xl border px-4 py-2.5 text-xs sm:text-sm text-white
-                    outline-none transition placeholder:text-white/20 bg-[#060403]
-                    ${errors.name ? 'border-red-900/50 focus:border-red-500/40 focus:ring-1 focus:ring-red-500/10' : 'border-[#2A1F14] focus:border-[#D4A97A]/40 focus:ring-2 focus:ring-[#D4A97A]/10'}
-                  `}
-                />
-                {/* RESERVED INNER TRACK FOR VALIDATION LABELS */}
-                <div className="min-h-[16px] flex items-center">
-                  {errors.name && (
-                    <p className="text-[10px] text-red-400 tracking-wide pl-1">✕ {errors.name.message}</p>
-                  )}
+              {/* THREE-COLUMN NAME FIELDS ROW */}
+              <div className="flex gap-x-3">
+                {/* FIRST NAME */}
+                <div className="flex-1 space-y-1">
+                  <label className="block text-[10px] font-black uppercase tracking-[0.18em] text-white/40">
+                    First Name
+                  </label>
+                  <input
+                    type="text"
+                    {...register("firstName", { 
+                      required: "Required.",
+                      validate: {
+                        startsWithLetter: (v) => /^[A-Za-z]/.test(v) || "Must start with a letter.",
+                        noNumbers: (v) => /^([^0-9]*)$/.test(v) || "No numbers allowed."
+                      }
+                    })}
+                    placeholder="John"
+                    className={`
+                      w-full rounded-xl border px-3 py-2.5 text-xs sm:text-sm text-white capitalize
+                      outline-none transition placeholder:text-white/20 bg-[#060403]
+                      ${errors.firstName ? 'border-red-900/50 focus:border-red-500/40 focus:ring-1 focus:ring-red-500/10' : 'border-[#2A1F14] focus:border-[#D4A97A]/40 focus:ring-2 focus:ring-[#D4A97A]/10'}
+                    `}
+                  />
+                  <div className="min-h-[16px] flex items-center">
+                    {errors.firstName && (
+                      <p className="text-[10px] text-red-400 tracking-wide pl-1">✕ {errors.firstName.message}</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* MIDDLE INITIAL */}
+                <div className="w-16 space-y-1">
+                  <label className="block text-[10px] font-black uppercase tracking-[0.18em] text-white/40 text-center">
+                    M.I.
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={1}
+                    {...register("middleInitial", {
+                      validate: {
+                        singleLetter: (v) => !v || /^[A-Za-z]$/.test(v) || "A-Z only."
+                      }
+                    })}
+                    placeholder="E"
+                    className={`
+                      w-full rounded-xl border text-center py-2.5 text-xs sm:text-sm text-white uppercase
+                      outline-none transition placeholder:text-white/20 bg-[#060403]
+                      ${errors.middleInitial ? 'border-red-900/50 focus:border-red-500/40 focus:ring-1 focus:ring-red-500/10' : 'border-[#2A1F14] focus:border-[#D4A97A]/40 focus:ring-2 focus:ring-[#D4A97A]/10'}
+                    `}
+                  />
+                  <div className="min-h-[16px] flex items-center justify-center">
+                    {errors.middleInitial && (
+                      <p className="text-[9px] text-red-400 tracking-wide">✕ Error</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* LAST NAME */}
+                <div className="flex-1 space-y-1">
+                  <label className="block text-[10px] font-black uppercase tracking-[0.18em] text-white/40">
+                    Last Name
+                  </label>
+                  <input
+                    type="text"
+                    {...register("lastName", { 
+                      required: "Required.",
+                      validate: {
+                        startsWithLetter: (v) => /^[A-Za-z]/.test(v) || "Must start with a letter.",
+                        noNumbers: (v) => /^([^0-9]*)$/.test(v) || "No numbers allowed."
+                      }
+                    })}
+                    placeholder="Doe"
+                    className={`
+                      w-full rounded-xl border px-3 py-2.5 text-xs sm:text-sm text-white capitalize
+                      outline-none transition placeholder:text-white/20 bg-[#060403]
+                      ${errors.lastName ? 'border-red-900/50 focus:border-red-500/40 focus:ring-1 focus:ring-red-500/10' : 'border-[#2A1F14] focus:border-[#D4A97A]/40 focus:ring-2 focus:ring-[#D4A97A]/10'}
+                    `}
+                  />
+                  <div className="min-h-[16px] flex items-center">
+                    {errors.lastName && (
+                      <p className="text-[10px] text-red-400 tracking-wide pl-1">✕ {errors.lastName.message}</p>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -188,7 +262,6 @@ export default function Register() {
                     ${errors.email ? 'border-red-900/50 focus:border-red-500/40 focus:ring-1 focus:ring-red-500/10' : 'border-[#2A1F14] focus:border-[#D4A97A]/40 focus:ring-2 focus:ring-[#D4A97A]/10'}
                   `}
                 />
-                {/* RESERVED INNER TRACK FOR VALIDATION LABELS */}
                 <div className="min-h-[16px] flex items-center">
                   {errors.email && (
                     <p className="text-[10px] text-red-400 tracking-wide pl-1">✕ {errors.email.message}</p>
@@ -230,7 +303,6 @@ export default function Register() {
                     {showPassword ? "Hide" : "Show"}
                   </button>
                 </div>
-                {/* RESERVED INNER TRACK FOR VALIDATION LABELS */}
                 <div className="min-h-[16px] flex items-center">
                   {errors.password && (
                     <p className="text-[10px] text-red-400 tracking-wide pl-1">✕ {errors.password.message}</p>

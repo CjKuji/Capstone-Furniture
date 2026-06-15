@@ -59,16 +59,28 @@ const getOrderMessage = (order: Order): string => {
 type Props = {
   order: Order;
   userId: string;
-  conversation?: { customer_unread_count?: number };
+  conversation?: { id: string; customer_unread_count?: number };
 };
 
-export default function OrderCard({ order: propOrder, userId, conversation }: Props) {
+export default function OrderCard({ order: propOrder, userId, conversation: propConversation }: Props) {
   const [order, setOrder] = useState<Order>(propOrder);
+  
+  // ⭐ FIX: Synchronize internal state with real-time conversations pipeline
+  const [liveUnreadCount, setLiveUnreadCount] = useState<number>(
+    propConversation?.customer_unread_count ?? 0
+  );
 
   useEffect(() => {
     setOrder(propOrder);
   }, [propOrder]);
 
+  useEffect(() => {
+    if (propConversation?.customer_unread_count !== undefined) {
+      setLiveUnreadCount(propConversation.customer_unread_count);
+    }
+  }, [propConversation]);
+
+  /* ── REALTIME SUBSCRIPTION: ORDERS ── */
   useEffect(() => {
     if (!order.id) return;
 
@@ -93,6 +105,35 @@ export default function OrderCard({ order: propOrder, userId, conversation }: Pr
     };
   }, [order.id]);
 
+  /* ── ⭐ REALTIME SUBSCRIPTION: UNREAD CHAT COUNTER ── */
+  useEffect(() => {
+    const targetConversationId = propConversation?.id;
+    if (!targetConversationId) return;
+
+    const chatChannel = supabase
+      .channel(`live-chat-counter-${targetConversationId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "conversations",
+          filter: `id=eq.${targetConversationId}`,
+        },
+        (payload) => {
+          const newData = payload.new as { customer_unread_count?: number };
+          if (newData && typeof newData.customer_unread_count === "number") {
+            setLiveUnreadCount(newData.customer_unread_count);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(chatChannel);
+    };
+  }, [propConversation?.id]);
+
   /* ── MODAL STATES ── */
   const [modals, setModals] = useState({
     detail: false,
@@ -102,18 +143,22 @@ export default function OrderCard({ order: propOrder, userId, conversation }: Pr
     cancel: false,
   });
 
-  const toggleModal = (key: keyof typeof modals, val: boolean) =>
+  const toggleModal = (key: keyof typeof modals, val: boolean) => {
     setModals((prev) => ({ ...prev, [key]: val }));
+    
+    // ⭐ CLEAR UNREAD COUNT LOCAL OPTIMIZATION
+    if (key === "chat" && val === true && propConversation?.id) {
+      setLiveUnreadCount(0);
+      
+      // Update Supabase in the background
+      supabase
+        .from("conversations")
+        .update({ customer_unread_count: 0, customer_last_read_at: new Date().toISOString() })
+        .eq("id", propConversation.id)
+        .then();
+    }
+  };
 
-  /**
-   * CENTRALIZED SCROLL LOCK — delegated to useBodyScrollLock.
-   *
-   * useBodyScrollLock uses a ref-counted lock so multiple components
-   * (Navbar, OrderCard, CustomerOrdersPage) can each call it independently
-   * without fighting over body.style.overflow. The lock only releases when
-   * ALL callers have deactivated, preventing the reflow that previously
-   * triggered a Supabase TOKEN_REFRESHED event and caused the Navbar flicker.
-   */
   const anyModalOpen = Object.values(modals).some(Boolean);
   useBodyScrollLock(anyModalOpen);
 
@@ -169,7 +214,6 @@ export default function OrderCard({ order: propOrder, userId, conversation }: Pr
   }, [order, financialData, paymentsLoading]);
 
   const statusUI = getOrderStatusUI(order.order_status);
-  const unreadCount = conversation?.customer_unread_count ?? 0;
 
   const handleConfirmCancel = async (reason: string) => {
     if (!order.id) return;
@@ -181,10 +225,10 @@ export default function OrderCard({ order: propOrder, userId, conversation }: Pr
 
   return (
     <>
-      <div className="relative flex flex-col w-full max-w-md mx-auto rounded-2xl overflow-hidden border border-[#423120] bg-gradient-to-b from-[#140F0A] to-[#0E0A06] shadow-[0_12px_40px_rgba(0,0,0,0.7)] transition-all duration-300 hover:border-[#D4A97A]/50">
+      <div className="relative flex flex-col w-full max-w-md mx-auto h-full rounded-2xl overflow-hidden border border-[#423120] bg-gradient-to-b from-[#140F0A] to-[#0E0A06] shadow-[0_12px_40px_rgba(0,0,0,0.7)] transition-all duration-300 hover:border-[#D4A97A]/50">
         <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-[#D4A97A]/80 to-transparent flex-shrink-0" />
 
-        <div className="px-5 pt-4 pb-2">
+        <div className="px-5 pt-4 pb-2 flex-shrink-0">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <p className="text-[9px] font-black tracking-[0.22em] text-[#A68056] uppercase mb-0.5">
@@ -198,18 +242,18 @@ export default function OrderCard({ order: propOrder, userId, conversation }: Pr
               </p>
             </div>
             <span
-              className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-[0.15em] border backdrop-blur-sm bg-black/30 shadow-inner ${statusUI?.color}`}
+              className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-[0.15em] border backdrop-blur-sm bg-black/30 shadow-inner shrink-0 ${statusUI?.color}`}
             >
               {statusUI?.label || "Processing"}
             </span>
           </div>
         </div>
 
-        <div className="px-5 mb-4">
+        <div className="px-5 mb-4 flex-shrink-0">
           <ProgressBar status={order.order_status} />
         </div>
 
-        <div className="px-5 mb-2.5">
+        <div className="px-5 mb-2.5 flex-shrink-0">
           <div className="flex items-center gap-2 bg-white/[0.02] border border-[#2A1F14] rounded-xl px-3 py-1.5">
             <span className="text-[11px] font-black text-[#D4A97A] bg-[#D4A97A]/10 px-1.5 py-0.5 rounded-md">
               x{financialData.totalPieces}
@@ -220,7 +264,7 @@ export default function OrderCard({ order: propOrder, userId, conversation }: Pr
           </div>
         </div>
 
-        <div className="mx-5 mb-2.5">
+        <div className="mx-5 mb-2.5 flex-shrink-0">
           <div className="grid grid-cols-3 divide-x divide-[#38291A] rounded-t-xl border-t border-x border-[#38291A] bg-[#070503]">
             <FinStat
               label="Total"
@@ -260,10 +304,11 @@ export default function OrderCard({ order: propOrder, userId, conversation }: Pr
           </div>
         </div>
 
-        <div className="mx-5 mb-2.5">
-          <div className="flex items-start gap-2.5 rounded-xl bg-[#1B120A] border border-[#38291A] px-3.5 py-2">
+        {/* Status context layout block */}
+        <div className="mx-5 mb-2.5 flex-shrink-0">
+          <div className="flex items-start gap-2.5 rounded-xl bg-[#1B120A] border border-[#38291A] px-3.5 py-2 min-h-[44px]">
             <div
-              className={`mt-1.5 h-1.5 w-1.5 rounded-full bg-[#D4A97A] ${
+              className={`mt-1.5 h-1.5 w-1.5 rounded-full shrink-0 bg-[#D4A97A] ${
                 order.order_status === "accepted"
                   ? "animate-pulse shadow-[0_0_8px_#D4A97A]"
                   : ""
@@ -275,7 +320,7 @@ export default function OrderCard({ order: propOrder, userId, conversation }: Pr
           </div>
         </div>
 
-        <div className="mx-5 mb-3.5 space-y-1.5">
+        <div className="mx-5 mb-3.5 space-y-1.5 flex-1">
           <InfoRow label="Customer" value={order.customer_name || "-"} />
           <InfoRow
             label={order.delivery_method === "pickup" ? "Pickup" : "Shipping"}
@@ -288,14 +333,15 @@ export default function OrderCard({ order: propOrder, userId, conversation }: Pr
           />
         </div>
 
-        <div className="mt-auto border-t border-[#2A1F14] bg-[#080604] px-5 py-3.5 flex flex-col gap-3">
-          <div className="flex items-center justify-between border-b border-[#1C150E] pb-2">
+        {/* ═══════════════ FOOTER ACTIONS (Fixed Height Enforcements) ═══════════════ */}
+        <div className="mt-auto border-t border-[#2A1F14] bg-[#080604] px-5 py-3.5 flex flex-col gap-3 flex-shrink-0">
+          <div className="flex items-center justify-between border-b border-[#1C150E] pb-2 h-7">
             <div className="flex flex-col gap-0.5">
               <span className="text-[9px] font-black uppercase text-white/30 tracking-widest">
                 Adjustments ({charges.length})
               </span>
               <span
-                className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border ${
+                className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border self-start ${
                   order.charge_status === "accepted"
                     ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
                     : order.charge_status === "rejected"
@@ -314,45 +360,51 @@ export default function OrderCard({ order: propOrder, userId, conversation }: Pr
             </button>
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-2 h-9 shrink-0">
             <button
               onClick={() => toggleModal("detail", true)}
-              className="h-9 rounded-xl border border-[#38291A] bg-white/[0.04] text-[10px] font-black uppercase text-white/70 hover:bg-white/[0.08] transition-all"
+              className="h-full rounded-xl border border-[#38291A] bg-white/[0.04] text-[10px] font-black uppercase text-white/70 hover:bg-white/[0.08] transition-all"
             >
               Details
             </button>
             <button
               onClick={() => toggleModal("chat", true)}
-              className="relative h-9 rounded-xl bg-[#C49A6C] hover:bg-[#D4A97A] text-[10px] font-black uppercase text-[#0E0A06] transition-all"
+              className="relative h-full rounded-xl bg-[#C49A6C] hover:bg-[#D4A97A] text-[10px] font-black uppercase text-[#0E0A06] transition-all"
             >
               Chat
-              {unreadCount > 0 && (
+              {liveUnreadCount > 0 && (
                 <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[8px] font-black text-white animate-pulse">
-                  {unreadCount}
+                  {liveUnreadCount}
                 </span>
               )}
             </button>
           </div>
 
-          {canPay && (
-            <button
-              onClick={() => toggleModal("pay", true)}
-              disabled={paymentsLoading}
-              className="h-9 w-full rounded-xl bg-gradient-to-r from-[#C49A6C] to-[#E8C98A] text-[10px] font-black uppercase text-[#0E0A06] shadow-lg hover:shadow-[#D4A97A]/20 transition-all disabled:opacity-50"
-            >
-              {paymentsLoading ? "Checking..." : payButtonLabel}
-            </button>
-          )}
+          {/* Fixed Pay Button Box - Renders empty space space matching exact layout calculations if hidden */}
+          <div className="h-9 shrink-0">
+            {canPay ? (
+              <button
+                onClick={() => toggleModal("pay", true)}
+                disabled={paymentsLoading}
+                className="h-full w-full rounded-xl bg-gradient-to-r from-[#C49A6C] to-[#E8C98A] text-[10px] font-black uppercase text-[#0E0A06] shadow-lg hover:shadow-[#D4A97A]/20 transition-all disabled:opacity-50"
+              >
+                {paymentsLoading ? "Checking..." : payButtonLabel}
+              </button>
+            ) : null}
+          </div>
 
-          {canCancel && (
-            <button
-              onClick={() => toggleModal("cancel", true)}
-              disabled={isCancelling}
-              className="text-[9px] font-black uppercase text-rose-400 hover:text-rose-300 mt-1 transition-colors"
-            >
-              {isCancelling ? "Processing..." : "Cancel Order"}
-            </button>
-          )}
+          {/* Fixed Cancel Button Box - Renders empty line matching exact layout calculations if hidden */}
+          <div className="h-4 flex items-center justify-center shrink-0">
+            {canCancel ? (
+              <button
+                onClick={() => toggleModal("cancel", true)}
+                disabled={isCancelling}
+                className="text-[9px] font-black uppercase text-rose-400 hover:text-rose-300 transition-colors"
+              >
+                {isCancelling ? "Processing..." : "Cancel Order"}
+              </button>
+            ) : null}
+          </div>
         </div>
       </div>
 

@@ -16,21 +16,76 @@ let cachedProfile: Profile | null = null;
 let cachedAuthUser: any | null = null;
 let activeProfilePromise: Promise<Profile | null> | null = null;
 let globalInitialized = false;
-
-/**
- * In-flight getSession promise — deduplicated so Strict Mode's
- * double-invoke never races two simultaneous lock acquisitions.
- * Both invocations await the same promise; only the first one
- * actually calls supabase.auth.getSession().
- */
 let activeSessionPromise: Promise<any> | null = null;
 
-/* ========================================================= */
+type Subscriber = {
+  setAuthUser: (u: any) => void;
+  setProfile: (p: Profile | null) => void;
+  setLoading: (l: boolean) => void;
+  setInitialized: (i: boolean) => void;
+};
+const subscribers = new Set<Subscriber>();
+
+function notifyAll() {
+  for (const sub of subscribers) {
+    sub.setAuthUser(cachedAuthUser);
+    sub.setProfile(cachedProfile);
+    sub.setLoading(false);
+    sub.setInitialized(true);
+  }
+}
+
+/* =========================================================
+   EXPORTED CACHE PRIMER
+   -------------------------------------------------------
+   Call this from the login page BEFORE router.push().
+
+   CRITICAL: must set BOTH cachedAuthUser AND cachedProfile.
+   The Navbar renders based on `authUser` — if only
+   cachedProfile is written, authUser stays null and the
+   Navbar shows the logged-out state.
+
+   Usage in login page:
+     const { user } = await authService.signIn(email, password);
+     await primeUserCache(user);   ← pass the full auth user object
+     router.push("/");
+========================================================= */
+export async function primeUserCache(authUser: any): Promise<void> {
+  if (!authUser) return;
+
+  try {
+    // Write the auth user immediately so the Navbar sees it
+    // synchronously via useLayoutEffect on the next page mount.
+    cachedAuthUser = authUser;
+
+    if (activeProfilePromise) {
+      await activeProfilePromise;
+    } else {
+      activeProfilePromise = getCurrentProfile(authUser.id);
+      const profile = await activeProfilePromise;
+      cachedProfile = profile;
+    }
+
+    globalInitialized = true;
+    notifyAll();
+  } catch {
+    // Profile fetch failed — auth user is still set so the
+    // Navbar will at least show the logged-in avatar.
+    globalInitialized = true;
+    notifyAll();
+  } finally {
+    activeProfilePromise = null;
+  }
+}
+
+/* =========================================================
+   HOOK
+========================================================= */
 
 export function useUser() {
-  const [profile, setProfile]       = useState<Profile | null>(cachedProfile);
-  const [authUser, setAuthUser]     = useState<any | null>(cachedAuthUser);
-  const [loading, setLoading]       = useState(!globalInitialized);
+  const [profile, setProfile]         = useState<Profile | null>(cachedProfile);
+  const [authUser, setAuthUser]       = useState<any | null>(cachedAuthUser);
+  const [loading, setLoading]         = useState(!globalInitialized);
   const [initialized, setInitialized] = useState(globalInitialized);
 
   const mounted = useRef(true);
@@ -38,10 +93,13 @@ export function useUser() {
 
   /* =========================================================
      SYNCHRONOUS CACHE REHYDRATION
+     Runs before paint. If primeUserCache() ran before
+     router.push(), both authUser and profile are already
+     populated here — no async round-trip, no flash.
   ========================================================= */
   useLayoutEffect(() => {
-    if (cachedAuthUser !== authUser)    setAuthUser(cachedAuthUser);
-    if (cachedProfile  !== profile)     setProfile(cachedProfile);
+    if (cachedAuthUser !== authUser)   setAuthUser(cachedAuthUser);
+    if (cachedProfile  !== profile)    setProfile(cachedProfile);
     if (globalInitialized && !initialized) {
       setLoading(false);
       setInitialized(true);
@@ -50,11 +108,30 @@ export function useUser() {
   }, []);
 
   /* =========================================================
-     MOUNT SAFETY
+     SUBSCRIBER REGISTRATION
   ========================================================= */
   useEffect(() => {
     mounted.current = true;
-    return () => { mounted.current = false; };
+
+    const sub: Subscriber = {
+      setAuthUser: (u) => { if (mounted.current) setAuthUser(u); },
+      setProfile:  (p) => { if (mounted.current) setProfile(p); },
+      setLoading:  (l) => { if (mounted.current) setLoading(l); },
+      setInitialized: (i) => { if (mounted.current) setInitialized(i); },
+    };
+    subscribers.add(sub);
+
+    if (globalInitialized) {
+      sub.setAuthUser(cachedAuthUser);
+      sub.setProfile(cachedProfile);
+      sub.setLoading(false);
+      sub.setInitialized(true);
+    }
+
+    return () => {
+      mounted.current = false;
+      subscribers.delete(sub);
+    };
   }, []);
 
   /* =========================================================
@@ -62,14 +139,11 @@ export function useUser() {
   ========================================================= */
   const markInitialized = useCallback(() => {
     globalInitialized = true;
-    if (mounted.current) {
-      setLoading(false);
-      setInitialized(true);
-    }
+    notifyAll();
   }, []);
 
   /* =========================================================
-     SAFE PROFILE FETCH (NO DUPLICATES)
+     SAFE PROFILE FETCH
   ========================================================= */
   const fetchProfile = useCallback(async (userId: string) => {
     try {
@@ -79,16 +153,13 @@ export function useUser() {
       const result = await activeProfilePromise;
 
       cachedProfile = result;
-      if (mounted.current) setProfile(result);
+      for (const sub of subscribers) sub.setProfile(result);
       return result;
     } catch (error) {
-      // Suppress Strict Mode lock-steal noise; treat as non-fatal
-      if (isLockError(error)) {
-        return cachedProfile;
-      }
+      if (isLockError(error)) return cachedProfile;
       console.error("[useUser] profile fetch error:", error);
       cachedProfile = null;
-      if (mounted.current) setProfile(null);
+      for (const sub of subscribers) sub.setProfile(null);
       return null;
     } finally {
       activeProfilePromise = null;
@@ -97,16 +168,16 @@ export function useUser() {
 
   /* =========================================================
      INITIAL LOAD
-     
-     KEY FIX: deduplicate getSession() with a module-level promise
-     so Strict Mode's double-invoke shares one lock acquisition
-     instead of two racing calls that trigger the 5 s timeout.
+     Only runs when globalInitialized is still false (first
+     ever mount, e.g. hard refresh). Skipped entirely after
+     a successful primeUserCache() call.
   ========================================================= */
   const loadUser = useCallback(async () => {
     try {
-      if (!globalInitialized) setLoading(true);
+      if (!globalInitialized) {
+        for (const sub of subscribers) sub.setLoading(true);
+      }
 
-      // Deduplicate — both Strict Mode invocations await the same promise
       if (!activeSessionPromise) {
         activeSessionPromise = supabase.auth.getSession();
       }
@@ -115,11 +186,11 @@ export function useUser() {
       const user = session?.user ?? null;
 
       cachedAuthUser = user;
-      if (mounted.current) setAuthUser(user);
+      for (const sub of subscribers) sub.setAuthUser(user);
 
       if (!user) {
         cachedProfile = null;
-        if (mounted.current) setProfile(null);
+        for (const sub of subscribers) sub.setProfile(null);
         markInitialized();
         return;
       }
@@ -127,14 +198,11 @@ export function useUser() {
       await fetchProfile(user.id);
       markInitialized();
     } catch (error) {
-      // Lock-steal errors from Strict Mode double-invoke are harmless —
-      // the second invocation will complete via the shared promise above.
       if (isLockError(error)) return;
       console.error("[useUser] loadUser error:", error);
-      if (mounted.current) setProfile(null);
+      for (const sub of subscribers) sub.setProfile(null);
       markInitialized();
     } finally {
-      // Clear so the next genuine call (e.g. after sign-out) gets a fresh session
       activeSessionPromise = null;
     }
   }, [fetchProfile, markInitialized]);
@@ -146,12 +214,11 @@ export function useUser() {
   }, [loadUser]);
 
   /* =========================================================
-     AUTH LISTENER
+     AUTH STATE LISTENER
   ========================================================= */
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
-        // Only react to identity-changing events — ignore TOKEN_REFRESHED etc.
         if (
           event !== "SIGNED_IN" &&
           event !== "SIGNED_OUT" &&
@@ -159,18 +226,14 @@ export function useUser() {
         ) return;
 
         queueMicrotask(async () => {
-          if (!mounted.current) return;
-
           const user = session?.user ?? null;
-          const userChanged = cachedAuthUser?.id !== user?.id;
-          if (!userChanged && globalInitialized) return;
 
           cachedAuthUser = user;
-          setAuthUser(user);
+          for (const sub of subscribers) setAuthUser(user);
 
           if (!user) {
             cachedProfile = null;
-            setProfile(null);
+            for (const sub of subscribers) sub.setProfile(null);
             markInitialized();
             return;
           }
@@ -200,12 +263,9 @@ export function useUser() {
     [role]
   );
 
-  /* =========================================================
-     API
-  ========================================================= */
   return {
-    user:        profile,
-    authUser,
+    user:         profile, // Returns database profile record maps
+    authUser,              // Returns internal raw Supabase Auth object context
     role,
     loading,
     initialized,

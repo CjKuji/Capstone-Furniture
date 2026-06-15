@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { authService } from "@/services/authService";
+import { primeUserCache } from "@/hooks/useUser";
 import { useRouter } from "next/navigation";
 
 type FormData = {
@@ -41,6 +42,18 @@ export default function Login() {
         return;
       }
 
+      /* ─────────────────────────────────────────────────────────
+         CRITICAL: prime the module-level cache BEFORE pushing
+         to the new route.
+
+         Pass the full `user` object (not just the ID) so that
+         primeUserCache can write cachedAuthUser directly.
+         The Navbar checks `authUser` (not `profile`) to decide
+         whether to render the logged-in state, so both must be
+         set before router.push().
+      ───────────────────────────────────────────────────────── */
+      await primeUserCache(user);
+
       if (profile.role === "admin" || profile.role === "super_admin") {
         router.push("/admin");
       } else {
@@ -69,7 +82,7 @@ export default function Login() {
           </h1>
 
           <p className="text-white/60 text-sm leading-relaxed mb-12">
-            A premium immersive furniture experience — meticulously design, modify structural compositions, 
+            A premium immersive furniture experience — meticulously design, modify structural compositions,
             and observe 3D dimensional scale variants in real-time before staging execution.
           </p>
 
@@ -151,8 +164,8 @@ export default function Login() {
                 </label>
                 <input
                   type="email"
-                  {...register("email", { 
-                    required: "Email is required." 
+                  {...register("email", {
+                    required: "Email is required."
                   })}
                   placeholder="you@example.com"
                   className={`
@@ -161,7 +174,6 @@ export default function Login() {
                     ${errors.email ? 'border-red-900/50 focus:border-red-500/40 focus:ring-1 focus:ring-red-500/10' : 'border-[#2A1F14] focus:border-[#D4A97A]/40 focus:ring-2 focus:ring-[#D4A97A]/10'}
                   `}
                 />
-                {/* RESERVED INNER TRACK FOR VALIDATION LABELS */}
                 <div className="min-h-[16px] flex items-center">
                   {errors.email && (
                     <p className="text-[10px] text-red-400 tracking-wide pl-1">✕ {errors.email.message}</p>
@@ -177,8 +189,8 @@ export default function Login() {
                 <div className="relative flex items-center">
                   <input
                     type={showPassword ? "text" : "password"}
-                    {...register("password", { 
-                      required: "Password is required." 
+                    {...register("password", {
+                      required: "Password is required."
                     })}
                     placeholder="Enter account access code"
                     className={`
@@ -195,7 +207,6 @@ export default function Login() {
                     {showPassword ? "Hide" : "Show"}
                   </button>
                 </div>
-                {/* RESERVED INNER TRACK FOR VALIDATION LABELS */}
                 <div className="min-h-[16px] flex items-center">
                   {errors.password && (
                     <p className="text-[10px] text-red-400 tracking-wide pl-1">✕ {errors.password.message}</p>

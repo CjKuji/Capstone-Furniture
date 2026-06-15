@@ -2,10 +2,11 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ChevronRight, Cpu, Maximize2 } from "lucide-react";
+import { ArrowLeft, ChevronRight, Cpu, Maximize2, ShoppingCart, X } from "lucide-react";
 
 import { useFurniturePublicById } from "@/hooks/useFurnitureById";
 import { useAIChatContext } from "@/app/context/AIChatContext";
+import { useUser } from "@/hooks/useUser"; // ✅ Added to track authentication state
 
 import Navbar from "@/app/components/Navbar";
 import Furniture3DViewer from "@/app/components/Furniture3DViewer";
@@ -19,6 +20,7 @@ import PageTransition from "@/app/components/PageTransition";
 export default function FurnitureDetailPage() {
   const router = useRouter();
   const params = useParams();
+  const { authUser } = useUser(); // ✅ Check if user session exists
 
   const id = params?.id as string;
 
@@ -26,6 +28,7 @@ export default function FurnitureDetailPage() {
   const { setFurnitureContext } = useAIChatContext();
 
   const [openOrderModal, setOpenOrderModal] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false); // ✅ Floating window control state
   const [previewVariantId, setPreviewVariantId] = useState<string | null>(null);
 
   const safeFurniture = furniture ?? null;
@@ -89,6 +92,15 @@ export default function FurnitureDetailPage() {
       isDefault: Boolean(v.is_default),
     }));
   }, [safeFurniture]);
+
+  const handleOrderClick = () => {
+    // ── GUEST REDIRECT TRAP ──
+    if (!authUser) {
+      setShowAuthModal(true);
+      return;
+    }
+    setOpenOrderModal(true);
+  };
 
   if (isLoading) {
     return (
@@ -252,10 +264,10 @@ export default function FurnitureDetailPage() {
             <Reveal delay={0.28}>
               <div className="pt-2">
                 <button
-                  onClick={() => setOpenOrderModal(true)}
+                  onClick={handleOrderClick}
                   className="bg-[#D4A97A] hover:bg-[#C4976A] shadow-md py-4 rounded-full w-full font-bold text-[#1C1209] text-sm active:scale-[0.99] transition-all"
                 >
-                  Customize & Order
+                  Customize &amp; Order
                 </button>
               </div>
             </Reveal>
@@ -267,6 +279,59 @@ export default function FurnitureDetailPage() {
           onClose={() => setOpenOrderModal(false)}
           furniture={safeFurniture}
         />
+
+        {/* ═══════════════ FLOATING LOGIN MODAL ═══════════════ */}
+        {showAuthModal && (
+          <div 
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in"
+            onClick={() => setShowAuthModal(false)}
+          >
+            <div 
+              className="relative w-full max-w-sm p-6 text-center border bg-[#1C1209] border-white/10 rounded-2xl shadow-2xl animate-scale-up"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Close button */}
+              <button 
+                onClick={() => setShowAuthModal(false)}
+                className="absolute top-4 right-4 text-white/40 hover:text-white transition"
+                aria-label="Close dialog"
+              >
+                <X className="w-4 h-4" />
+              </button>
+
+              {/* Content Icon */}
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-[#D4A97A]/10 border border-[#D4A97A]/20 text-[#D4A97A] mb-4">
+                <ShoppingCart className="w-5 h-5" />
+              </div>
+
+              <h3 className="text-base font-bold text-white tracking-wide">
+                Login Required
+              </h3>
+              <p className="mt-2 text-xs text-white/50 leading-relaxed">
+                Please sign in to save blueprints, build out customized orders, and manage items in your cart.
+              </p>
+
+              {/* Action CTAs */}
+              <div className="mt-6 flex flex-col gap-2">
+                <button
+                  onClick={() => {
+                    setShowAuthModal(false);
+                    router.push("/auth/login");
+                  }}
+                  className="w-full bg-[#D4A97A] hover:bg-[#C4976A] py-2.5 rounded-xl font-semibold text-[#1C1209] text-sm transition shadow-lg"
+                >
+                  Sign In Now
+                </button>
+                <button
+                  onClick={() => setShowAuthModal(false)}
+                  className="w-full py-2.5 rounded-xl border border-white/10 font-medium text-white/60 hover:text-white hover:bg-white/5 text-sm transition"
+                >
+                  Keep Browsing
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </PageTransition>
   );

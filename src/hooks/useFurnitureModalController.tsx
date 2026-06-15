@@ -15,11 +15,15 @@ import { validateModel } from "@/services/handlers/modelValidator";
 import { exportCleanedModel } from "@/services/handlers/modelExporter";
 
 import type {
+  FurnitureCategory,
   FurnitureFormPayload,
   FurnitureItemAdmin,
 } from "@/types/furniture";
 
+import type { FurnitureSizePreset } from "@/types/modelValidation";
+
 import type { useFurnitureForm } from "@/hooks/useFurnitureForm";
+import type { FormState } from "@/hooks/useFurnitureForm";
 
 /* ========================================================= */
 
@@ -34,18 +38,13 @@ type Params = {
     id: string | null,
     data: FurnitureFormPayload
   ) => Promise<void> | void;
+  /**
+   * Full categories list — needed to resolve categoryId → category slug
+   * so validateModel receives a meaningful `category` string for preset
+   * generation rather than a raw UUID.
+   */
+  categories: FurnitureCategory[];
 };
-
-/* ========================================================= */
-
-type BasicInfoKeys =
-  | "name"
-  | "description"
-  | "categoryId"
-  | "basePrice"
-  | "widthCm"
-  | "depthCm"
-  | "heightCm";
 
 /* ========================================================= */
 
@@ -63,10 +62,6 @@ function isGlbFile(file: File): boolean {
 
 /* ========================================================= */
 
-/**
- * Loads a GLB File into an offscreen Three.js scene and returns the
- * root THREE.Group. Wraps GLTFLoader's callback API in a Promise.
- */
 async function loadGlbFile(file: File): Promise<THREE.Group> {
   const arrayBuffer = await file.arrayBuffer();
   const loader = new GLTFLoader();
@@ -77,7 +72,6 @@ async function loadGlbFile(file: File): Promise<THREE.Group> {
       "",
       (gltf) => {
         const scene = gltf.scene as THREE.Group;
-        // Ensure all world matrices are up to date before we hand off
         scene.updateMatrixWorld(true);
         resolve(scene);
       },
@@ -94,6 +88,25 @@ async function loadGlbFile(file: File): Promise<THREE.Group> {
   });
 }
 
+/**
+ * Resolves a FurnitureCategory's name/slug into the underscore_case key
+ * expected by FURNITURE_STANDARDS and CATEGORY_RANGES.
+ */
+function resolveCategorySlug(
+  categoryId: string,
+  categories: FurnitureCategory[] | undefined | null
+): string {
+  if (!categoryId) return "";
+  if (!Array.isArray(categories) || categories.length === 0) return "";
+  const cat = categories.find((c) => c.id === categoryId);
+  if (!cat) return "";
+  const raw: string =
+    (cat as any).slug ??
+    (cat as any).name ??
+    "";
+  return raw.toLowerCase().trim().replace(/\s+/g, "_");
+}
+
 /* ========================================================= */
 
 export function useFurnitureModalController({
@@ -102,6 +115,7 @@ export function useFurnitureModalController({
   isOpen,
   onClose,
   onSave,
+  categories,
 }: Params) {
   const {
     state,
@@ -115,8 +129,10 @@ export function useFurnitureModalController({
     updateVariant,
     removeVariant,
     setField,
-    // New from Step 5
     setModelFile,
+    setDimensionField,
+    applyDetectedDimensions,
+    applyPreset,
     isAnalyzing,
     setIsAnalyzing,
     setCleanedModelFile,
@@ -127,14 +143,12 @@ export function useFurnitureModalController({
      STABLE REFERENCES
   ========================================================= */
 
-  const modelBlobRef = useRef<string | null>(null);
-  const cleanupRef = useRef<Set<string>>(new Set());
-
-  // Tracks the in-flight pipeline so we can abort on unmount / file change
+  const modelBlobRef     = useRef<string | null>(null);
+  const cleanupRef       = useRef<Set<string>>(new Set());
   const pipelineAbortRef = useRef<boolean>(false);
 
   /* ========================================================= */
-  const [submitting, setSubmitting] = useState(false);
+  const [submitting, setSubmitting]           = useState(false);
   const [activeVariantId, setActiveVariantId] = useState<string | null>(null);
 
   /* ========================================================= */
@@ -143,12 +157,23 @@ export function useFurnitureModalController({
     []
   );
 
-  /* ========================================================= */
+  /* =========================================================
+     BASIC INFO
+     Typed as (key: keyof FormState, value: any) so it is assignable
+     to BasicInfoSection's prop without a generic mismatch.
+     The categoryId side-effect is guarded with a runtime string check.
+  ========================================================= */
+
   const setBasicInfoField = useCallback(
-    <K extends BasicInfoKeys>(key: K, value: any) => {
+    (key: keyof FormState, value: any) => {
       setField(key, value);
+
+      if (key === "categoryId") {
+        const slug = resolveCategorySlug(value as string, categories);
+        setField("categorySlug", slug);
+      }
     },
-    [setField]
+    [setField, categories]
   );
 
   /* =========================================================
@@ -172,7 +197,15 @@ export function useFurnitureModalController({
   }, [activeVariantId, state.variants, getKey]);
 
   /* =========================================================
-     MODEL PREVIEW (SAFE + NO EARLY REVOCATION)
+     AR SAFETY STATUS
+  ========================================================= */
+
+  const arSafetyStatus = useMemo(() => {
+    return state.validationReport?.arSafetyStatus ?? null;
+  }, [state.validationReport]);
+
+  /* =========================================================
+     MODEL PREVIEW
   ========================================================= */
 
   const [modelPreviewUrl, setModelPreviewUrl] = useState<string | null>(null);
@@ -190,7 +223,7 @@ export function useFurnitureModalController({
   }, [state.modelFile, item]);
 
   /* =========================================================
-     CLEANUP ONLY ON UNMOUNT / CLOSE
+     CLEANUP
   ========================================================= */
 
   const cleanupBlobs = useCallback(() => {
@@ -202,94 +235,65 @@ export function useFurnitureModalController({
   }, []);
 
   useEffect(() => {
-    return () => {
-      cleanupBlobs();
-    };
+    return () => { cleanupBlobs(); };
   }, [cleanupBlobs]);
 
   /* =========================================================
      GLB PIPELINE
   ========================================================= */
 
-  /**
-   * Full model normalization pipeline:
-   *  1. Set isAnalyzing = true
-   *  2. Load GLB via GLTFLoader (offscreen)
-   *  3. Sanitize (strip lights/cameras, prune, scale, align)
-   *  4. Validate → ValidationReport
-   *  5. Export cleaned GLB → File
-   *  6. Push cleaned File + report into form state
-   *  7. Set isAnalyzing = false
-   *
-   * Dimensions are read from form state at call time (snapshot),
-   * so they always reflect what the user typed before uploading.
-   */
   const runModelPipeline = useCallback(
     async (file: File) => {
-      // Snapshot dimensions at the moment the file is staged
-      const { widthCm, depthCm, heightCm } = state;
+      const categorySlug = state.categorySlug;
 
-      if (widthCm == null || depthCm == null || heightCm == null) {
-        err("Pipeline aborted: dimensions not set");
-        return;
-      }
-
-      // Reset abort flag for this run
       pipelineAbortRef.current = false;
-
       setIsAnalyzing(true);
-      log("Pipeline START", file.name);
+      log("Pipeline START", file.name, { categorySlug });
 
       try {
-        // ── Step 1: Load ────────────────────────────────────
         log("Pipeline: loading GLB…");
         const scene = await loadGlbFile(file);
+        if (pipelineAbortRef.current) return;
 
-        if (pipelineAbortRef.current) {
-          log("Pipeline: aborted after load");
-          return;
-        }
+        log("Pipeline: computing natural bbox…");
+        const rawBox  = new THREE.Box3().setFromObject(scene);
+        const rawSize = new THREE.Vector3();
+        rawBox.getSize(rawSize);
+        const M_TO_CM = 100;
+        const naturalDims = {
+          widthCm:  Math.round(rawSize.x * M_TO_CM * 10) / 10,
+          depthCm:  Math.round(rawSize.z * M_TO_CM * 10) / 10,
+          heightCm: Math.round(rawSize.y * M_TO_CM * 10) / 10,
+        };
+        log("Pipeline: natural dims", naturalDims);
+        if (pipelineAbortRef.current) return;
 
-        // ── Step 2: Sanitize ────────────────────────────────
         log("Pipeline: sanitizing…");
-        const { scene: cleanedScene, autoFixLog } = sanitizeModel(scene, {
-          widthCm,
-          depthCm,
-          heightCm,
-        });
+        const { scene: cleanedScene, autoFixLog } = sanitizeModel(scene, naturalDims);
+        if (pipelineAbortRef.current) return;
 
-        if (pipelineAbortRef.current) {
-          log("Pipeline: aborted after sanitize");
-          return;
-        }
-
-        // ── Step 3: Validate ────────────────────────────────
         log("Pipeline: validating…");
         const report = validateModel(cleanedScene, {
-          widthCm,
-          depthCm,
-          heightCm,
+          ...naturalDims,
           autoFixLog,
+          scaleWasNormalized: true,
+          category: categorySlug || undefined,
         });
+        if (pipelineAbortRef.current) return;
 
-        if (pipelineAbortRef.current) {
-          log("Pipeline: aborted after validate");
-          return;
-        }
-
-        // ── Step 4: Export ──────────────────────────────────
         log("Pipeline: exporting…");
         const { file: cleanedFile, sizeBytes } = await exportCleanedModel(
           cleanedScene,
           file.name
         );
+        if (pipelineAbortRef.current) return;
 
-        if (pipelineAbortRef.current) {
-          log("Pipeline: aborted after export");
-          return;
-        }
+        applyDetectedDimensions(
+          report.detectedDimensions.widthCm,
+          report.detectedDimensions.depthCm,
+          report.detectedDimensions.heightCm,
+        );
 
-        // ── Step 5: Push into form ──────────────────────────
         setCleanedModelFile(cleanedFile);
         setValidationReport({
           ...report,
@@ -297,14 +301,13 @@ export function useFurnitureModalController({
         });
 
         log("Pipeline DONE", {
-          cleanedFile: cleanedFile.name,
+          detectedDimensions: report.detectedDimensions,
+          presets:            report.presetSuggestions?.map((p) => p.label),
+          arSafetyStatus:     report.arSafetyStatus,
           sizeBytes,
-          fixCount: autoFixLog.length,
         });
       } catch (e) {
         err("Pipeline FAILED", e);
-
-        // Surface the error in the report so AssetsSection can show it
         setValidationReport({
           autoFixLog: [],
           error:
@@ -318,34 +321,41 @@ export function useFurnitureModalController({
         }
       }
     },
-    // Capture state snapshot at call time — no stale closure risk for dims
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [state.widthCm, state.depthCm, state.heightCm, setIsAnalyzing, setCleanedModelFile, setValidationReport]
+    [
+      state.categorySlug,
+      setIsAnalyzing,
+      applyDetectedDimensions,
+      setCleanedModelFile,
+      setValidationReport,
+    ]
   );
 
   /* =========================================================
-     MODEL FILE SETTER (triggers pipeline for GLB)
+     MODEL FILE SETTER
   ========================================================= */
 
-  /**
-   * Use this instead of setField("modelFile") everywhere.
-   * - Stages the raw file in form state
-   * - Aborts any in-flight pipeline
-   * - Kicks off runModelPipeline if the file is a GLB
-   */
   const handleModelFile = useCallback(
     (file: File | undefined) => {
-      // Abort any in-flight pipeline from a previous file
       pipelineAbortRef.current = true;
-
       setModelFile(file);
 
       if (file && isGlbFile(file)) {
-        // Small tick so the file is committed to form state first
         setTimeout(() => runModelPipeline(file), 0);
       }
     },
     [setModelFile, runModelPipeline]
+  );
+
+  /* =========================================================
+     PRESET CHIP HANDLER
+  ========================================================= */
+
+  const handlePresetSelect = useCallback(
+    (preset: FurnitureSizePreset) => {
+      applyPreset(preset);
+      log("Preset applied", preset.label, preset.dimensions);
+    },
+    [applyPreset]
   );
 
   /* =========================================================
@@ -397,9 +407,7 @@ export function useFurnitureModalController({
   ========================================================= */
 
   const handleClose = useCallback(() => {
-    // Abort any in-flight pipeline
     pipelineAbortRef.current = true;
-
     cleanupBlobs();
     resetForm();
     setActiveVariantId(null);
@@ -438,9 +446,15 @@ export function useFurnitureModalController({
     activeVariantTexture,
     activeVariantId,
 
+    arSafetyStatus,
+
+    presetSuggestions: state.validationReport?.presetSuggestions ?? null,
+    activePreset:      state.activePreset,
+
     setBasicInfoField,
-    // Expose handleModelFile instead of the old setModelFile
     setModelFile: handleModelFile,
+    setDimensionField,
+    handlePresetSelect,
 
     setActiveVariantId,
 
@@ -457,10 +471,8 @@ export function useFurnitureModalController({
     handleVariantFile,
 
     getKey,
-
     validate,
     buildPayload,
-
     setField,
   };
 }

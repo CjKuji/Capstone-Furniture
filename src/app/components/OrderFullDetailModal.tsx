@@ -34,11 +34,11 @@ export default function OrderFullDetailModal({
    * NO scroll-lock useEffect here.
    *
    * Previously this component ran:
-   *   document.body.style.overflow = "hidden"
+   * document.body.style.overflow = "hidden"
    *
    * The Navbar ALSO has a scroll-lock useEffect for its mobile menu:
-   *   document.body.style.overflow = menuOpen ? "hidden" : ""
-   *   cleanup: document.body.style.overflow = ""
+   * document.body.style.overflow = menuOpen ? "hidden" : ""
+   * cleanup: document.body.style.overflow = ""
    *
    * When the modal mounted and set overflow:hidden, any subsequent
    * re-render of the Navbar (e.g. triggered by the same React batch
@@ -66,8 +66,13 @@ export default function OrderFullDetailModal({
       const snapshot = item.furniture_snapshot;
       const rawDimensions = (snapshot as any)?.dimensions;
 
+      // Ensure historical row URLs and snapshot nested strings are perfectly cleaned 
+      const rawUrl = item.model_snapshot_url || (snapshot as any)?.model_url || (snapshot as any)?.model_snapshot_url;
+      const sanitizedModelUrl = typeof rawUrl === "string" ? rawUrl.trim() : undefined;
+
       return {
         ...item,
+        model_snapshot_url: sanitizedModelUrl,
         furniture_snapshot: snapshot
           ? {
               id: snapshot.id,
@@ -75,10 +80,10 @@ export default function OrderFullDetailModal({
               description: snapshot.description ?? undefined,
               category: snapshot.category ?? undefined,
               base_price: snapshot.base_price ?? undefined,
-              model_url: snapshot.model_url ?? undefined,
-              width_cm: rawDimensions?.width_cm ?? undefined,
-              depth_cm: rawDimensions?.depth_cm ?? undefined,
-              height_cm: rawDimensions?.height_cm ?? undefined,
+              model_url: sanitizedModelUrl,
+              width_cm: rawDimensions?.width_cm ?? (snapshot as any)?.width_cm ?? undefined,
+              depth_cm: rawDimensions?.depth_cm ?? (snapshot as any)?.depth_cm ?? undefined,
+              height_cm: rawDimensions?.height_cm ?? (snapshot as any)?.height_cm ?? undefined,
               images: snapshot.images ?? undefined,
             }
           : undefined,
@@ -86,8 +91,8 @@ export default function OrderFullDetailModal({
           ? {
               id: item.variant_snapshot.id,
               name: item.variant_snapshot.name ?? undefined,
-              texture_url: item.variant_snapshot.texture_url ?? undefined,
-              preview_image_url: item.variant_snapshot.preview_image_url ?? undefined,
+              texture_url: item.variant_snapshot.texture_url?.trim() ?? undefined,
+              preview_image_url: item.variant_snapshot.preview_image_url?.trim() ?? undefined,
               price_adjustment: item.variant_snapshot.price_adjustment ?? undefined,
             }
           : undefined,
@@ -202,7 +207,7 @@ export default function OrderFullDetailModal({
           {items.map((item, index) => {
             const snapshot = item.furniture_snapshot;
             const variant = item.variant_snapshot;
-            const modelUrl = item.model_snapshot_url || snapshot?.model_url;
+            const modelUrl = item.model_snapshot_url;
 
             if (!snapshot) {
               return (

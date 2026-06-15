@@ -2,45 +2,61 @@
 
 import { useQuery } from "@tanstack/react-query";
 import {
-  fetchPaymentsByOrder,
+  fetchPayments,
   PaymentSummary,
   EMPTY_PAYMENT_SUMMARY,
 } from "@/services/payments/fetchPaymentService";
 
 /**
  * =========================================================
- * QUERY KEYS
+ * QUERY KEYS (Polymorphic Engine Structure)
  * =========================================================
  */
 export const paymentKeys = {
   all: ["payments"] as const,
   byOrder: (orderId: string) => [...paymentKeys.all, "order", orderId] as const,
+  byInquiry: (inquiryId: string) => [...paymentKeys.all, "inquiry", inquiryId] as const,
 };
+
+interface UsePaymentsQueryOptions {
+  refetchInterval?: number | false;
+}
 
 /**
  * =========================================================
- * HOOK
+ * DUAL PIPELINE QUERY HOOK
  * =========================================================
+ * * FIX: 'targetId' now explicitly accepts string | undefined to eliminate 
+ * compilation mismatch errors directly from parent modal invocation loops.
  */
 export function usePaymentsQuery(
-  orderId?: string,
-  options?: {
-    refetchInterval?: number | false;
-  }
+  targetId?: string | undefined, 
+  options?: UsePaymentsQueryOptions
 ) {
-  const safeOrderId = orderId ?? "";
+  // Normalize undefined or null variables seamlessly to an operational empty string
+  const safeId = targetId ?? "";
+
+  // Detect pipeline routing structure cleanly via UUID structure constraint metrics
+  const isUuid = safeId.length === 36; 
 
   return useQuery<PaymentSummary>({
-    queryKey: paymentKeys.byOrder(safeOrderId),
+    // Keeps state domains completely partitioned to prevent data blending leaks
+    queryKey: isUuid ? paymentKeys.byInquiry(safeId) : paymentKeys.byOrder(safeId),
 
     queryFn: async () => {
-      if (!safeOrderId) {
+      if (!safeId) {
         return EMPTY_PAYMENT_SUMMARY;
       }
-      return await fetchPaymentsByOrder(safeOrderId);
+
+      if (isUuid) {
+        return await fetchPayments({ inquiryId: safeId });
+      }
+
+      return await fetchPayments({ orderId: safeId });
     },
 
-    enabled: Boolean(safeOrderId),
+    // Safeguard constraint: Prevents running a live network fetch until targetId resolves
+    enabled: Boolean(safeId),
 
     /**
      * PREVENT UI FLICKER
@@ -48,7 +64,7 @@ export function usePaymentsQuery(
     placeholderData: (previousData) => previousData ?? EMPTY_PAYMENT_SUMMARY,
 
     /**
-     * ── FIX: STABILIZED TO PREVENT INFINITE INTERACTION RERENDERS ──
+     * STABILIZED TO PREVENT INFINITE INTERACTION RERENDERS
      */
     staleTime: Infinity,
     gcTime: 15 * 60 * 1000,

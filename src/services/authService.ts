@@ -7,21 +7,23 @@ import { supabase } from "@/lib/supabase";
  */
 export const authService = {
   /**
-   * SIGN UP (profile created via DB trigger)
+   * SIGN UP
+   * Updated to support first name, middle initial, and last name
    */
-  async signUp(email: string, password: string, fullName?: string) {
+  async signUp(email: string, password: string, firstName: string, middleInitial: string, lastName: string) {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: {
-          full_name: fullName ?? "",
+          first_name: firstName,
+          middle_initial: middleInitial || null, // Handles empty string safely
+          last_name: lastName,
         },
       },
     });
 
     if (error) throw error;
-
     return data;
   },
 
@@ -35,7 +37,6 @@ export const authService = {
     });
 
     if (error) throw error;
-
     return data;
   },
 
@@ -44,7 +45,6 @@ export const authService = {
    */
   async signOut() {
     const { error } = await supabase.auth.signOut();
-
     if (error) throw error;
   },
 
@@ -53,9 +53,7 @@ export const authService = {
    */
   async getUser() {
     const { data, error } = await supabase.auth.getUser();
-
     if (error) throw error;
-
     return data.user;
   },
 
@@ -64,9 +62,7 @@ export const authService = {
    */
   async getSession() {
     const { data, error } = await supabase.auth.getSession();
-
     if (error) throw error;
-
     return data.session;
   },
 
@@ -84,7 +80,6 @@ export const authService = {
       .maybeSingle();
 
     if (error) throw error;
-
     return data;
   },
 };

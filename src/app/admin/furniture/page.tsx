@@ -5,6 +5,7 @@ import { Plus, Search, Box } from "lucide-react";
 
 import FurnitureCard from "@/app/components/FurnitureCardAdmin";
 import FurnitureAdminModal from "@/app/components/FurnitureAdminModal";
+import DeleteConfirmModal from "@/app/components/DeleteConfirmModal";
 
 import type {
   FurnitureItemAdmin,
@@ -33,8 +34,8 @@ export default function AdminFurniture() {
   /* ================= STATE ================= */
 
   const [categories, setCategories] = useState<FurnitureCategory[]>([]);
-  const [search, setSearch] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [search, setSearch]         = useState("");
+  const [saving, setSaving]         = useState(false);
 
   const [modalState, setModalState] = useState<{
     isOpen: boolean;
@@ -43,6 +44,15 @@ export default function AdminFurniture() {
   }>({
     isOpen: false,
     mode: "create",
+    item: null,
+  });
+
+  /* ── Delete confirm modal state ── */
+  const [deleteState, setDeleteState] = useState<{
+    isOpen: boolean;
+    item: FurnitureItemAdmin | null;
+  }>({
+    isOpen: false,
     item: null,
   });
 
@@ -92,25 +102,31 @@ export default function AdminFurniture() {
     setModalState((prev) => ({ ...prev, isOpen: false }));
   }, []);
 
-  const handleDelete = useCallback(
-    async (id: string) => {
-      if (!confirm("Delete this furniture item?")) return;
-      await remove(id);
-    },
-    [remove]
-  );
+  /* ── Open the delete confirm modal instead of window.confirm ── */
+  const openDeleteConfirm = useCallback((item: FurnitureItemAdmin) => {
+    setDeleteState({ isOpen: true, item });
+  }, []);
 
-  /**
-   * onSave is called by the controller BEFORE it calls onClose.
-   * Do NOT close the modal here — the controller's handleSubmit
-   * calls resetForm + onClose after onSave resolves.
-   */
+  const closeDeleteConfirm = useCallback(() => {
+    setDeleteState({ isOpen: false, item: null });
+  }, []);
+
+  const handleDeleteConfirmed = useCallback(async () => {
+    if (!deleteState.item) return;
+    await remove(deleteState.item.id);
+    closeDeleteConfirm();
+  }, [deleteState.item, remove, closeDeleteConfirm]);
+
   const handleSave = useCallback(
     async (id: string | null, form: FurnitureFormPayload) => {
-      if (!userId) return;
       setSaving(true);
       try {
         if (modalState.mode === "create") {
+          if (!userId) {
+            console.error("SAVE_ERROR: Unauthorized context or user missing.");
+            alert("Unable to create asset. Your session user ID could not be verified.");
+            return;
+          }
           await create({ payload: form, userId });
         } else {
           if (!id) return;
@@ -144,8 +160,7 @@ export default function AdminFurniture() {
         <button
           type="button"
           onClick={openCreate}
-          disabled={!userId}
-          className="flex items-center gap-2 bg-[#D4A97A] text-[#1C1209] px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+          className="flex items-center gap-2 bg-[#D4A97A] text-[#1C1209] px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
         >
           <Plus size={16} />
           Add Furniture
@@ -179,7 +194,7 @@ export default function AdminFurniture() {
               key={item.id}
               item={item}
               onEdit={() => openEdit(item)}
-              onDelete={() => handleDelete(item.id)}
+              onDelete={() => openDeleteConfirm(item)}
             />
           ))}
         </div>
@@ -198,13 +213,7 @@ export default function AdminFurniture() {
         </div>
       )}
 
-      {/*
-        ── MODAL ──
-        Always mounted so useLayoutEffect inside the modal can set
-        `mounted = true` before isOpen ever flips to true. Conditional
-        mounting ({ isOpen && <Modal> }) caused the portal to return null
-        on the very first render because useLayoutEffect hadn't fired yet.
-      */}
+      {/* ── FURNITURE FORM MODAL ── */}
       <FurnitureAdminModal
         isOpen={modalState.isOpen}
         mode={modalState.mode}
@@ -214,7 +223,15 @@ export default function AdminFurniture() {
         onSave={handleSave}
       />
 
-      {/* ── SAVE STATUS TOAST ── */}
+      {/* ── DELETE CONFIRMATION MODAL ── */}
+      <DeleteConfirmModal
+        isOpen={deleteState.isOpen}
+        itemName={deleteState.item?.name ?? null}
+        onConfirm={handleDeleteConfirmed}
+        onCancel={closeDeleteConfirm}
+      />
+
+      {/* ── SAVE TOAST ── */}
       {saving && (
         <div className="fixed bottom-4 right-4 z-[99999] bg-black/90 border border-white/10 text-white text-xs px-4 py-2 rounded-lg shadow-xl">
           Saving changes...

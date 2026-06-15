@@ -7,12 +7,6 @@ import type {
   Order,
 } from "@/types/order";
 
-/**
- * =========================================================
- * TYPES
- * =========================================================
- */
-
 type FurnitureSnapshot = {
   id: string;
   slug: string;
@@ -58,12 +52,6 @@ type VariantSnapshot = {
   snapshot_created_at: string;
 };
 
-/**
- * =========================================================
- * HELPERS
- * =========================================================
- */
-
 function safeNumber(value: unknown, fallback = 0): number {
   const parsed = Number(value);
 
@@ -74,16 +62,6 @@ function safeNumber(value: unknown, fallback = 0): number {
   return parsed;
 }
 
-/**
- * Generates a short, readable, meaningful order reference.
- * Format: WF-YYYYMMDD-XXXX
- * Example: WF-20260601-4K7M
- *
- * - "WF" = WoodForge brand prefix
- * - Date portion lets admins know when the order was placed at a glance
- * - 4-char alphanumeric suffix (1.6M combinations per day — no practical collision risk)
- * - Charset excludes 0/O/1/I to avoid confusion when reading aloud or on paper
- */
 function generateOrderReference(): string {
   const now = new Date();
 
@@ -101,15 +79,6 @@ function generateOrderReference(): string {
   return `WF-${datePart}-${suffix}`;
 }
 
-/**
- * Uploads a single customer reference image to Supabase Storage.
- * Bucket:  order-request-images   (create this in your Supabase dashboard)
- * Path:    {orderId}/{timestamp}-{random}.{ext}
- * Returns: public URL string, or null if upload fails.
- *
- * Random suffix added so multiple files uploaded in the same
- * millisecond don't collide on the timestamp alone.
- */
 async function uploadRequestImage(
   orderId: string,
   file: File
@@ -135,11 +104,6 @@ async function uploadRequestImage(
   return data.publicUrl ?? null;
 }
 
-/**
- * Uploads all reference images in parallel via Promise.allSettled.
- * Individual failures are logged but do not abort the order.
- * Returns an array of successfully uploaded public URLs.
- */
 async function uploadRequestImages(
   orderId: string,
   files: File[]
@@ -229,12 +193,6 @@ function createVariantSnapshot(
   };
 }
 
-/**
- * =========================================================
- * CREATE ORDER
- * =========================================================
- */
-
 export async function createOrder(
   payload: CreateOrderPayload & {
     request?: {
@@ -243,11 +201,6 @@ export async function createOrder(
     } | null;
   }
 ): Promise<Order> {
-  /**
-   * =========================================================
-   * AUTH
-   * =========================================================
-   */
 
   const {
     data: { user },
@@ -258,12 +211,6 @@ export async function createOrder(
     throw new Error("User not authenticated");
   }
 
-  /**
-   * =========================================================
-   * VALIDATE ITEMS
-   * =========================================================
-   */
-
   if (
     !payload.items ||
     payload.items.length === 0
@@ -272,12 +219,6 @@ export async function createOrder(
       "Order must contain at least one item"
     );
   }
-
-  /**
-   * =========================================================
-   * ADMIN
-   * =========================================================
-   */
 
   const { data: adminProfile } = await supabase
     .from("profiles")
@@ -290,37 +231,29 @@ export async function createOrder(
     throw new Error("No admin found");
   }
 
-  /**
-   * =========================================================
-   * USER PROFILE
-   * =========================================================
-   */
+// ── UPDATED FALLBACK NAME LOGIC ──
+const { data: profile } = await supabase
+  .from("profiles")
+  .select("first_name, middle_initial, last_name")
+  .eq("id", user.id)
+  .single();
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("full_name")
-    .eq("id", user.id)
-    .single();
+// Build a clean string from the updated structural database columns
+const formattedProfileName = profile
+  ? [
+      profile.first_name,
+      profile.middle_initial ? `${profile.middle_initial.trim().replace('.', '')}.` : "",
+      profile.last_name
+    ].filter(Boolean).join(" ").trim()
+  : null;
 
-  const fallbackName =
-    profile?.full_name ||
-    payload.customer_name ||
-    user.email ||
-    "Unknown Customer";
-
-  /**
-   * =========================================================
-   * ORDER REFERENCE
-   * =========================================================
-   */
+const fallbackName =
+  formattedProfileName ||
+  payload.customer_name ||
+  user.email ||
+  "Unknown Customer";
 
   const order_reference_code = generateOrderReference();
-
-  /**
-   * =========================================================
-   * REQUEST
-   * =========================================================
-   */
 
   const requestText =
     payload.request?.description?.trim() ||
@@ -333,33 +266,16 @@ export async function createOrder(
   const hasCustomerRequest =
     !!(requestText || requestImageFiles.length);
 
-  /**
-   * =========================================================
-   * BUILD ORDER ITEMS
-   * =========================================================
-   */
-
   const itemsToInsert: any[] = [];
 
   let quoteTotalPrice = 0;
 
   for (const item of payload.items) {
-    /**
-     * -----------------------------------------------------
-     * VALIDATE QUANTITY
-     * -----------------------------------------------------
-     */
 
     const quantity = Math.max(
       safeNumber(item.quantity),
       1
     );
-
-    /**
-     * -----------------------------------------------------
-     * LOAD FURNITURE
-     * -----------------------------------------------------
-     */
 
     const {
       data: furniture,
@@ -392,12 +308,6 @@ export async function createOrder(
       );
     }
 
-    /**
-     * -----------------------------------------------------
-     * LOAD IMAGES
-     * -----------------------------------------------------
-     */
-
     const { data: images } = await supabase
       .from("furniture_images")
       .select(`
@@ -408,15 +318,6 @@ export async function createOrder(
         "furniture_id",
         item.furniture_id
       );
-
-    /**
-     * -----------------------------------------------------
-     * LOAD VARIANT
-     * IMPORTANT:
-     * VALIDATE VARIANT BELONGS
-     * TO FURNITURE
-     * -----------------------------------------------------
-     */
 
     let variant: any = null;
 
@@ -454,12 +355,6 @@ export async function createOrder(
       variant = variantData;
     }
 
-    /**
-     * -----------------------------------------------------
-     * SAFE PRICING
-     * -----------------------------------------------------
-     */
-
     const basePrice = Math.max(
       safeNumber(furniture.base_price),
       0
@@ -480,12 +375,6 @@ export async function createOrder(
 
     quoteTotalPrice += totalPrice;
 
-    /**
-     * -----------------------------------------------------
-     * SNAPSHOTS
-     * -----------------------------------------------------
-     */
-
     const furnitureSnapshot =
       createFurnitureSnapshot({
         furniture,
@@ -495,19 +384,9 @@ export async function createOrder(
     const variantSnapshot =
       createVariantSnapshot(variant);
 
-    /**
-     * -----------------------------------------------------
-     * ORDER ITEM
-     * -----------------------------------------------------
-     */
-
     itemsToInsert.push({
       order_id: "",
 
-      /**
-       * Optional references only
-       * (not source of truth)
-       */
       furniture_id:
         item.furniture_id,
 
@@ -534,12 +413,6 @@ export async function createOrder(
     });
   }
 
-  /**
-   * =========================================================
-   * FINAL TOTAL VALIDATION
-   * =========================================================
-   */
-
   if (
     !Number.isFinite(
       quoteTotalPrice
@@ -550,12 +423,6 @@ export async function createOrder(
       "Invalid order total computed"
     );
   }
-
-  /**
-   * =========================================================
-   * CREATE ORDER
-   * =========================================================
-   */
 
   const {
     data: order,
@@ -621,12 +488,6 @@ export async function createOrder(
     );
   }
 
-  /**
-   * =========================================================
-   * INSERT ORDER ITEMS
-   * =========================================================
-   */
-
   const finalItems =
     itemsToInsert.map((item) => ({
       ...item,
@@ -640,10 +501,6 @@ export async function createOrder(
     .insert(finalItems);
 
   if (itemsError) {
-    /**
-     * Basic rollback cleanup
-     * (until full DB transaction/RPC exists)
-     */
 
     await supabase
       .from("orders")
@@ -654,12 +511,6 @@ export async function createOrder(
       itemsError.message
     );
   }
-
-  /**
-   * =========================================================
-   * CREATE CONVERSATION
-   * =========================================================
-   */
 
   const {
     data: conversation,
@@ -686,12 +537,6 @@ export async function createOrder(
     );
   }
 
-  /**
-   * =========================================================
-   * SYSTEM MESSAGE
-   * =========================================================
-   */
-
   await supabase
     .from("messages")
     .insert({
@@ -713,12 +558,6 @@ export async function createOrder(
         order_id: order.id,
       },
     });
-
-  /**
-   * =========================================================
-   * CUSTOMER REQUEST — text message
-   * =========================================================
-   */
 
   if (requestText) {
     const {
@@ -753,19 +592,6 @@ export async function createOrder(
       );
     }
   }
-
-  /**
-   * =========================================================
-   * CUSTOMER REQUEST — image messages
-   *
-   * All files are uploaded to Storage in parallel first, then
-   * one message row is inserted per successfully uploaded image
-   * so each appears individually in the chat thread.
-   *
-   * Non-fatal: failed uploads are logged but do not throw —
-   * the order is already created successfully at this point.
-   * =========================================================
-   */
 
   if (requestImageFiles.length > 0) {
     const imageUrls = await uploadRequestImages(
@@ -810,12 +636,6 @@ export async function createOrder(
       }
     }
   }
-
-  /**
-   * =========================================================
-   * RETURN ORDER
-   * =========================================================
-   */
 
   return order as Order;
 }

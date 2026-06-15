@@ -225,10 +225,15 @@ export default function CatalogPage() {
                 </div>
               ))
             : filtered.map((item, idx) => (
-                <Reveal key={item.id} delay={Math.min(idx, 7) * 0.06} from="bottom">
-                  <CustomerFurnitureCard item={item} />
-                </Reveal>
-              ))}
+  <Reveal 
+    key={item.id} 
+    delay={Math.min(idx, 7) * 0.06} 
+    from="bottom" 
+    className="w-full h-full" 
+  >
+    <CustomerFurnitureCard item={item} />
+  </Reveal>
+))}
         </div>
 
         {/* empty state */}

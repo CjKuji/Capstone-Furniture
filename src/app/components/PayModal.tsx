@@ -6,16 +6,32 @@ import { PaymentType, usePayment } from "@/hooks/usePayment";
 import { usePaymentsQuery } from "@/hooks/useFetchPayments";
 import { calculatePaymentBreakdown } from "@/utils/paymentCalculator";
 
+// Universal loose type fallback representation to map Custom Inquiry models cleanly
+type CustomInquiry = {
+  id: string;
+  user_id: string;
+  inquiry_reference_code?: string;
+  customer_name?: string;
+  delivery_method?: string;
+  [key: string]: any;
+};
+
 type Props = {
   open: boolean;
   onClose: () => void;
-  order: Order;
+  order?: Order | null;       // Made optional to support dual pipelines
+  inquiry?: CustomInquiry | null; // Added to support workshop workflows
   totalAmount: number;
 };
 
-export default function PayModal({ open, onClose, order, totalAmount }: Props) {
+export default function PayModal({ open, onClose, order, inquiry, totalAmount }: Props) {
   const { pay, loading, error, resetError } = usePayment();
-  const { data: paymentsData } = usePaymentsQuery(order.id);
+
+  // 1. DYNAMICALLY CHOOSE THE SOURCE CONTEXT ID
+  const activeTargetId = order?.id || inquiry?.id || "";
+  
+  // Use unified payments query query hook matching your backend wrappers
+  const { data: paymentsData } = usePaymentsQuery(activeTargetId);
 
   const totalPaid       = paymentsData?.totalPaid ?? 0;
   const hasPaidAnything = totalPaid > 0;
@@ -42,6 +58,24 @@ export default function PayModal({ open, onClose, order, totalAmount }: Props) {
     ? "Pay Full"
     : "Pay Partial";
 
+  /* ── DERIVE DISCARDABLE COMPONENT PRESENTATION METADATA ── */
+  const contextMeta = useMemo(() => {
+    if (inquiry) {
+      return {
+        typeLabel: "Custom Inquiry",
+        referenceCode: inquiry.inquiry_reference_code || inquiry.id?.substring(0, 8).toUpperCase() || "N/A",
+        customerName: inquiry.customer_name || "Custom Client",
+        deliveryMethod: inquiry.delivery_method || "Standard Delivery",
+      };
+    }
+    return {
+      typeLabel: "Order",
+      referenceCode: order?.order_reference_code || "N/A",
+      customerName: order?.customer_name || "Unknown",
+      deliveryMethod: order?.delivery_method || "Standard",
+    };
+  }, [order, inquiry]);
+
   /* ── ESC CLOSE ── */
   useEffect(() => {
     if (!open) return;
@@ -61,10 +95,13 @@ export default function PayModal({ open, onClose, order, totalAmount }: Props) {
   const handlePay = async () => {
     try {
       resetError();
+      
+      // Conditionally pack parameters safely to align with database entity routers
       await pay({
-        orderId: order.id,
-        userId:  order.user_id,
-        type:    hasPaidAnything ? "partial" : paymentType,
+        orderId: order?.id || undefined,
+        inquiryId: inquiry?.id || undefined,
+        userId: order?.user_id || inquiry?.user_id || "",
+        type: hasPaidAnything ? "partial" : paymentType,
       });
     } catch (err) {
       console.error(err);
@@ -96,12 +133,14 @@ export default function PayModal({ open, onClose, order, totalAmount }: Props) {
         {/* ── HEADER ── */}
         <div className="shrink-0 flex items-center justify-between gap-4 px-5 sm:px-6 py-4 bg-[#0B0704] border-b border-[#2A1F14]">
           <div className="min-w-0">
-            <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#7A5C3A] mb-0.5">Payment</p>
+            <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#7A5C3A] mb-0.5">
+              {contextMeta.typeLabel} Payment
+            </p>
             <h2 className="text-sm sm:text-base font-bold text-white tracking-tight truncate">
               Complete Your Payment
             </h2>
             <p className="text-[10px] text-white/30 mt-0.5">
-              Order #{order.order_reference_code}
+              Ref ID #{contextMeta.referenceCode}
             </p>
           </div>
           <button
@@ -122,7 +161,7 @@ export default function PayModal({ open, onClose, order, totalAmount }: Props) {
 
           {/* FINANCIAL STAT SUMMARY STRIP */}
           <div className="grid grid-cols-3 divide-x divide-[#2A1F14] rounded-xl border border-[#2A1F14] bg-[#0B0704] overflow-hidden shadow-inner">
-            <FinStat label="Order Total" value={`₱${safeTotalAmount.toLocaleString()}`} color="text-[#E8C98A]" />
+            <FinStat label="Invoice Total" value={`₱${safeTotalAmount.toLocaleString()}`} color="text-[#E8C98A]" />
             <FinStat label="Paid" value={`₱${totalPaid.toLocaleString()}`} color="text-emerald-400" />
             <FinStat
               label="Balance"
@@ -131,20 +170,19 @@ export default function PayModal({ open, onClose, order, totalAmount }: Props) {
             />
           </div>
 
-       {/* ORDER INFO DESCRIPTION CARD */}
-<div className="rounded-xl border border-[#2A1F14] bg-[#0B0704] overflow-hidden">
-  <div className="px-4 py-2.5 bg-white/[0.01] border-b border-[#2A1F14]/40">
-    <p className="text-[9px] font-black uppercase tracking-[0.2em] text-white/25">Order Details</p>
-  </div>
-  <div className="px-4 py-3 space-y-2">
-    <InfoRow label="Customer" value={order.customer_name ?? "Unknown"} />
-    
-    {/* FIXED LINE BELOW */}
-    <InfoRow label="Delivery" value={order.delivery_method ?? "Standard"} capitalize />
-    
-    <InfoRow label="Already Paid" value={`₱${totalPaid.toLocaleString()}`} />
-  </div>
-</div>
+          {/* CLIENT INFO DESCRIPTION CARD */}
+          <div className="rounded-xl border border-[#2A1F14] bg-[#0B0704] overflow-hidden">
+            <div className="px-4 py-2.5 bg-white/[0.01] border-b border-[#2A1F14]/40">
+              <p className="text-[9px] font-black uppercase tracking-[0.2em] text-white/25">
+                {contextMeta.typeLabel} Details
+              </p>
+            </div>
+            <div className="px-4 py-3 space-y-2">
+              <InfoRow label="Customer" value={contextMeta.customerName} />
+              <InfoRow label="Delivery" value={contextMeta.deliveryMethod} capitalize />
+              <InfoRow label="Already Paid" value={`₱${totalPaid.toLocaleString()}`} />
+            </div>
+          </div>
 
           {/* PAYMENT TYPE TOGGLE ACTIONS */}
           {showPaymentOptions && (

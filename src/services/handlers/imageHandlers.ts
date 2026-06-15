@@ -17,6 +17,11 @@ function debug(...args: unknown[]) {
 
 /* =========================================================
    VALIDATION
+   -------------------------------------------------------
+   Images are optional at the service layer — the form hook
+   enforces "at least one image" before buildPayload() is
+   called.  We only guard against multiple primary flags here
+   so the DB constraint is never violated.
 ========================================================= */
 
 export function validateImages(images: FurnitureImagePayload[]) {
@@ -24,14 +29,14 @@ export function validateImages(images: FurnitureImagePayload[]) {
 
   debug("validateImages → active:", active.length, active);
 
-  if (active.length === 0) {
-    throw new Error("At least one image is required.");
-  }
+  // Zero images is valid — the 3D model alone is sufficient.
+  if (active.length === 0) return;
 
   const primaryCount = active.filter((i) => i.isPrimary).length;
 
   debug("primaryCount:", primaryCount);
 
+  // If images exist, exactly one must be primary.
   if (primaryCount === 0) {
     throw new Error("At least one primary image is required.");
   }
@@ -169,6 +174,8 @@ export async function updateImages(
 
   const fullNormalized = normalizeImages(toKeepRaw);
 
+  // Only validate if there are images — validation is a no-op for
+  // empty arrays (model-only furniture is permitted).
   validateImages(fullNormalized);
 
   /* ---------------- DELETE ---------------- */

@@ -2,40 +2,67 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { Search, ShoppingBag, X, Menu, LogOut, LayoutDashboard, UserCircle2, ChevronRight } from "lucide-react";
+import {
+  Search,
+  ShoppingBag,
+  ShoppingCart,
+  MessageSquare,
+  X,
+  Menu,
+  LogOut,
+  LayoutDashboard,
+  UserCircle2,
+  ChevronRight,
+} from "lucide-react";
 
 import { supabase } from "@/lib/supabase";
 import { useUser } from "@/hooks/useUser";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
+import { useCart } from "@/hooks/useCart";
+import { useMyOrders } from "@/hooks/useUserOrders"; 
+import { useUserInquiries } from "@/hooks/useUserInquiry";
 
 const NAV_ITEMS = [
-  { label: "Home", route: "/" },
-  { label: "Designs", route: "/catalog" },
-  { label: "About", route: "/about" },
+  { label: "Home",     route: "/" },
+  { label: "Designs",  route: "/catalog" },
+  { label: "About",    route: "/about" },
 ];
 
+interface DropdownItem {
+  label: string;
+  icon: React.ReactNode;
+  route: string;
+  badge?: number;
+}
+
 export default function Navbar() {
-  const router = useRouter();
+  const router   = useRouter();
   const pathname = usePathname();
 
   const { authUser, role, initialized } = useUser();
+  const { count: cartCount } = useCart();
+  
+  // FIXED ts(2554): Reverted hook parameters to match your original hook signatures
+  const { data: orders } = useMyOrders();
+  const orderCount = orders?.length ?? 0;
 
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const { data: inquiries } = useUserInquiries();
+  const inquiryCount = inquiries?.length ?? 0;
+
+  const [searchOpen,   setSearchOpen]   = useState(false);
+  const [menuOpen,     setMenuOpen]     = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
+  const [scrolled,     setScrolled]     = useState(false);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const searchRef = useRef<HTMLInputElement>(null);
+  const searchRef   = useRef<HTMLInputElement>(null);
 
-  // --- FIX: State adjustment during render ---
   const [prevPathname, setPrevPathname] = useState(pathname);
   if (pathname !== prevPathname) {
     setPrevPathname(pathname);
     setMenuOpen(false);
     setDropdownOpen(false);
   }
-  // -------------------------------------------
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -68,7 +95,59 @@ export default function Navbar() {
     ? authUser.email.slice(0, 2).toUpperCase()
     : "?";
 
-  const cartCount = 0;
+  const onCart    = pathname === "/cart";
+  const onOrders  = pathname === "/orders";
+  const onInquiry = pathname === "/inquiry";
+
+  const dropdownItems: DropdownItem[] = [
+    { label: "Profile",          icon: <UserCircle2 className="w-4 h-4" />,    route: "/profile" },
+    { label: "My Cart",          icon: <ShoppingCart className="w-4 h-4" />,   route: "/cart",    badge: cartCount > 0 ? cartCount : undefined },
+    { label: "Custom Inquiries", icon: <MessageSquare className="w-4 h-4" />,   route: "/inquiry", badge: inquiryCount > 0 ? inquiryCount : undefined },
+    { label: "My Orders",        icon: <ShoppingBag className="w-4 h-4" />,    route: "/orders",  badge: orderCount > 0 ? orderCount : undefined },
+  ];
+
+  if (role === "admin" || role === "super_admin") {
+    dropdownItems.push({
+      label: "Admin Dashboard",
+      icon: <LayoutDashboard className="w-4 h-4" />,
+      route: "/admin",
+    });
+  }
+
+  // FIXED ts(17002): Extracted inline rendering mapping blocks to ensure parsing stays perfect
+  const renderNavItems = (isMobile = false) => {
+    return NAV_ITEMS.map(({ label, route }) => {
+      const active = pathname === route;
+      if (isMobile) {
+        return (
+          <li key={label}>
+            <button
+              onClick={() => { router.push(route); setMenuOpen(false); }}
+              className={`flex justify-between items-center py-4 w-full font-medium text-base transition
+                ${active ? "text-[#D4A97A]" : "text-white/70 hover:text-white"}`}
+            >
+              {label}
+              <ChevronRight className={`w-4 h-4 ${active ? "text-[#D4A97A]/50" : "text-white/20"}`} />
+            </button>
+          </li>
+        );
+      }
+      return (
+        <li key={label}>
+          <button
+            onClick={() => router.push(route)}
+            className={`relative px-4 py-2 text-sm font-medium tracking-wide transition-colors duration-150
+              ${active ? "text-white" : "text-white/60 hover:text-white"}`}
+          >
+            {label}
+            {active && (
+              <span className="-bottom-px absolute inset-x-4 bg-[#D4A97A] rounded-full h-[2px]" />
+            )}
+          </button>
+        </li>
+      );
+    });
+  };
 
   return (
     <>
@@ -95,23 +174,7 @@ export default function Navbar() {
           {/* CENTER NAV (desktop) */}
           <nav className="hidden md:flex">
             <ul className="flex items-center gap-1">
-              {NAV_ITEMS.map(({ label, route }) => {
-                const active = pathname === route;
-                return (
-                  <li key={label}>
-                    <button
-                      onClick={() => router.push(route)}
-                      className={`relative px-4 py-2 text-sm font-medium tracking-wide transition-colors duration-150
-                        ${active ? "text-white" : "text-white/60 hover:text-white"}`}
-                    >
-                      {label}
-                      {active && (
-                        <span className="-bottom-px absolute inset-x-4 bg-[#D4A97A] rounded-full h-[2px]" />
-                      )}
-                    </button>
-                  </li>
-                );
-              })}
+              {renderNavItems(false)}
             </ul>
           </nav>
 
@@ -124,23 +187,65 @@ export default function Navbar() {
               aria-label="Toggle search"
               className="hover:bg-white/10 p-2 rounded-full text-white/60 hover:text-white transition"
             >
-              {searchOpen ? <X className="w-4 h-4 sm:w-5 sm:h-5" /> : <Search className="w-4 h-4 sm:w-5 sm:h-5" />}
+              {searchOpen
+                ? <X className="w-4 h-4 sm:w-5 sm:h-5" />
+                : <Search className="w-4 h-4 sm:w-5 sm:h-5" />}
             </button>
 
             {!initialized ? (
               <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white/10 animate-pulse ml-0.5 sm:ml-1" />
             ) : authUser ? (
               <>
-                {/* ORDERS / CART */}
+                {/* ── CART ICON ── */}
+                <button
+                  onClick={() => router.push("/cart")}
+                  aria-label="My cart"
+                  title="Saved designs"
+                  className={`relative p-2 rounded-full transition
+                    ${onCart
+                      ? "text-[#D4A97A] bg-[#D4A97A]/10"
+                      : "text-white/60 hover:text-white hover:bg-white/10"}`}
+                >
+                  <ShoppingCart className="w-4 h-4 sm:w-5 sm:h-5" />
+                  {cartCount > 0 && (
+                    <span className="top-1 right-1 absolute flex justify-center items-center bg-[#D4A97A] rounded-full w-3.5 h-3.5 sm:w-4 sm:h-4 font-bold text-[#1C1209] text-[9px] sm:text-[10px]">
+                      {cartCount > 99 ? "99+" : cartCount}
+                    </span>
+                  )}
+                </button>
+
+                {/* ── INQUIRY ICON ── */}
+                <button
+                  onClick={() => router.push("/inquiry")}
+                  aria-label="My inquiries"
+                  title="Custom blueprints"
+                  className={`relative p-2 rounded-full transition
+                    ${onInquiry
+                      ? "text-[#D4A97A] bg-[#D4A97A]/10"
+                      : "text-white/60 hover:text-white hover:bg-white/10"}`}
+                >
+                  <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5" />
+                  {inquiryCount > 0 && (
+                    <span className="top-1 right-1 absolute flex justify-center items-center bg-[#D4A97A] rounded-full w-3.5 h-3.5 sm:w-4 sm:h-4 font-bold text-[#1C1209] text-[9px] sm:text-[10px]">
+                      {inquiryCount > 99 ? "99+" : inquiryCount}
+                    </span>
+                  )}
+                </button>
+
+                {/* ── ORDERS ICON ── */}
                 <button
                   onClick={() => router.push("/orders")}
                   aria-label="My orders"
-                  className="relative hover:bg-white/10 p-2 rounded-full text-white/60 hover:text-white transition"
+                  title="My orders"
+                  className={`relative p-2 rounded-full transition
+                    ${onOrders
+                      ? "text-[#D4A97A] bg-[#D4A97A]/10"
+                      : "text-white/60 hover:text-white hover:bg-white/10"}`}
                 >
                   <ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5" />
-                  {cartCount > 0 && (
+                  {orderCount > 0 && (
                     <span className="top-1 right-1 absolute flex justify-center items-center bg-[#D4A97A] rounded-full w-3.5 h-3.5 sm:w-4 sm:h-4 font-bold text-[#1C1209] text-[9px] sm:text-[10px]">
-                      {cartCount}
+                      {orderCount > 99 ? "99+" : orderCount}
                     </span>
                   )}
                 </button>
@@ -172,20 +277,7 @@ export default function Navbar() {
                         </div>
                       </div>
 
-                      {[
-                        {
-                          label: "Profile",
-                          icon: <UserCircle2 className="w-4 h-4" />,
-                          route: "/profile",
-                        },
-                        ...(role === "admin" || role === "super_admin"
-                          ? [{
-                              label: "Admin Dashboard",
-                              icon: <LayoutDashboard className="w-4 h-4" />,
-                              route: "/admin",
-                            }]
-                          : []),
-                      ].map(({ label, icon, route }) => (
+                      {dropdownItems.map(({ label, icon, route, badge }) => (
                         <button
                           key={label}
                           onClick={() => { setDropdownOpen(false); router.push(route); }}
@@ -193,6 +285,11 @@ export default function Navbar() {
                         >
                           <span className="text-[#D4A97A]">{icon}</span>
                           {label}
+                          {badge !== undefined && (
+                            <span className="ml-1 flex items-center justify-center bg-[#D4A97A]/20 text-[#D4A97A] text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px]">
+                              {badge}
+                            </span>
+                          )}
                           <ChevronRight className="ml-auto w-3.5 h-3.5 text-white/30" />
                         </button>
                       ))}
@@ -234,7 +331,9 @@ export default function Navbar() {
               aria-expanded={menuOpen}
               className="md:hidden hover:bg-white/10 ml-0.5 p-2 rounded-full text-white/60 hover:text-white transition"
             >
-              {menuOpen ? <X className="w-4 h-4 sm:w-5 sm:h-5" /> : <Menu className="w-4 h-4 sm:w-5 sm:h-5" />}
+              {menuOpen
+                ? <X className="w-4 h-4 sm:w-5 sm:h-5" />
+                : <Menu className="w-4 h-4 sm:w-5 sm:h-5" />}
             </button>
           </div>
         </div>
@@ -272,21 +371,7 @@ export default function Navbar() {
 
           <nav className="flex-1 overflow-y-auto px-4 py-2">
             <ul className="flex flex-col divide-y divide-white/5">
-              {NAV_ITEMS.map(({ label, route }) => {
-                const active = pathname === route;
-                return (
-                  <li key={label}>
-                    <button
-                      onClick={() => { router.push(route); setMenuOpen(false); }}
-                      className={`flex justify-between items-center py-4 w-full font-medium text-base transition
-                        ${active ? "text-[#D4A97A]" : "text-white/70 hover:text-white"}`}
-                    >
-                      {label}
-                      <ChevronRight className={`w-4 h-4 ${active ? "text-[#D4A97A]/50" : "text-white/20"}`} />
-                    </button>
-                  </li>
-                );
-              })}
+              {renderNavItems(true)}
             </ul>
 
             {!initialized ? (
@@ -319,13 +404,8 @@ export default function Navbar() {
                     {role && <p className="text-[#D4A97A] text-xs capitalize">{role}</p>}
                   </div>
                 </div>
-                {[
-                  { label: "Profile", icon: <UserCircle2 className="w-4 h-4" />, route: "/profile" },
-                  { label: "My Orders", icon: <ShoppingBag className="w-4 h-4" />, route: "/orders" },
-                  ...(role === "admin" || role === "super_admin"
-                    ? [{ label: "Admin Dashboard", icon: <LayoutDashboard className="w-4 h-4" />, route: "/admin" }]
-                    : []),
-                ].map(({ label, icon, route }) => (
+                
+                {dropdownItems.map(({ label, icon, route, badge }) => (
                   <button
                     key={label}
                     onClick={() => { router.push(route); setMenuOpen(false); }}
@@ -333,9 +413,15 @@ export default function Navbar() {
                   >
                     <span className="text-[#D4A97A]">{icon}</span>
                     {label}
+                    {badge !== undefined && (
+                      <span className="ml-1 flex items-center justify-center bg-[#D4A97A]/20 text-[#D4A97A] text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px]">
+                        {badge}
+                      </span>
+                    )}
                     <ChevronRight className="ml-auto w-3.5 h-3.5 text-white/20" />
                   </button>
                 ))}
+                
                 <button
                   onClick={() => { handleLogout(); setMenuOpen(false); }}
                   className="flex items-center gap-3 px-4 py-3.5 w-full text-red-400 hover:text-red-300 hover:bg-red-950/20 text-sm transition"
