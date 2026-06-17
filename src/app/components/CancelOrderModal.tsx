@@ -8,19 +8,19 @@ type Props = {
   onClose: () => void;
   onConfirm: (reason: string) => Promise<void>;
   order: Order;
-  mode: "instant" | "request"; // Added to fix the TypeScript interface assignment error
+  mode: "instant" | "request";
 };
 
 /* =========================================================
    MESSAGE LOGIC
 ========================================================= */
-const getMessage = (order: Order, mode: "instant" | "request") => {
+const getMessage = (order: Order, computedMode: "instant" | "request") => {
   if (order.cancel_status === "requested") {
     return "Your cancellation request is already pending admin review.";
   }
 
-  if (mode === "instant") {
-    return "Your order will be cancelled immediately after confirmation. This action cannot be undone.";
+  if (computedMode === "instant") {
+    return "Your order has no payment transactions on file and will be cancelled immediately after confirmation. This action cannot be undone.";
   }
 
   if (order.payment_status === "partially_paid") {
@@ -42,12 +42,17 @@ export default function CancelOrderModal({
   onClose,
   onConfirm,
   order,
-  mode, // Destructured for direct consumption
+  mode,
 }: Props) {
   const [reason, setReason] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const message = getMessage(order, mode);
+  // Fallback check: force instant cancel mode if there are no registered payments
+  const hasNoPayment = !order.payment_status || order.payment_status === "unpaid";
+  const computedMode = hasNoPayment ? "instant" : mode;
+
+  const message = getMessage(order, computedMode);
+  const isPending = order.cancel_status === "requested";
 
   // Reset inputs on close
   useEffect(() => {
@@ -91,8 +96,6 @@ export default function CancelOrderModal({
 
   if (!open) return null;
 
-  const isPending = order.cancel_status === "requested";
-
   return (
     <div
       className="fixed inset-0 z-[99999] flex justify-center p-4 pb-6 md:pb-8 backdrop-blur-md overflow-hidden bg-[#0A0705]/65"
@@ -104,7 +107,9 @@ export default function CancelOrderModal({
         mt-[76px] h-[calc(100vh-100px)] md:mt-[84px] md:h-[calc(100vh-116px)]
         shadow-[0_24px_64px_rgba(0,0,0,0.8)] transition-all duration-200 overflow-hidden
         border border-[#2A1F14] bg-[#0E0A06]
-      ">
+      "
+      onClick={(e) => e.stopPropagation()}
+      >
         {/* TOP ACCENT GRADIENT LINE */}
         <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-[#D4A97A]/60 to-transparent flex-shrink-0" />
 
@@ -138,25 +143,25 @@ export default function CancelOrderModal({
           <div>
             <span className={`
               text-[9px] font-black uppercase tracking-[0.15em] px-3 py-1.5 rounded-full border
-              ${mode === "instant" 
+              ${computedMode === "instant" 
                 ? "bg-rose-500/5 text-rose-500 border-rose-500/20" 
                 : "bg-[#D4A97A]/5 text-[#D4A97A] border-[#D4A97A]/20"
               }
             `}>
-              {mode === "instant" ? "Instant Cancellation" : "Admin Review Required"}
+              {computedMode === "instant" ? "Instant Cancellation" : "Admin Review Required"}
             </span>
           </div>
 
           {/* SYSTEM INFO CONTAINER */}
           <div className={`
             rounded-xl p-4 border text-xs sm:text-sm leading-relaxed
-            ${mode === "instant"
+            ${computedMode === "instant"
               ? "bg-rose-500/[0.03] border-rose-500/15 text-rose-500/85"
               : "bg-[#D4A97A]/[0.02] border-[#D4A97A]/15 text-white/60"
             }
           `}>
             <div className="flex gap-2.5 items-start">
-              <span className="shrink-0 text-sm mt-0.5">{mode === "instant" ? "⚠️" : "📝"}</span>
+              <span className="shrink-0 text-sm mt-0.5">{computedMode === "instant" ? "⚠️" : "📝"}</span>
               <p>{message}</p>
             </div>
           </div>
@@ -173,7 +178,7 @@ export default function CancelOrderModal({
             <div className="flex justify-between items-baseline py-0.5">
               <span className="text-[9px] font-black uppercase tracking-[0.16em] text-white/25 shrink-0">Payment Status</span>
               <span className="text-[11px] font-semibold text-white/70 text-right capitalize truncate max-w-[70%]">
-                {order.payment_status?.replace(/_/g, " ")}
+                {order.payment_status?.replace(/_/g, " ") ?? "Unpaid"}
               </span>
             </div>
 
@@ -234,7 +239,7 @@ export default function CancelOrderModal({
               className={`
                 flex-1 h-10 rounded-xl text-[10px] font-black uppercase tracking-[0.15em] transition
                 active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed
-                ${mode === "instant" 
+                ${computedMode === "instant" 
                   ? "bg-rose-600 text-white border-none hover:bg-rose-500" 
                   : "bg-[#D4A97A]/10 text-[#D4A97A] border border-[#D4A97A]/20 hover:bg-[#D4A97A]/15"
                 }
@@ -242,7 +247,7 @@ export default function CancelOrderModal({
             >
               {loading
                 ? "Processing..."
-                : mode === "instant"
+                : computedMode === "instant"
                 ? "Cancel Order"
                 : "Submit Request"}
             </button>

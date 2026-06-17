@@ -17,59 +17,44 @@ export const adminOrderKeys = {
   detail: (id: string) => [...adminOrderKeys.all, "detail", id] as const,
 };
 
+/**
+ * Hook: Fetch all administrative pipeline orders
+ */
 export function useAdminOrders() {
-  return useQuery<OrderAdmin[]>({
+  const queryClient = useQueryClient();
+
+  const queryResult = useQuery<OrderAdmin[]>({
     queryKey: adminOrderKeys.list(),
     queryFn: async () => {
       const data = await getAdminOrders();
       return data ?? [];
     },
-
-    /**
-     * FIX 1: gcTime Infinity (was 15 min)
-     *
-     * staleTime: Infinity means "never consider this data stale", so React
-     * Query won't proactively refetch it. But if gcTime is 15 min and the
-     * admin navigates away for longer, the cache entry gets garbage-collected.
-     * When they return, the cache is empty → isLoading fires → skeleton flash.
-     *
-     * Setting gcTime: Infinity keeps the cache alive for the entire session,
-     * matching the staleTime intent. The realtime subscription handles
-     * freshness, so we don't need TTL-based eviction.
-     */
     staleTime: Infinity,
     gcTime: Infinity,
-
-    /**
-     * FIX 2: refetchOnWindowFocus / refetchOnReconnect → false
-     *
-     * With staleTime: Infinity these were already no-ops (data is never stale,
-     * so focus/reconnect refetches are skipped). Being explicit prevents a
-     * future staleTime change from accidentally re-enabling them and fighting
-     * the realtime subscription.
-     */
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
-
-    /**
-     * FIX 3: placeholderData keeps previous data during any refetch.
-     *
-     * Without this, when invalidateOrders() fires from the realtime channel,
-     * React Query briefly sets orders → undefined while it fetches fresh data.
-     * That undefined blows past the `orders.length === 0` guard and flashes
-     * the skeleton or the empty state. With placeholderData: (prev) => prev,
-     * the old array stays in place; only isFetching goes true, never isLoading.
-     */
     placeholderData: (prev) => prev,
-
     retry: 2,
   });
+
+  const mutate = useCallback(() => {
+    return queryClient.invalidateQueries({ queryKey: adminOrderKeys.list() });
+  }, [queryClient]);
+
+  return {
+    ...queryResult,
+    mutate,
+  };
 }
 
+/**
+ * Hook: Fetch isolated admin data parameters by Order ID
+ */
 export function useAdminOrder(orderId?: string) {
+  const queryClient = useQueryClient();
   const safeOrderId = orderId ?? "";
 
-  return useQuery<OrderAdmin>({
+  const queryResult = useQuery<OrderAdmin>({
     queryKey: safeOrderId
       ? adminOrderKeys.detail(safeOrderId)
       : ["admin-orders", "detail", "disabled"],
@@ -86,8 +71,22 @@ export function useAdminOrder(orderId?: string) {
     refetchOnReconnect: false,
     retry: 2,
   });
+
+  const mutate = useCallback(() => {
+    if (safeOrderId) {
+      return queryClient.invalidateQueries({ queryKey: adminOrderKeys.detail(safeOrderId) });
+    }
+  }, [queryClient, safeOrderId]);
+
+  return {
+    ...queryResult,
+    mutate,
+  };
 }
 
+/**
+ * Hook: Core administration pipeline mutators and cache sync handlers
+ */
 export function useAdminOrderActions() {
   const queryClient = useQueryClient();
 
@@ -100,8 +99,53 @@ export function useAdminOrderActions() {
 
       if (error) throw error;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: adminOrderKeys.all });
+    
+    // UX ENHANCEMENT: OPTIMISTIC CACHE WRITE
+    onMutate: async ({ orderId, status }) => {
+      // Cancel outgoing refetches so they don't overwrite our optimistic update
+      await queryClient.cancelQueries({ queryKey: adminOrderKeys.all });
+
+      // Snapshot the previous values from cache
+      const previousOrders = queryClient.getQueryData<OrderAdmin[]>(adminOrderKeys.list());
+      const previousDetail = queryClient.getQueryData<OrderAdmin>(adminOrderKeys.detail(orderId));
+
+      // Optimistically update the list array cache
+      if (previousOrders) {
+        queryClient.setQueryData<OrderAdmin[]>(
+          adminOrderKeys.list(),
+          previousOrders.map((order) =>
+            order.id === orderId ? { ...order, order_status: status } : order
+          )
+        );
+      }
+
+      // Optimistically update the unique detail item cache
+      if (previousDetail) {
+        queryClient.setQueryData<OrderAdmin>(
+          adminOrderKeys.detail(orderId),
+          { ...previousDetail, order_status: status }
+        );
+      }
+
+      // Return context containing snapshot data to utilize during fallback rollbacks
+      return { previousOrders, previousDetail, orderId };
+    },
+
+    onError: (err, variables, context) => {
+      console.error("Mutation failed, rolling back changes...", err);
+      // Revert cache to exact snapshot values captured in onMutate
+      if (context?.previousOrders) {
+        queryClient.setQueryData(adminOrderKeys.list(), context.previousOrders);
+      }
+      if (context?.previousDetail && context.orderId) {
+        queryClient.setQueryData(adminOrderKeys.detail(context.orderId), context.previousDetail);
+      }
+    },
+
+    onSettled: (data, error, variables) => {
+      // Silently re-sync with the backend database records in the background
+      queryClient.invalidateQueries({ queryKey: adminOrderKeys.list() });
+      queryClient.invalidateQueries({ queryKey: adminOrderKeys.detail(variables.orderId) });
     },
   });
 

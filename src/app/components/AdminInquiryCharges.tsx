@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { X, Loader2, Tag, Info, Lock } from "lucide-react";
 import { SupabaseClient } from "@supabase/supabase-js";
-import { supabase } from "@/lib/supabase"; // Corrected ESM import
+import { supabase } from "@/lib/supabase";
 import { useAdminInquiryCharges } from "@/hooks/useAdminInquiryCharges";
 
 interface InquiryChargesModalProps {
@@ -13,8 +13,8 @@ interface InquiryChargesModalProps {
   supabaseClient?: SupabaseClient;
   currentAdminId?: string;
   adminId?: string;
-  status?: "accepted" | "pending" | "rejected" | "none" | string;
-  readOnly?: boolean; // Fixed: Added this property to resolve the TypeScript interface compilation error
+  status?: string;
+  readOnly?: boolean;
 }
 
 type ChargeRow = {
@@ -33,7 +33,7 @@ export default function InquiryChargesModal({
   currentAdminId,
   adminId,
   status = "none",
-  readOnly = false, // Fixed: Destructured readOnly property with a fallback default state
+  readOnly = false,
 }: InquiryChargesModalProps) {
   const activeAdminId = adminId || currentAdminId || "";
   const activeSupabase = supabaseClient || supabase;
@@ -53,8 +53,15 @@ export default function InquiryChargesModal({
   const [formError, setFormError] = useState<string | null>(null);
   const initializedRef = useRef(false);
 
-  // Read-only logic: Triggers true if status is accepted OR explicitly dictated by parent component prop
-  const isReadOnly = status === "accepted" || readOnly;
+  // FIXED: Read-only logic explicitly locks down if status is 'accepted' OR if it isn't one of the allowed editable stages
+  const isReadOnly = useMemo(() => {
+    if (readOnly) return true;
+    if (status === "accepted") return true;
+    
+    const allowedEditableStatuses = ["under_review", "pending", "rejected", "none"];
+    return !allowedEditableStatuses.includes(status);
+  }, [status, readOnly]);
+
   const isBusy = isLoading || isSaving || isReadOnly;
 
   /* ── RESET INITIALIZATION REF WHEN MODAL CLOSES OR ID CHANGES ── */
@@ -213,7 +220,7 @@ export default function InquiryChargesModal({
         {isReadOnly && (
           <div className="mx-6 mt-4 p-3 bg-emerald-950/20 border border-emerald-500/20 rounded-xl flex items-center gap-2.5 text-emerald-400 text-xs">
             <Lock className="w-3.5 h-3.5 shrink-0" />
-            <span>This ledger is locked because the inquiry charges have been finalized and accepted.</span>
+            <span>This ledger is locked because adjustments can only be modified during custom planning phases.</span>
           </div>
         )}
 
@@ -286,6 +293,7 @@ export default function InquiryChargesModal({
                   {/* Remove CTA Row completely hidden if view only */}
                   {!isReadOnly && (
                     <button 
+                      type="button"
                       onClick={() => handleDeleteLocal(i)} 
                       className="px-3 rounded-lg border border-red-500/10 text-[10px] text-red-400 hover:bg-red-500/5 transition-colors"
                     >
@@ -301,17 +309,19 @@ export default function InquiryChargesModal({
         {/* FOOTER CONTROLLER LAYER */}
         <div className="border-t border-white/5 bg-black/40 px-6 py-4">
           {isReadOnly ? (
-            /* CLOSE DISMISS BUTTON FOR ACCEPTED STATUS / COMPLIANT LOCK STATES */
+            /* CLOSE DISMISS BUTTON FOR COMPLIANT LOCK STATES */
             <button 
+              type="button"
               onClick={onClose}
               className="h-10 w-full rounded-xl border border-white/10 text-[10px] font-black uppercase text-white/60 hover:bg-white/5 transition-colors tracking-wider"
             >
               Close Ledger
             </button>
           ) : (
-            /* WRITE ACTION ROW FOR PENDING / NONE / REJECTED STATUSES */
+            /* WRITE ACTION ROW FOR EDITABLE PIPELINE STATES */
             <div className="flex gap-2">
               <button 
+                type="button"
                 onClick={handleAddChargeLine} 
                 disabled={isBusy}
                 className="h-10 flex-1 rounded-xl border border-white/10 text-[10px] font-black uppercase text-white/50 hover:bg-white/5 disabled:opacity-50 transition-colors"
@@ -319,6 +329,7 @@ export default function InquiryChargesModal({
                 + Add Adjustment
               </button>
               <button 
+                type="button"
                 onClick={handleFinalizeCharges} 
                 disabled={isBusy} 
                 className="h-10 flex-[2] rounded-xl bg-[#D4A97A] text-[10px] font-black uppercase text-black hover:bg-[#c49869] disabled:opacity-50 transition-colors"

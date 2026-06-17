@@ -59,8 +59,8 @@ type Props = {
 };
 
 export default function AdminOrderCard({ order: propOrder, conversation, adminId, onUpdateStatus }: Props) {
-  // Local state to allow instant UI feedback from Realtime
   const [order, setOrder] = useState<Order>(propOrder);
+  const [liveUnreadCount, setLiveUnreadCount] = useState(conversation?.admin_unread_count ?? 0);
   
   const [openDetail, setOpenDetail] = useState(false);
   const [openChat, setOpenChat] = useState(false);
@@ -68,58 +68,88 @@ export default function AdminOrderCard({ order: propOrder, conversation, adminId
   const [openFinalizeCharges, setOpenFinalizeCharges] = useState(false);
   const [openCancel, setOpenCancel] = useState(false);
 
-  // Sync local state when React Query refetches
+  // Synchronize state if properties shift from parent re-renders
   useEffect(() => {
     setOrder(propOrder);
   }, [propOrder]);
 
-  // ── LIVE NOTIFICATION & ORDER STATE ──
-  // Fix: Use admin_unread_count for the Admin card
-  const [liveUnreadCount, setLiveUnreadCount] = useState(conversation?.admin_unread_count ?? 0);
+  // Handle incoming conversation list data synchronization safely
+  useEffect(() => {
+    if (conversation) {
+      setLiveUnreadCount(conversation.admin_unread_count ?? 0);
+    }
+  }, [conversation?.admin_unread_count]);
 
+  /* ── REALTIME CONVERSATION & ORDER CHANNELS ── */
   useEffect(() => {
     const channels: RealtimeChannel[] = [];
 
-    // Channel for Conversation Updates (Unread counts)
     if (conversation?.id) {
       const convChannel = supabase
         .channel(`unread-count-admin-${conversation.id}`)
         .on(
           "postgres_changes",
-          { event: "UPDATE", schema: "public", table: "conversations", filter: `id=eq.${conversation.id}` },
+          { 
+            event: "*", 
+            schema: "public", 
+            table: "conversations", 
+            filter: `id=eq.${conversation.id}` 
+          },
           (payload) => {
-            const newCount = payload.new.admin_unread_count;
-            if (typeof newCount === "number") setLiveUnreadCount(newCount);
+            // Added explicit type assertion to payload.new to resolve your compiler error cleanly
+            const newConv = payload.new as Partial<Conversation> | null;
+            const newCount = newConv?.admin_unread_count;
+            if (typeof newCount === "number") {
+              setLiveUnreadCount(newCount);
+            }
           }
         )
         .subscribe();
       channels.push(convChannel);
     }
 
-    // Channel for Order Row Updates (Status/Pricing)
-    const orderChannel = supabase
-      .channel(`order-live-admin-${order.id}`)
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "orders", filter: `id=eq.${order.id}` },
-        (payload) => {
-          setOrder((prev) => ({ ...prev, ...payload.new }));
-        }
-      )
-      .subscribe();
-    channels.push(orderChannel);
+    if (order?.id) {
+      const orderChannel = supabase
+        .channel(`order-live-admin-${order.id}`)
+        .on(
+          "postgres_changes",
+          { 
+            event: "UPDATE", 
+            schema: "public", 
+            table: "orders", 
+            filter: `id=eq.${order.id}` 
+          },
+          (payload) => {
+            if (payload.new) {
+              // Casted payload down to type safety matching your operational entity shape
+              const updatedOrder = payload.new as Partial<Order>;
+              setOrder((prev) => ({ ...prev, ...updatedOrder }));
+            }
+          }
+        )
+        .subscribe();
+      channels.push(orderChannel);
+    }
 
     return () => {
       channels.forEach(ch => supabase.removeChannel(ch));
     };
   }, [conversation?.id, order.id]);
 
-  // ── ACTION HANDLERS ──
-  const handleOpenChat = () => {
-    setLiveUnreadCount(0); // Mark as read locally for instant feedback
+  /* ── ACTIONS ── */
+  const handleOpenChat = async () => {
+    setLiveUnreadCount(0);
     setOpenChat(true);
+
+    if (conversation?.id) {
+      await supabase
+        .from("conversations")
+        .update({ admin_unread_count: 0 })
+        .eq("id", conversation.id);
+    }
   };
 
+  /* ── DATA INTEGRATION HOOKS ── */
   const { charges = [] as OrderCharge[] } = useOrderCharges(order.id);
   const { data: payments, isLoading: paymentsLoading } = usePaymentsQuery(order.id);
   const { approveCancel, rejectCancel, isLoading: isProcessingCancel } = useCancelReview();
@@ -185,6 +215,12 @@ export default function AdminOrderCard({ order: propOrder, conversation, adminId
     return "Pending Review";
   };
 
+  const isCalculatedViewMode = useMemo(() => {
+    if (order.order_status !== "accepted") return "view";
+    if (order.charge_status === "accepted") return "view";
+    return "edit"; 
+  }, [order.order_status, order.charge_status]);
+
   return (
     <>
       <div className="
@@ -200,6 +236,7 @@ export default function AdminOrderCard({ order: propOrder, conversation, adminId
       ">
         <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-[#D4A97A]/80 to-transparent flex-shrink-0" />
 
+        {/* HEADER */}
         <div className="flex-shrink-0 px-5 pt-4 pb-2">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
@@ -224,11 +261,12 @@ export default function AdminOrderCard({ order: propOrder, conversation, adminId
           </div>
         </div>
 
-        {/* ── WORKFLOW PROGRESS BAR ── */}
+        {/* TIMELINE PROGRESS */}
         <div className="px-5 mb-4">
           <AdminProgressBar status={order.order_status} />
         </div>
 
+        {/* METRICS SPECIFICATION PANEL */}
         <div className="px-5 mb-2.5 flex-shrink-0">
           <div className="flex items-center gap-2 bg-white/[0.02] border border-[#2A1F14] rounded-xl px-3 py-1.5">
             <span className="text-[11px] font-black text-[#D4A97A] bg-[#D4A97A]/10 px-1.5 py-0.5 rounded-md">
@@ -240,6 +278,7 @@ export default function AdminOrderCard({ order: propOrder, conversation, adminId
           </div>
         </div>
 
+        {/* METRICS FINANCIAL PANEL */}
         <div className="flex-shrink-0 mx-5 mb-2.5">
           <div className="grid grid-cols-3 divide-x divide-[#38291A] rounded-t-xl border-t border-x border-[#38291A] bg-[#070503] overflow-hidden shadow-inner">
             <FinStat label="Total" value={`₱${finalTotal.toLocaleString()}`} color="text-[#E8C98A]" />
@@ -265,15 +304,17 @@ export default function AdminOrderCard({ order: propOrder, conversation, adminId
           </div>
         </div>
 
+        {/* CONTEXT MESSAGE SYSTEM */}
         <div className="flex-shrink-0 mx-5 mb-2.5">
           <div className="flex items-start gap-2.5 rounded-xl bg-[#1B120A] border border-[#38291A] px-3.5 py-2">
-            <div className={`mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[#D4A97A] shadow-[0_0_8px_#D4A97A] ${order.order_status === 'accepted' && totalPaid > 0 ? 'animate-pulse' : ''}`} />
+            <div className={`mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[#D4A97A] shadow-[0_0_8px_#D4A97A] ${(order.order_status === 'accepted' && order.charge_status === 'pending') || (order.order_status === 'accepted' && totalPaid > 0) ? 'animate-pulse' : ''}`} />
             <p className="text-[11px] leading-relaxed text-white/70 italic">
               {orderMessage}
             </p>
           </div>
         </div>
 
+        {/* LOGISTICS TRACK DATA */}
         <div className="flex-shrink-0 mx-5 mb-3.5 space-y-1.5">
           <InfoRow label="Customer" value={customerName} />
           <InfoRow label="Contact" value={phoneNumber} />
@@ -284,6 +325,7 @@ export default function AdminOrderCard({ order: propOrder, conversation, adminId
           />
         </div>
 
+        {/* BACKEND ACTIONS HUB */}
         <div className="mt-auto border-t border-[#2A1F14] bg-[#080604] px-5 py-3.5 flex flex-col gap-3">
           <div className="flex items-center justify-between border-b border-[#1C150E] pb-2">
             <div className="flex flex-col gap-0.5">
@@ -295,6 +337,7 @@ export default function AdminOrderCard({ order: propOrder, conversation, adminId
               </span>
             </div>
             <button
+              type="button"
               onClick={() => setOpenViewCharges(true)}
               className="text-[10px] font-black uppercase tracking-wider text-[#D4A97A] hover:text-[#E5BC8E] transition-colors"
             >
@@ -304,6 +347,7 @@ export default function AdminOrderCard({ order: propOrder, conversation, adminId
 
           <div className="grid grid-cols-2 gap-2 w-full">
             <button
+              type="button"
               onClick={() => setOpenDetail(true)}
               className="h-9 rounded-xl border border-[#38291A] bg-white/[0.04] text-[10px] font-black uppercase tracking-[0.1em] text-white/70 hover:bg-white/[0.08] hover:text-white/90 hover:border-[#4E3A25] transition-all duration-200"
             >
@@ -311,6 +355,7 @@ export default function AdminOrderCard({ order: propOrder, conversation, adminId
             </button>
 
             <button
+              type="button"
               onClick={handleOpenChat}
               className="relative h-9 rounded-xl bg-[#C49A6C] hover:bg-[#D4A97A] active:scale-[0.97] text-[10px] font-black uppercase tracking-[0.1em] text-[#0E0A06] shadow-[0_4px_12px_rgba(196,154,108,0.2)] transition-all duration-200"
             >
@@ -336,6 +381,7 @@ export default function AdminOrderCard({ order: propOrder, conversation, adminId
           {hasCancelRequest && (
             <div className="pt-1 border-t border-[#1C150E] flex items-center justify-center">
               <button
+                type="button"
                 onClick={() => setOpenCancel(true)}
                 className="text-[9px] font-black uppercase tracking-[0.18em] text-rose-400 hover:text-rose-300 underline underline-offset-4 transition-colors duration-200"
               >
@@ -346,31 +392,36 @@ export default function AdminOrderCard({ order: propOrder, conversation, adminId
         </div>
       </div>
 
-      {/* ── MODALS ── */}
+      {/* ── MODALS CONTAINER ── */}
       {openDetail && (
         <OrderFullDetailModal open={openDetail} onClose={() => setOpenDetail(false)} order={order} />
       )}
 
-      <ChatModal open={openChat} onClose={() => setOpenChat(false)} order={order} currentUserId={adminId} senderType="admin" />
+      {openChat && (
+        <ChatModal open={openChat} onClose={() => setOpenChat(false)} order={order} currentUserId={adminId} senderType="admin" />
+      )}
 
       <ChargesModal
         open={openViewCharges}
         onClose={() => setOpenViewCharges(false)}
         orderId={order.id}
         adminId={adminId}
+        orderStatus={order.order_status}
         chargeStatus={order.charge_status}
         baseQuoteTotal={baseTotal}
+        mode={isCalculatedViewMode}
       />
 
-      {/* MODAL MOUNTED ONLY IF STATUS IS NOT ACCEPTED */}
-      {openFinalizeCharges && order.charge_status !== "accepted" && (
+      {openFinalizeCharges && isCalculatedViewMode === "edit" && (
         <ChargesModal
           open={openFinalizeCharges}
           onClose={() => setOpenFinalizeCharges(false)}
           orderId={order.id}
           adminId={adminId}
+          orderStatus={order.order_status}
           chargeStatus={order.charge_status}
           baseQuoteTotal={baseTotal}
+          mode="edit"
         />
       )}
 
@@ -394,17 +445,8 @@ export default function AdminOrderCard({ order: propOrder, conversation, adminId
   );
 }
 
-/* ── HELPER COMPONENTS ── */
-
 function AdminProgressBar({ status }: { status: OrderStatus }) {
-  const stages: OrderStatus[] = [
-    "requested",
-    "accepted",
-    "in_production",
-    "ready_for_shipment",
-    "completed",
-  ];
-
+  const stages: OrderStatus[] = ["requested", "accepted", "in_production", "ready_for_shipment", "completed"];
   const currentStatus = status === "ready_for_pickup" ? "ready_for_shipment" : status;
   const currentIndex = stages.indexOf(currentStatus);
 
@@ -412,19 +454,9 @@ function AdminProgressBar({ status }: { status: OrderStatus }) {
     <div className="flex items-center justify-between w-full px-1 pt-2">
       {stages.map((stage, i) => (
         <div key={stage} className="flex items-center flex-1 last:flex-none">
-          <div
-            className={`h-1.5 w-1.5 rounded-full transition-all duration-500 ${
-              i <= currentIndex
-                ? "bg-[#D4A97A] shadow-[0_0_8px_#D4A97A]"
-                : "bg-white/10"
-            }`}
-          />
+          <div className={`h-1.5 w-1.5 rounded-full transition-all duration-500 ${i <= currentIndex ? "bg-[#D4A97A] shadow-[0_0_8px_#D4A97A]" : "bg-white/10"}`} />
           {i < stages.length - 1 && (
-            <div
-              className={`h-[1px] flex-1 mx-1 ${
-                i < currentIndex ? "bg-[#D4A97A]/50" : "bg-white/5"
-              }`}
-            />
+            <div className={`h-[1px] flex-1 mx-1 ${i < currentIndex ? "bg-[#D4A97A]/50" : "bg-white/5"}`} />
           )}
         </div>
       ))}
@@ -435,9 +467,7 @@ function AdminProgressBar({ status }: { status: OrderStatus }) {
 function FinStat({ label, value, color = "text-white" }: { label: string; value: string; color?: string }) {
   return (
     <div className="flex flex-col items-center justify-center py-2 px-1">
-      <p className="text-[8px] font-black uppercase tracking-[0.18em] text-white/30 mb-0.5">
-        {label}
-      </p>
+      <p className="text-[8px] font-black uppercase tracking-[0.18em] text-white/30 mb-0.5">{label}</p>
       <p className={`text-[12px] font-bold tracking-wide tabular-nums ${color}`}>{value}</p>
     </div>
   );
@@ -446,12 +476,8 @@ function FinStat({ label, value, color = "text-white" }: { label: string; value:
 function InfoRow({ label, value, truncate = false }: { label: string; value: string; truncate?: boolean }) {
   return (
     <div className="flex items-baseline justify-between gap-4">
-      <span className="flex-shrink-0 text-[9px] font-black uppercase tracking-[0.16em] text-white/35">
-        {label}
-      </span>
-      <span className={`text-[11px] font-medium text-white/80 ${truncate ? "max-w-[220px] truncate pl-4" : ""}`}>
-        {value}
-      </span>
+      <span className="flex-shrink-0 text-[9px] font-black uppercase tracking-[0.16em] text-white/35">{label}</span>
+      <span className={`text-[11px] font-medium text-white/80 ${truncate ? "max-w-[220px] truncate pl-4" : ""}`}>{value}</span>
     </div>
   );
 }

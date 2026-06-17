@@ -110,6 +110,9 @@ export default function OrderFullDetailModal({
     [items]
   );
 
+  // Early return if the modal is closed to prevent unnecessary DOM insertions via portal
+  if (!open) return null;
+
   if (!order || !order.id) {
     return createPortal(
       <div
@@ -156,6 +159,7 @@ export default function OrderFullDetailModal({
           translate-y-0 scale-100 opacity-100
         `}
         style={{ transitionTimingFunction: "cubic-bezier(0.16, 1, 0.3, 1)" }}
+        onClick={(e) => e.stopPropagation()} // Hardens the UI panel against backdrop click bubbles
       >
         <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-[#D4A97A]/50 to-transparent flex-shrink-0" />
 

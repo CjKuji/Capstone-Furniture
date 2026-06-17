@@ -19,11 +19,14 @@ import { supabase } from "@/lib/supabase";
 import { useUser } from "@/hooks/useUser";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import { useCart } from "@/hooks/useCart";
+
+// Note: If these custom hooks use SWR or TanStack/React Query under the hood,
+// make sure you export their "mutate" or "refetch" handlers to sync them manually.
 import { useMyOrders } from "@/hooks/useUserOrders"; 
 import { useUserInquiries } from "@/hooks/useUserInquiry";
 
 const NAV_ITEMS = [
-  { label: "Home",     route: "/" },
+  { label: "Home",    route: "/" },
   { label: "Designs",  route: "/catalog" },
   { label: "About",    route: "/about" },
 ];
@@ -42,12 +45,17 @@ export default function Navbar() {
   const { authUser, role, initialized } = useUser();
   const { count: cartCount } = useCart();
   
-  // FIXED ts(2554): Reverted hook parameters to match your original hook signatures
-  const { data: orders } = useMyOrders();
-  const orderCount = orders?.length ?? 0;
+  const onCart    = pathname === "/cart";
+  const onOrders  = pathname === "/orders";
+  const onInquiry = pathname === "/inquiry";
 
-  const { data: inquiries } = useUserInquiries();
-  const inquiryCount = inquiries?.length ?? 0;
+  // Retain data mutations structures if your custom hooks support re-validation arguments
+  const { data: orders, mutate: mutateOrders } = useMyOrders() as any;
+  const { data: inquiries, mutate: mutateInquiries } = useUserInquiries() as any;
+
+  // Read lengths safely based on authentication status
+  const orderCount = authUser ? (orders?.length ?? 0) : 0;
+  const inquiryCount = authUser ? (inquiries?.length ?? 0) : 0;
 
   const [searchOpen,   setSearchOpen]   = useState(false);
   const [menuOpen,     setMenuOpen]     = useState(false);
@@ -63,6 +71,44 @@ export default function Navbar() {
     setMenuOpen(false);
     setDropdownOpen(false);
   }
+
+  /* ── FIX: REALTIME NETWORK CACHE REVALIDATION LOUPE ── */
+  useEffect(() => {
+    if (!authUser?.id) return;
+
+    // Listen to changes on the orders table for this client user
+    const ordersChannel = supabase
+      .channel(`navbar-orders-${authUser.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "orders", filter: `customer_id=eq.${authUser.id}` },
+        () => {
+          if (typeof mutateOrders === "function") {
+            mutateOrders(); // Forces hook cache to instantly clear and re-fetch from database
+          }
+        }
+      )
+      .subscribe();
+
+    // Listen to changes on your blueprint inquiries table
+    const inquiriesChannel = supabase
+      .channel(`navbar-inquiries-${authUser.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "inquiries", filter: `user_id=eq.${authUser.id}` },
+        () => {
+          if (typeof mutateInquiries === "function") {
+            mutateInquiries();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(ordersChannel);
+      supabase.removeChannel(inquiriesChannel);
+    };
+  }, [authUser?.id, mutateOrders, mutateInquiries]);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -95,14 +141,10 @@ export default function Navbar() {
     ? authUser.email.slice(0, 2).toUpperCase()
     : "?";
 
-  const onCart    = pathname === "/cart";
-  const onOrders  = pathname === "/orders";
-  const onInquiry = pathname === "/inquiry";
-
   const dropdownItems: DropdownItem[] = [
     { label: "Profile",          icon: <UserCircle2 className="w-4 h-4" />,    route: "/profile" },
     { label: "My Cart",          icon: <ShoppingCart className="w-4 h-4" />,   route: "/cart",    badge: cartCount > 0 ? cartCount : undefined },
-    { label: "Custom Inquiries", icon: <MessageSquare className="w-4 h-4" />,   route: "/inquiry", badge: inquiryCount > 0 ? inquiryCount : undefined },
+    { label: "Custom Inquiries", icon: <MessageSquare className="w-4 h-4" />,  route: "/inquiry", badge: inquiryCount > 0 ? inquiryCount : undefined },
     { label: "My Orders",        icon: <ShoppingBag className="w-4 h-4" />,    route: "/orders",  badge: orderCount > 0 ? orderCount : undefined },
   ];
 
@@ -114,7 +156,6 @@ export default function Navbar() {
     });
   }
 
-  // FIXED ts(17002): Extracted inline rendering mapping blocks to ensure parsing stays perfect
   const renderNavItems = (isMobile = false) => {
     return NAV_ITEMS.map(({ label, route }) => {
       const active = pathname === route;

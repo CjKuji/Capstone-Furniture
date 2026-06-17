@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, UseQueryOptions } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { getMyOrders, getMyOrderById } from "@/services/orders/fetchOrderService";
 import type { Order } from "@/types/order";
@@ -26,30 +26,14 @@ export const userOrderKeys = {
 
 /**
  * Hook: Fetch all customer orders
- *
- * KEY FIXES vs original:
- *
- * 1. gcTime: Infinity (was 15 min)
- *    staleTime: Infinity means data is never considered stale, so React Query
- *    won't refetch in the background. BUT if gcTime is shorter than the time
- *    between visits, the cache entry gets garbage-collected while the user is
- *    on another page. When they return, the cache is empty and isLoading fires
- *    again — causing the skeleton flash. Setting gcTime to Infinity keeps the
- *    cache alive for the entire session, matching the staleTime intent.
- *
- * 2. refetchOnWindowFocus: false, refetchOnReconnect: false
- *    With staleTime: Infinity these would be no-ops anyway (data is never
- *    stale so focus/reconnect refetches are skipped), but being explicit
- *    prevents any future staleTime change from accidentally re-enabling them.
- *
- * 3. placeholderData: (prev) => prev
- *    During any transition where React Query does fetch (e.g. manual refetch
- *    via refetch()), this keeps the previous data visible instead of wiping
- *    it to undefined. isLoading stays false; only isFetching goes true.
- *    This is the "keep showing old data while refreshing" pattern.
+ * Includes exposure of fallback parameters to support layout revalidation
  */
-export function useMyOrders() {
-  return useQuery<OrderWithItems[], Error>({
+export function useMyOrders(
+  options?: Partial<UseQueryOptions<OrderWithItems[], Error>>
+) {
+  const queryClient = useQueryClient();
+
+  const queryResult = useQuery<OrderWithItems[], Error>({
     queryKey: userOrderKeys.lists(),
     queryFn: async () => {
       const data = await getMyOrders();
@@ -61,19 +45,33 @@ export function useMyOrders() {
     refetchOnReconnect: false,
     placeholderData: (prev) => prev,
     retry: 2,
+    ...options,
   });
+
+  // Inject a standard mutate helper for easy alignment with layout hooks (like SWR fallback syntax)
+  const mutate = useCallback(() => {
+    return queryClient.invalidateQueries({ queryKey: userOrderKeys.lists() });
+  }, [queryClient]);
+
+  return {
+    ...queryResult,
+    mutate,
+  };
 }
 
 /**
- * Hook: Fetch single order by ID (with placeholder protection)
+ * Hook: Fetch single order by ID
  */
 export function useMyOrderById(orderId?: string) {
-  return useQuery<OrderWithItems, Error>({
-    queryKey: orderId ? userOrderKeys.detail(orderId) : ["user-orders", "disabled"],
-    enabled: !!orderId,
+  const queryClient = useQueryClient();
+  const safeOrderId = orderId ?? "";
+
+  const queryResult = useQuery<OrderWithItems, Error>({
+    queryKey: safeOrderId ? userOrderKeys.detail(safeOrderId) : ["user-orders", "disabled"],
+    enabled: !!safeOrderId,
     queryFn: async () => {
-      if (!orderId) throw new Error("Order ID required");
-      const data = await getMyOrderById(orderId);
+      if (!safeOrderId) throw new Error("Order ID required");
+      const data = await getMyOrderById(safeOrderId);
       return transformOrder(data);
     },
     placeholderData: (previousData) => previousData,
@@ -83,6 +81,17 @@ export function useMyOrderById(orderId?: string) {
     refetchOnReconnect: false,
     retry: 2,
   });
+
+  const mutate = useCallback(() => {
+    if (safeOrderId) {
+      return queryClient.invalidateQueries({ queryKey: userOrderKeys.detail(safeOrderId) });
+    }
+  }, [queryClient, safeOrderId]);
+
+  return {
+    ...queryResult,
+    mutate,
+  };
 }
 
 /**

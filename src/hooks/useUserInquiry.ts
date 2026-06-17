@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useMutation, UseQueryOptions } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { inquiryService, CreateInquiryPayload, CustomInquiryStatus } from "@/services/inquiry/inquiryService";
 
@@ -78,11 +78,14 @@ export const inquiryKeys = {
 
 /**
  * 1. FETCH USER INQUIRIES HOOK (FIXED SUBSCRIPTION FLOW)
+ * Now accepts optional TanStack Query Options configuration object.
  */
-export const useUserInquiries = () => {
+export const useUserInquiries = (
+  options?: Partial<UseQueryOptions<InquiryData[], Error>>
+) => {
   const queryClient = useQueryClient();
 
-  const queryResult = useQuery<InquiryData[]>({
+  const queryResult = useQuery<InquiryData[], Error>({
     queryKey: inquiryKeys.lists(),
     queryFn: async () => {
       const rawData = await inquiryService.fetchUserInquiries();
@@ -101,6 +104,7 @@ export const useUserInquiries = () => {
       })) as InquiryData[];
     },
     staleTime: 2 * 60 * 1000,
+    ...options, // Overrides baseline defaults with parameters sent via layout components
   });
 
   useEffect(() => {

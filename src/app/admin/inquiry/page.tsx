@@ -1,18 +1,14 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
-import { Loader2, AlertTriangle, RefreshCw, ShieldCheck, Eye } from "lucide-react";
-import Navbar from "@/app/components/Navbar"; 
+import React, { useMemo } from "react";
+import { Loader2, AlertTriangle, RefreshCw, ShieldCheck, Eye, Layers, FileText, CheckCircle2 } from "lucide-react";
 import PageTransition from "@/app/components/PageTransition";
 import Reveal from "@/app/components/Reveal";
 import AdminInquiryCard from "@/app/components/AdminInquiryCard"; 
 import { useAdminInquiries } from "@/hooks/useAdminInquiry";
-import { useUser } from "@/hooks/useUser"; // Imported your custom pub/sub user auth hook
-import { CustomInquiryStatus } from "@/types/inquiry";
+import { useUser } from "@/hooks/useUser"; 
 
 export default function AdminInquiriesPage() {
-  const [statusFilter, setStatusFilter] = useState<CustomInquiryStatus | "all">("all");
-  
   /**
    * REFINED: Dynamically extract the live database profile context.
    * This completely avoids hardcoded placeholders and secures your RLS / tracking audits
@@ -21,30 +17,21 @@ export default function AdminInquiriesPage() {
   const { user } = useUser();
   const currentAdminId = user?.id ?? "";
 
-  // 1. Fetch live administrative inquiries via your isolated backend hook
+  // 1. Fetch live administrative inquiries across ALL active statuses (filter removed)
   const { data: inquiries, isLoading, error, refetch } = useAdminInquiries({
-    status: statusFilter === "all" ? undefined : statusFilter,
     limit: 50,
   });
 
-  // 2. Synthesize pipeline summary metrics across the current snapshot data array
-  const totalNewRequests = useMemo(() => inquiries?.filter(i => i.status === "requested").length || 0, [inquiries]);
-  const totalUnderReview = useMemo(() => inquiries?.filter(i => i.status === "under_review").length || 0, [inquiries]);
-  const totalActionRequired = useMemo(() => inquiries?.filter(i => i.status === "awaiting_payment" || i.status === "verifying_payment").length || 0, [inquiries]);
+ 
 
   return (
     <PageTransition>
       <div className="relative bg-[#0F0A06] min-h-screen font-sans text-white antialiased selection:bg-[#D4A97A]/30">
         
-        {/* TOP COMPONENT STICKY BAR */}
-        <div className="fixed top-0 left-0 w-full z-50">
-          <Navbar />
-        </div>
-
-        <main className="pt-28 pb-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-8">
+        <main className="pt-16 pb-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-8">
           
           {/* 1. EXECUTIVE HEADER BLOCK */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-white/5">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-white/5">
             <Reveal>
               <div className="space-y-1">
                 <div className="flex items-center gap-1.5 text-[#A68056] uppercase text-[10px] font-black tracking-[0.2em]">
@@ -59,49 +46,21 @@ export default function AdminInquiriesPage() {
               </div>
             </Reveal>
 
-            {/* QUICK CORNER PIPELINE FILTER SELECT DROP */}
-            <div className="flex items-center gap-2 bg-[#140F0A] border border-white/10 px-4 py-2.5 rounded-full shadow-lg max-w-xs w-full sm:w-fit">
-              <span className="text-[10px] font-black tracking-wider text-white/40 uppercase pl-1 shrink-0">Filter:</span>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as CustomInquiryStatus | "all")}
-                className="bg-transparent text-xs font-bold text-[#E8C98A] uppercase tracking-wide focus:outline-none cursor-pointer w-full pr-4"
+            {/* LIVE STREAM RECONNECT BUTTON */}
+            {!isLoading && !error && inquiries && inquiries.length > 0 && (
+              <button
+                type="button"
+                onClick={() => refetch()}
+                className="inline-flex items-center gap-2 self-start md:self-auto text-[10px] font-black uppercase tracking-widest text-[#D4A97A] hover:text-white bg-[#D4A97A]/5 hover:bg-[#D4A97A]/10 border border-[#D4A97A]/20 px-4 h-9 rounded-xl transition-all"
               >
-                <option value="all" className="bg-[#140F0A] text-white">All Active Pipelines</option>
-                <option value="requested" className="bg-[#140F0A] text-white">New Requests</option>
-                <option value="under_review" className="bg-[#140F0A] text-white">Under Review</option>
-                <option value="awaiting_payment" className="bg-[#140F0A] text-white">Awaiting Payment</option>
-                
-                <option value="in_production" className="bg-[#140F0A] text-white">In Production</option>
-                <option value="completed" className="bg-[#140F0A] text-white">Completed</option>
-                <option value="cancelled" className="bg-[#140F0A] text-white">Cancelled</option>
-              </select>
-            </div>
-          </div>
-
-          {/* 2. DYNAMIC WORKSPACE METRIC GRID CARDS */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white/[0.02] border border-white/5 p-5 rounded-2xl shadow-sm transition-all">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">Total Active Queue</span>
-              <p className="text-3xl font-bold font-mono mt-2 text-white">{isLoading ? "..." : inquiries?.length || 0}</p>
-            </div>
-            <div className="bg-white/[0.02] border border-white/5 border-l-2 border-l-sky-500 p-5 rounded-2xl shadow-sm transition-all">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-sky-400">New Submissions</span>
-              <p className="text-3xl font-bold font-mono mt-2 text-sky-400">{isLoading ? "..." : totalNewRequests}</p>
-            </div>
-            <div className="bg-white/[0.02] border border-white/5 border-l-2 border-l-amber-500 p-5 rounded-2xl shadow-sm transition-all">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-amber-400">Under Review</span>
-              <p className="text-3xl font-bold font-mono mt-2 text-amber-400">{isLoading ? "..." : totalUnderReview}</p>
-            </div>
-            <div className="bg-white/[0.02] border border-white/5 border-l-2 border-l-indigo-500 p-5 rounded-2xl shadow-sm transition-all">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-400">Action Required</span>
-              <p className="text-3xl font-bold font-mono mt-2 text-indigo-400">{isLoading ? "..." : totalActionRequired}</p>
-            </div>
+                <RefreshCw className="w-3 h-3" /> Refresh Queue
+              </button>
+            )}
           </div>
 
           {/* 3. FETCH STATE ROUTING CANVASES */}
           {isLoading ? (
-            <div className="flex flex-col items-center justify-center h-[350px] gap-3 bg-white/[0.01] border border-white/5 rounded-3xl border-dashed">
+            <div className="flex flex-col items-center justify-center h-[400px] gap-3 bg-white/[0.01] border border-white/5 rounded-3xl border-dashed">
               <Loader2 className="w-6 h-6 animate-spin text-[#D4A97A]" />
               <p className="text-xs font-mono tracking-widest text-white/40 uppercase">Mapping Administrative Channels...</p>
             </div>
@@ -129,13 +88,14 @@ export default function AdminInquiriesPage() {
               </div>
               <h3 className="text-base font-bold text-white/80">No Inquiries Found</h3>
               <p className="text-xs text-white/40 mt-1.5 max-w-xs leading-relaxed">
-                There are no client-submitted layout configurations matching your current status filter.
+                There are currently no active client-submitted layout configurations in the pipeline.
               </p>
             </div>
           ) : (
             
-            /* 4. RESPONSIVE COMPONENT DISPLAY LAYOUT GRID */
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 items-start">
+            /* 4. RESPONSIVE OPTIMIZED COMPONENT DISPLAY GRID */
+            /* Adjusted grid columns from max-4 to max-3 layout to provide standard widescreen dimensions */
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 items-start">
               {inquiries.map((inquiry) => {
                 const activeChatRow = inquiry.conversations && inquiry.conversations.length > 0 
                   ? inquiry.conversations[0] 
@@ -161,5 +121,21 @@ export default function AdminInquiriesPage() {
         </main>
       </div>
     </PageTransition>
+  );
+}
+
+/* ── PIPELINE STATS WIDGET SUB-HELPER ── */
+
+function MetricSummaryCard({ label, count, icon }: { label: string; count: number; icon: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between p-4 rounded-2xl border border-[#2A1F14] bg-gradient-to-b from-[#140F0A] to-[#0E0A06]">
+      <div className="space-y-0.5">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-white/40">{label}</p>
+        <p className="text-xl font-bold font-mono text-white">{count}</p>
+      </div>
+      <div className="p-2.5 rounded-xl bg-white/[0.02] border border-white/5">
+        {icon}
+      </div>
+    </div>
   );
 }

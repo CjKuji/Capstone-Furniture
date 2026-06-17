@@ -159,7 +159,7 @@ export default function HomePage() {
                   </p>
                 </div>
                 <button
-                  onClick={() => router.push("/inquire")}
+                  onClick={() => router.push("/inquiry")}
                   className="group flex items-center justify-center gap-2 bg-[#D4A97A]/10 hover:bg-[#D4A97A] border border-[#D4A97A]/30 hover:border-transparent px-5 py-3 rounded-full font-medium text-[#D4A97A] hover:text-[#1C1209] text-xs uppercase tracking-wider transition shrink-0 whitespace-nowrap"
                 >
                   Start Custom Inquiry

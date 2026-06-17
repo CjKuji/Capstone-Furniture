@@ -67,22 +67,6 @@ export default function AdminOrdersPage() {
         },
         (payload) => {
           console.log("Realtime change detected:", payload.eventType);
-
-          /**
-           * FIX: removed router.refresh() that was here before.
-           *
-           * router.refresh() invalidates the *entire* Next.js cache and forces
-           * every Server Component on the page to re-render from scratch. This
-           * causes isFetching to spike, which triggered the loading guard and
-           * flashed the skeleton every time any order changed — even if the
-           * admin was looking at the grid.
-           *
-           * invalidateOrders() only invalidates the ["admin-orders"] React
-           * Query cache key, which triggers a background refetch. Thanks to
-           * placeholderData: (prev) => prev in useAdminOrders, the existing
-           * grid stays visible during the refetch and only isFetching goes
-           * true (shown as the subtle "Syncing…" indicator in the header).
-           */
           invalidateOrders();
         }
       )
@@ -116,31 +100,10 @@ export default function AdminOrdersPage() {
     }
   };
 
-  /* ================= LOADING GUARD ================= */
-  /**
-   * FIX: corrected the loading condition.
-   *
-   * The original guard was `(isLoading && !isFetching)`. In TanStack Query v5,
-   * isLoading is shorthand for (isPending && isFetching), so
-   * `isLoading && !isFetching` is always false — skeletons never showed.
-   *
-   * The correct pattern (matching the customer page) is:
-   *   orders.length === 0 && (isLoading || authLoading)
-   *
-   * Why include `orders.length === 0`:
-   * With placeholderData: (prev) => prev, React Query keeps the previous array
-   * in place during any refetch/invalidation. This means orders is never empty
-   * once it has loaded at least once, so the skeleton only shows on genuine
-   * first load (empty cache + no prior data).
-   *
-   * Why NOT use `isFetching`:
-   * isFetching is true during background syncs triggered by the realtime
-   * subscription. Using it here would flash the skeleton over perfectly good
-   * rendered cards every time an order changes.
-   */
-  const showInitialLoading = orders.length === 0 && (isLoading || authLoading);
-
-  if (showInitialLoading) {
+  /* ================= CONTROL SEQUENCE LOAD BALANCERS ================= */
+  
+  // 1. Authenticating over the network baseline check
+  if (authLoading) {
     return (
       <main className="min-h-screen bg-[#0F0A06] text-white p-6">
         <div className="animate-pulse space-y-6">
@@ -158,27 +121,7 @@ export default function AdminOrdersPage() {
     );
   }
 
-  /* ================= ERROR ================= */
-  if (isError && orders.length === 0) {
-    return (
-      <main className="min-h-screen bg-[#0F0A06] text-white p-6 flex items-center justify-center">
-        <div className="text-center text-rose-400">
-          <p className="text-sm font-medium">
-            Failed to synchronize application layout data records.
-          </p>
-          <button
-            onClick={() => window.location.reload()}
-            className="mt-4 inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-wider bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 px-4 py-2.5 rounded-xl transition"
-          >
-            <RefreshCw className="w-3 h-3" />
-            Retry Connection
-          </button>
-        </div>
-      </main>
-    );
-  }
-
-  /* ================= UNAUTHORIZED ================= */
+  // 2. Reject if auth complete and zero permission matching verified ID
   if (!adminId) {
     return (
       <main className="min-h-screen bg-[#0F0A06] text-white flex items-center justify-center">
@@ -191,7 +134,47 @@ export default function AdminOrdersPage() {
     );
   }
 
-  /* ================= MAIN UI ================= */
+  // 3. Fallback error state layout handling if network pipelines break down
+  if (isError && orders.length === 0) {
+    return (
+      <main className="min-h-screen bg-[#0F0A06] text-white p-6 flex items-center justify-center">
+        <div className="text-center text-rose-400">
+          <p className="text-sm font-medium">
+            Failed to synchronize application layout data records.
+          </p>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="mt-4 inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-wider bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 px-4 py-2.5 rounded-xl transition"
+          >
+            <RefreshCw className="w-3 h-3" />
+            Retry Connection
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  // 4. Genuine initial load placeholder tracking (empty cache data array)
+  if (orders.length === 0 && isLoading) {
+    return (
+      <main className="min-h-screen bg-[#0F0A06] text-white p-6">
+        <div className="animate-pulse space-y-6">
+          <div className="h-6 w-48 bg-white/10 rounded-xl" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div
+                key={i}
+                className="h-64 bg-white/5 border border-white/5 rounded-2xl"
+              />
+            ))}
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  /* ================= MAIN CONTENT UI ================= */
   return (
     <main className="min-h-screen bg-[#0F0A06] text-white p-6 space-y-6">
       <div className="flex items-end justify-between border-b border-white/5 pb-4 relative">

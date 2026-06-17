@@ -8,9 +8,11 @@ import {
   ArrowRight,
   X,
   Undo2,
+  ChevronLeft,
   ChevronRight,
   Info,
-  ShoppingBag
+  ShoppingBag,
+  Compass
 } from "lucide-react";
 
 export default function TutorialWidget() {
@@ -43,7 +45,7 @@ export default function TutorialWidget() {
     },
   ];
 
-  // Custom Blueprint Inquiry Steps (Updated with full Conversion -> Order workflow)
+  // Custom Blueprint Inquiry Steps
   const inquirySteps = [
     {
       title: "1. Send a Custom Blueprint",
@@ -67,16 +69,19 @@ export default function TutorialWidget() {
     },
   ];
 
-  // Dynamically resolve the steps based on the active selection
   const currentSteps = activePipeline === "order" ? orderSteps : inquirySteps;
 
   const handleNext = () => {
     if (activeStep < currentSteps.length - 1) {
       setActiveStep((prev) => prev + 1);
     } else {
-      setActivePipeline(null);
-      setActiveStep(0);
-      setIsOpen(false);
+      closeWidget();
+    }
+  };
+
+  const handlePrev = () => {
+    if (activeStep > 0) {
+      setActiveStep((prev) => prev - 1);
     }
   };
 
@@ -96,142 +101,165 @@ export default function TutorialWidget() {
       {/* FLOATING ACTION TRIGGER */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="bottom-6 left-6 fixed z-40 flex items-center gap-2 bg-[#D4A97A] hover:bg-[#C4976A] shadow-lg px-4 py-2.5 rounded-full font-bold text-[#1C1209] text-xs uppercase tracking-wider transition group"
+        className="fixed bottom-6 left-6 z-40 flex items-center gap-2 bg-[#D4A97A] hover:bg-[#C49A6C] shadow-[0_8px_24px_rgba(212,169,122,0.2)] px-4 py-2.5 rounded-full font-bold text-[#0E0A06] text-xs uppercase tracking-wider transition-all duration-200 active:scale-95 group"
       >
-        <HelpCircle className="w-4 h-4" />
+        <HelpCircle className="w-4 h-4 text-[#0E0A06]" />
         <span>Interactive Guide</span>
       </button>
 
       {/* FLYOUT MODAL WINDOW */}
       {isOpen && (
-        <div className="fixed inset-x-4 bottom-24 sm:left-auto sm:right-6 z-50 bg-[#160E07] border border-[#D4A97A]/40 shadow-2xl p-5 sm:p-6 rounded-2xl w-auto sm:w-[460px] max-h-[80vh] overflow-y-auto text-white animate-in fade-in slide-in-from-bottom-5 duration-300">
+        <div className="fixed inset-x-4 bottom-24 sm:left-auto sm:right-6 z-50 flex flex-col border border-[#362719] bg-gradient-to-b from-[#120D08] to-[#0A0704] shadow-[0_12px_40px_rgba(0,0,0,0.7)] p-4 sm:p-5 rounded-xl w-auto sm:w-[440px] max-h-[82vh] text-white overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-200">
           
-          {/* Header Controls */}
-          <div className="flex justify-between items-center pb-3 border-white/5 border-b">
-            <div className="flex items-center gap-2">
-              <Info className="w-4 h-4 text-[#D4A97A]" />
-              <span className="font-semibold text-xs uppercase tracking-wider">
+          {/* HEADER CONTROLS */}
+          <div className="flex justify-between items-center pb-3 border-[#21180F] border-b">
+            <div className="flex items-center gap-1.5">
+              <Compass className="w-4 h-4 text-[#D4A97A]" />
+              <span className="font-mono font-bold text-[10px] text-[#A68056] uppercase tracking-wider">
                 Onboarding Simulator
               </span>
             </div>
             <button 
               onClick={closeWidget} 
-              className="text-white/40 hover:text-white transition"
+              className="text-white/40 hover:text-white transition-colors"
               aria-label="Close guide"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
 
-          {activePipeline === null ? (
-            /* MATRIX PATHWAY SELECTOR */
-            <div className="space-y-4 mt-4">
-              <p className="text-white/50 text-xs leading-relaxed">
-                Choose a guide below to see exactly how our orders and custom builds work step-by-step.
-              </p>
-              
-              {/* Pathway A */}
-              <div className="bg-white/[0.02] hover:bg-white/[0.04] p-4 border border-white/5 rounded-xl transition group">
-                <div className="flex items-center gap-3 mb-2">
-                  <Layers className="w-4 h-4 text-[#D4A97A]" />
-                  <h4 className="font-bold text-sm text-white group-hover:text-[#D4A97A] transition">
-                    Standard Order Process
-                  </h4>
-                </div>
-                <p className="text-white/40 text-xs leading-relaxed">
-                  Learn how to choose designs, set up delivery options, add reference files, review admin charges, and message builders directly.
+          <div className="flex-1 overflow-y-auto custom-scrollbar pr-0.5">
+            {activePipeline === null ? (
+              /* MATRIX PATHWAY SELECTOR */
+              <div className="space-y-3 mt-3.5">
+                <p className="text-white/50 text-xs leading-relaxed font-medium">
+                  Select a tailored pipeline pathway below to discover exactly how blueprint milestones and workshop production builds step forward.
                 </p>
-                <button
-                  onClick={() => startPipeline("order")}
-                  className="flex items-center justify-center gap-1.5 bg-[#D4A97A] hover:bg-[#C4976A] mt-3 px-3 py-1.5 rounded-lg font-bold text-[#1C1209] text-xs transition w-full"
-                >
-                  See How to Order
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
+                
+                {/* Pathway A */}
+                <div className="bg-white/[0.01] hover:bg-white/[0.03] p-3.5 border border-[#21180F] hover:border-[#D4A97A]/30 rounded-lg transition-all duration-200 group">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <Layers className="w-4 h-4 text-[#D4A97A] shrink-0" />
+                    <h4 className="font-bold text-sm text-white group-hover:text-[#D4A97A] transition-colors">
+                      Standard Order Process
+                    </h4>
+                  </div>
+                  <p className="text-white/40 text-[11px] leading-relaxed">
+                    Learn how to choose catalog designs, configure localized delivery specs, attach reference files, verify line-item adjustments, and converse with creators.
+                  </p>
+                  <button
+                    onClick={() => startPipeline("order")}
+                    className="flex items-center justify-center gap-1.5 bg-[#D4A97A] hover:bg-[#C49A6C] mt-3 py-1.5 rounded-md font-bold text-[#0E0A06] text-xs transition w-full"
+                  >
+                    <span>Launch Order Guide</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
 
-              {/* Pathway B */}
-              <div className="bg-gradient-to-br from-[#1C1209] to-transparent p-4 border border-[#D4A97A]/20 rounded-xl group">
-                <div className="flex items-center gap-3 mb-2">
-                  <HelpCircle className="w-4 h-4 text-[#D4A97A]" />
-                  <h4 className="font-bold text-sm text-white group-hover:text-[#D4A97A] transition">
-                    Custom Blueprint Inquiries
+                {/* Pathway B */}
+                <div className="bg-gradient-to-br from-[#1C140C] to-transparent p-3.5 border border-[#362719] hover:border-[#D4A97A]/30 rounded-lg transition-all duration-200 group">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <Info className="w-4 h-4 text-[#D4A97A] shrink-0" />
+                    <h4 className="font-bold text-sm text-white group-hover:text-[#D4A97A] transition-colors">
+                      Custom Blueprint Inquiries
+                    </h4>
+                  </div>
+                  <p className="text-white/40 text-[11px] leading-relaxed">
+                    Have unique industrial ideas or architectural dimensions? Discover how to upload technical blueprints, adjust custom statements, and trigger direct active order conversion.
+                  </p>
+                  <button
+                    onClick={() => startPipeline("inquiry")}
+                    className="flex items-center justify-center gap-1.5 bg-white/[0.02] hover:bg-white/[0.06] border border-[#291E13] hover:border-[#362719] mt-3 py-1.5 rounded-md font-bold text-[#D4A97A] text-xs transition-all w-full"
+                  >
+                    <span>Explore Blueprint Inquiries</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {/* TRACK TRACKER QUICK INFO FOOTNOTE */}
+                <div className="flex items-start gap-3 bg-[#050402] border border-[#21180F] p-3 rounded-lg">
+                  <div className="p-2 bg-[#D4A97A]/5 border border-[#D4A97A]/10 rounded-md text-[#D4A97A] shrink-0">
+                    <ShoppingBag className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <h5 className="font-bold text-[11px] text-white/90 uppercase font-mono tracking-wide">Track Active Projects</h5>
+                    <p className="mt-0.5 text-white/40 text-[11px] leading-relaxed">
+                      You can manage your file uploads, execute milestone balances, and open real-time workshop discussions by utilizing your dashboard matrix views.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* LIVE PIPELINE ACTIVE VIEWPORT */
+              <div className="mt-3.5">
+                <div className="flex justify-between items-center mb-3">
+                  <span className="bg-[#D4A97A]/10 border border-[#D4A97A]/20 px-2 py-0.5 rounded text-[#D4A97A] font-mono text-[9px] font-bold uppercase tracking-wider">
+                    Stage {activeStep + 1} of {currentSteps.length}
+                  </span>
+                  <button
+                    onClick={() => { setActivePipeline(null); setActiveStep(0); }}
+                    className="flex items-center gap-1 text-white/30 hover:text-white/60 font-mono text-[10px] font-bold uppercase tracking-wide transition-colors"
+                  >
+                    <Undo2 className="w-3 h-3" /> Reset
+                  </button>
+                </div>
+
+                {/* STEPPER METRIC PROGRESS BAR BAR LINK */}
+                <div className="flex items-center gap-1.5 mb-4 px-0.5">
+                  {currentSteps.map((_, idx) => (
+                    <button 
+                      key={idx}
+                      onClick={() => setActiveStep(idx)}
+                      className={`h-1 rounded-full transition-all duration-300 flex-1 relative ${
+                        idx === activeStep 
+                          ? "bg-[#D4A97A] shadow-[0_0_6px_#D4A97A]" 
+                          : idx < activeStep 
+                          ? "bg-[#D4A97A]/30" 
+                          : "bg-white/5"
+                      }`}
+                      title={`Jump to Step ${idx + 1}`}
+                    />
+                  ))}
+                </div>
+
+                {/* STATIC DISPLACEMENT BOX - LOCKS COMPACT VISUAL DIMENSIONS */}
+                <div className="bg-[#050402] border border-[#21180F] rounded-lg p-3.5 min-h-[144px] flex flex-col justify-start">
+                  <h4 className="font-bold text-white/90 text-sm tracking-tight">
+                    {currentSteps[activeStep]?.title}
                   </h4>
-                </div>
-                <p className="text-white/40 text-xs leading-relaxed">
-                  Have a specific structural plan or wood requests? Learn how to submit blueprints, receive custom craftsman adjustments, and convert it into a tracking order.
-                </p>
-                <button
-                  onClick={() => startPipeline("inquiry")}
-                  className="flex items-center justify-center gap-1.5 bg-white/5 hover:bg-white/10 border border-white/10 mt-3 px-3 py-1.5 rounded-lg font-bold text-[#D4A97A] text-xs transition w-full"
-                >
-                  See How Custom Builds Work
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-
-              {/* VIEW / MANAGE ORDERS QUICK INFO BOX */}
-              <div className="flex items-start gap-3 bg-white/[0.02] border border-white/5 p-3.5 rounded-xl">
-                <div className="relative p-2 bg-[#D4A97A]/10 rounded-full text-[#D4A97A] shrink-0">
-                  <ShoppingBag className="w-4 h-4" />
-                </div>
-                <div>
-                  <h5 className="font-semibold text-xs text-white">Track Your Active Projects</h5>
-                  <p className="mt-0.5 text-white/40 text-[11px] leading-relaxed">
-                    You can view your uploads, pay balances, and chat with creators anytime by clicking the <strong className="text-[#D4A97A]">My Orders</strong> bag icon on your top navigation panel.
+                  <p className="mt-2 text-white/60 text-xs leading-relaxed font-medium">
+                    {currentSteps[activeStep]?.desc}
                   </p>
                 </div>
-              </div>
-            </div>
-          ) : (
-            /* LIVE PIPELINE ACTIVE VIEWPORT */
-            <div className="mt-4">
-              <div className="flex justify-between items-center mb-3">
-                <span className="bg-[#D4A97A]/10 px-2 py-0.5 rounded text-[#D4A97A] text-[10px] font-bold uppercase tracking-wider">
-                  Step {activeStep + 1} of {currentSteps.length}
-                </span>
-                <button
-                  onClick={() => { setActivePipeline(null); setActiveStep(0); }}
-                  className="flex items-center gap-1 text-white/40 hover:text-white text-[10px] transition"
-                >
-                  <Undo2 className="w-3 h-3" /> Back
-                </button>
-              </div>
 
-              {/* Progress Indicators */}
-              <div className="flex items-center gap-1.5 mb-4">
-                {currentSteps.map((_, idx) => (
-                  <div 
-                    key={idx}
-                    className={`h-1 rounded-full transition-all duration-300 flex-1 ${
-                      idx === activeStep ? "bg-[#D4A97A]" : idx < activeStep ? "bg-[#D4A97A]/30" : "bg-white/5"
+                {/* BOTTOM DUAL-DIRECTION NAVIGATION CONTROL PANEL */}
+                <div className="flex items-center justify-between gap-2.5 mt-4 pt-3 border-[#21180F] border-t">
+                  <button
+                    onClick={handlePrev}
+                    disabled={activeStep === 0}
+                    className={`flex items-center justify-center gap-1 h-8 px-3 rounded-md font-bold text-xs transition-all ${
+                      activeStep === 0 
+                        ? "opacity-20 cursor-not-allowed text-white/40 border border-transparent" 
+                        : "border border-[#291E13] bg-white/[0.01] text-white/70 hover:text-white hover:bg-white/[0.04]"
                     }`}
-                  />
-                ))}
-              </div>
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                    <span>Prev</span>
+                  </button>
 
-              {/* Active Step Content */}
-              <div className="min-h-[120px]">
-                <h4 className="font-bold text-white text-sm sm:text-base">
-                  {currentSteps[activeStep]?.title}
-                </h4>
-                <p className="mt-2 text-white/70 text-xs sm:text-sm leading-relaxed">
-                  {currentSteps[activeStep]?.desc}
-                </p>
+                  <button
+                    onClick={handleNext}
+                    className="flex items-center justify-center gap-1 bg-[#D4A97A] hover:bg-[#C49A6C] h-8 px-4 rounded-md font-bold text-[#0E0A06] text-xs transition-all shadow-md"
+                  >
+                    <span>
+                      {activeStep === currentSteps.length - 1 ? "Complete Guide" : "Next Stage"}
+                    </span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
-
-              {/* Footer Control Panel */}
-              <div className="flex justify-end items-center gap-3 mt-5 pt-3 border-white/5 border-t">
-                <button
-                  onClick={handleNext}
-                  className="flex items-center justify-center gap-1 bg-[#D4A97A] hover:bg-[#C4976A] px-4 py-2 rounded-full font-bold text-[#1C1209] text-xs transition ml-auto"
-                >
-                  {activeStep === currentSteps.length - 1 ? "Finish Guide" : "Next Step"}
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       )}
     </>

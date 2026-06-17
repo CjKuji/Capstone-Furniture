@@ -1,37 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import type { VariantSnapshot, OrderItem } from "@/types/order";
 
-/* ========================================================= */
-
-type VariantSnapshot = {
-  id: string;
-  name?: string;
-  preview_image_url?: string | null;
-  price_adjustment?: number | null;
-};
-
-type OrderItem = {
-  id: string;
-  variant_snapshot?: VariantSnapshot | null;
-  furniture_snapshot?: { name?: string } | null;
-};
-
+/* =========================================================
+    TYPES
+========================================================= */
 type Props = {
   items?: OrderItem[] | null;
-  onApplyVariant?: (itemId: string, variant: VariantSnapshot | null) => void;
 };
 
-/* ========================================================= */
-
-export default function OrderVariantsSection({ items, onApplyVariant }: Props) {
+/* =========================================================
+    COMPONENT
+========================================================= */
+export default function OrderVariantsSection({ items }: Props) {
   const safeItems = Array.isArray(items) ? items : [];
-  const [active, setActive] = useState<Record<string, string | null>>({});
-
-  const apply = (item: OrderItem, v: VariantSnapshot | null) => {
-    setActive((prev) => ({ ...prev, [item.id]: v?.id ?? null }));
-    onApplyVariant?.(item.id, v);
-  };
 
   if (!safeItems.length) {
     return (
@@ -39,13 +21,11 @@ export default function OrderVariantsSection({ items, onApplyVariant }: Props) {
     );
   }
 
-  /* ================= SHARED STYLE ENGINE TRIPPERS ================= */
-  const rowBase = `
-    w-full flex items-center gap-4 p-3 rounded-xl text-left transition-all duration-200
+  /* ================= STYLE CONSTANTS ================= */
+  const rowStyle = `
+    w-full flex items-center gap-4 p-3 rounded-xl text-left 
+    border border-white/[0.06] bg-white/[0.03]
   `.trim();
-
-  const rowActive = `border border-[#D4A97A]/35 bg-[#D4A97A]/[0.06]`;
-  const rowIdle   = `border border-white/[0.06] bg-white/[0.03]`;
 
   const thumbBase = `
     w-11 h-11 shrink-0 rounded-lg overflow-hidden flex items-center justify-center
@@ -70,7 +50,6 @@ export default function OrderVariantsSection({ items, onApplyVariant }: Props) {
       <div className="space-y-4">
         {safeItems.map((item, i) => {
           const v = item.variant_snapshot;
-          const isActive = active[item.id] === (v?.id ?? null);
 
           return (
             <div key={item.id} className="space-y-2">
@@ -96,7 +75,7 @@ export default function OrderVariantsSection({ items, onApplyVariant }: Props) {
                   Standard production: No variants or finish adjustments configured.
                 </div>
               ) : (
-                <div className={`${rowBase} ${isActive ? rowActive : rowIdle}`}>
+                <div className={rowStyle}>
                   {/* TEXTURE SPECIMEN PLUG */}
                   <div
                     className={thumbBase}
@@ -127,27 +106,6 @@ export default function OrderVariantsSection({ items, onApplyVariant }: Props) {
                         : "No price adjustment"}
                     </p>
                   </div>
-
-                  {/* PREVIEW INTERACTION STATE TRIGGER BUTTON */}
-                  <button
-                    onClick={() => apply(item, isActive ? null : v)}
-                    className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all duration-200`}
-                    style={
-                      isActive
-                        ? {
-                            background: "rgba(255, 80, 80, 0.08)",
-                            borderColor: "rgba(255, 80, 80, 0.2)",
-                            color: "rgba(255, 120, 120, 0.9)",
-                          }
-                        : {
-                            background: "rgba(212, 169, 122, 0.1)",
-                            borderColor: "rgba(212, 169, 122, 0.25)",
-                            color: "#D4A97A",
-                          }
-                    }
-                  >
-                    {isActive ? "Clear View" : "Preview"}
-                  </button>
                 </div>
               )}
             </div>

@@ -23,12 +23,7 @@ import { useUser } from "@/hooks/useUser";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 
 /* ─────────────────────────────────────────────────────────────
-   PAYMENT MODAL — the ONLY component allowed to call
-   useSearchParams(). It lives in its own component so the
-   parent tree never suspends when search params are read.
-   The inline <Suspense fallback={null}> in CustomerOrdersContent
-   catches any suspension here without touching Navbar or the
-   order grid at all.
+   PAYMENT MODAL — Isolated Search Params Boundary
 ───────────────────────────────────────────────────────────── */
 function PaymentSuccessModal() {
   const searchParams = useSearchParams();
@@ -83,8 +78,6 @@ function PaymentSuccessModal() {
 
 /* ─────────────────────────────────────────────────────────────
    MAIN PAGE CONTENT
-   No useSearchParams here. No outer Suspense in page.tsx.
-   The only Suspense is the inline one wrapping PaymentSuccessModal.
 ───────────────────────────────────────────────────────────── */
 function CustomerOrdersContent() {
   const router = useRouter();
@@ -108,10 +101,8 @@ function CustomerOrdersContent() {
     return new Map(conversations.map((c) => [c.order_id, c]));
   }, [conversations]);
 
-  /* ── LOADING & AUTH GUARDS ── */
   const isAuthLoading = user === undefined;
 
-  // Track if the request dropped due to missing profile synchronization tokens or an expired JWT session context
   const isUnauthenticated = (isError && error instanceof Error && 
     (error.message.toLowerCase().includes("auth") || 
      error.message.toLowerCase().includes("jwt") || 
@@ -121,16 +112,39 @@ function CustomerOrdersContent() {
 
   const showInitialLoading = orders.length === 0 && (isLoading || isAuthLoading) && !isUnauthenticated;
 
+  /* HIGH DENSITY REFINED SHIMMER SKELETON */
   if (showInitialLoading) {
     return (
-      <main className="min-h-screen bg-[#0F0A06] text-white">
+      <main className="min-h-screen bg-[#0F0A06] text-white selection:bg-[#D4A97A]/30">
         <Navbar />
-        <div className="p-6 max-w-7xl mx-auto space-y-6 mt-6">
+        <div className="mx-auto px-4 sm:px-8 xl:px-12 py-4 sm:py-6 max-w-7xl mt-2">
           <div className="animate-pulse space-y-6">
-            <div className="h-6 w-48 bg-white/10 rounded-xl" />
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-5">
+            <div className="space-y-2 border-b border-white/5 pb-4">
+              <div className="h-5 w-32 bg-white/5 rounded-full" />
+              <div className="h-8 w-56 bg-white/10 rounded-lg" />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-5">
               {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="h-64 bg-white/5 border border-white/5 rounded-2xl" />
+                <div 
+                  key={i} 
+                  className="h-72 bg-gradient-to-b from-white/[0.02] to-transparent border border-white/5 rounded-xl p-4 flex flex-col justify-between"
+                >
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <div className="h-4 w-24 bg-white/10 rounded" />
+                      <div className="h-5 w-16 bg-white/5 rounded" />
+                    </div>
+                    <div className="h-3 w-40 bg-white/5 rounded" />
+                    <div className="h-12 w-full bg-white/[0.02] border border-white/5 rounded-lg" />
+                  </div>
+                  <div className="space-y-2">
+                    <div className="h-10 w-full bg-white/5 rounded-lg" />
+                    <div className="flex gap-2">
+                      <div className="h-8 flex-1 bg-white/5 rounded-lg" />
+                      <div className="h-8 flex-1 bg-white/5 rounded-lg" />
+                    </div>
+                  </div>
+                </div>
               ))}
             </div>
           </div>
@@ -163,7 +177,7 @@ function CustomerOrdersContent() {
     );
   }
 
-  /* CRITICAL INFRASTRUCTURE / BACKEND CONNECTION SERVICE BLOCKS */
+  /* CRITICAL INFRASTRUCTURE ERROR SYSTEM BLOCK */
   if (isError && orders.length === 0) {
     return (
       <main className="min-h-screen bg-[#0F0A06] text-white">
@@ -192,9 +206,18 @@ function CustomerOrdersContent() {
       <div className="bg-[#0F0A06] min-h-screen font-sans text-white relative selection:bg-[#D4A97A]/30">
         <Navbar />
 
+        {/* AMBIENT BACKGROUND GLOW */}
         <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
           <div className="top-0 -right-40 absolute bg-[#7A4E2D]/10 blur-[100px] sm:blur-[140px] rounded-full w-[320px] sm:w-[500px] h-[320px] sm:h-[500px]" />
         </div>
+
+        {/* INTERACTIVE COMPOSITOR SUB-HEADER OVERLAY FOR DATA BACKGROUND SYNC STATES */}
+        {isFetching && orders.length > 0 && (
+          <div className="fixed bottom-6 right-6 z-50 bg-[#120D08]/90 border border-[#D4A97A]/30 text-[#D4A97A] font-mono text-[10px] font-bold uppercase px-3 py-2 rounded-lg shadow-2xl flex items-center gap-2 tracking-wider backdrop-blur-md animate-in fade-in slide-in-from-bottom-2">
+            <LoaderCircle className="w-3.5 h-3.5 animate-spin" />
+            <span>Synchronizing Matrix...</span>
+          </div>
+        )}
 
         <main className="relative z-10 mx-auto px-4 sm:px-8 xl:px-12 py-4 sm:py-6 max-w-7xl">
           <header className="mb-4 sm:mb-6 flex items-end justify-between border-b border-white/5 pb-3">
@@ -210,14 +233,9 @@ function CustomerOrdersContent() {
             </div>
 
             <div className="flex items-center gap-2 text-[10px] text-white/30 font-medium">
-              {isFetching ? (
-                <div className="flex items-center gap-1.5 text-[#D4A97A]">
-                  <LoaderCircle className="w-3 h-3 animate-spin" />
-                  <span className="hidden sm:inline">Syncing...</span>
-                </div>
-              ) : (
-                <span className="opacity-60 uppercase tracking-widest text-[9px]">
-                  Live Updates
+              {!isFetching && (
+                <span className="opacity-60 uppercase tracking-widest text-[9px] font-mono">
+                  Live Updates Active
                 </span>
               )}
             </div>
@@ -233,7 +251,7 @@ function CustomerOrdersContent() {
                   </p>
                   <button
                     onClick={() => router.push("/catalog")}
-                    className="mt-4 text-[#D4A97A] text-xs font-semibold underline underline-offset-4"
+                    className="mt-4 text-[#D4A97A] text-xs font-semibold underline underline-offset-4 hover:text-white transition-colors"
                   >
                     Browse our collection
                   </button>
@@ -243,11 +261,11 @@ function CustomerOrdersContent() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-5">
                 {orders.map((order, idx) => (
                   <div key={order.id} className="contents">
-                    <Reveal delay={idx * 0.02} from="bottom">
+                    <Reveal delay={idx * 0.01} from="bottom">
                       <OrderCard
                         order={order}
                         userId={user?.id ?? ""}
-                        conversation={conversationMap.get(order.id)}
+                        conversation={conversationMap.get(order.id) || null}
                       />
                     </Reveal>
                   </div>

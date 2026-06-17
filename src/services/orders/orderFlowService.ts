@@ -14,24 +14,30 @@ async function getOrder(orderId: string) {
     .single();
 
   if (error) throw new Error(error.message);
+  if (!data) throw new Error(`Order with ID ${orderId} not found`);
+  
   return data;
 }
 
 async function updateOrderStatus(
   orderId: string,
-  status: OrderStatus
+  status: OrderStatus,
+  additionalPayload: Record<string, any> = {}
 ) {
   const { data, error } = await supabase
     .from("orders")
     .update({
       order_status: status,
       updated_at: new Date().toISOString(),
+      ...additionalPayload,
     })
     .eq("id", orderId)
     .select("*")
     .single();
 
   if (error) throw new Error(error.message);
+  if (!data) throw new Error("Failed to update order status: No data returned");
+  
   return data;
 }
 
@@ -55,23 +61,23 @@ export async function acceptOrder(params: {
     throw new Error("Only requested orders can be accepted");
   }
 
-  return updateOrderStatus(orderId, "accepted");
+  return updateOrderStatus(orderId, "accepted", {
+    charge_status: "pending",
+  });
 }
 
 /**
  * =========================================================
- * START PRODUCTION (FIXED)
+ * START PRODUCTION
  * =========================================================
  */
 export async function startProduction(orderId: string) {
   const order = await getOrder(orderId);
 
-  // ✅ MUST be accepted
   if (order.order_status !== "accepted") {
     throw new Error("Order must be accepted before starting production");
   }
 
-  // ✅ MUST be partially or fully paid
   if (
     order.payment_status !== "partially_paid" &&
     order.payment_status !== "fully_paid"
@@ -140,7 +146,7 @@ export async function completeOrder(orderId: string) {
   }
 
   // DELIVERY FLOW
-  if (order.delivery_method === "delivery") {
+  if (order.delivery_method === "delivery" || order.delivery_method === "shipping") {
     if (order.order_status !== "shipped") {
       throw new Error("Order must be shipped before completion");
     }
@@ -203,8 +209,10 @@ export async function addOrderCharge(params: {
  * =========================================================
  * RECALCULATE TOTAL
  * =========================================================
+ * Fixed: Repaired variable destructuring mapping for Postgrest response
  */
 export async function recalculateOrderTotal(orderId: string) {
+  // Fixed error mapping destructure here
   const { data: order, error: orderError } = await supabase
     .from("orders")
     .select("quote_total_price")
@@ -212,6 +220,7 @@ export async function recalculateOrderTotal(orderId: string) {
     .single();
 
   if (orderError) throw new Error(orderError.message);
+  if (!order) throw new Error(`Order with ID ${orderId} not found to recalculate`);
 
   const { data: charges, error: chargesError } = await supabase
     .from("order_charges")
@@ -232,6 +241,7 @@ export async function recalculateOrderTotal(orderId: string) {
   await supabase
     .from("orders")
     .update({
+      final_total_price: finalTotal,
       updated_at: new Date().toISOString(),
     })
     .eq("id", orderId);

@@ -12,6 +12,7 @@ import {
 
 import type { Order, OrderRow } from "@/types/order";
 import { userOrderKeys } from "@/hooks/useUserOrders";
+import { adminOrderKeys } from "@/hooks/useAdminOrders";
 import { normalizeOrderRow } from "@/utils/normalizeOrderRow";
 
 export function useOrderFlow() {
@@ -22,11 +23,11 @@ export function useOrderFlow() {
 
     const normalized = normalizeOrderRow(row);
 
+    // 1. Instantly update active detailed client-side caches
     queryClient.setQueryData<Order | undefined>(
       userOrderKeys.detail(row.id),
       (old) => {
         if (!old) return normalized;
-
         return {
           ...old,
           ...normalized,
@@ -34,10 +35,17 @@ export function useOrderFlow() {
       }
     );
 
+    // 2. Clear out user pipeline queries safely in the background
     queryClient.invalidateQueries({
       queryKey: userOrderKeys.all,
     });
 
+    // 3. Clear out admin records cleanly using formal system key variables
+    queryClient.invalidateQueries({
+      queryKey: adminOrderKeys.all,
+    });
+    
+    // Fallback alignment for plain string tokens if still used across components
     queryClient.invalidateQueries({
       queryKey: ["admin-orders"],
     });

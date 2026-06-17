@@ -98,8 +98,8 @@ export default function PayModal({ open, onClose, order, inquiry, totalAmount }:
       
       // Conditionally pack parameters safely to align with database entity routers
       await pay({
-        orderId: order?.id || undefined,
-        inquiryId: inquiry?.id || undefined,
+        orderId: order?.id || "",
+        inquiryId: inquiry?.id || "",
         userId: order?.user_id || inquiry?.user_id || "",
         type: hasPaidAnything ? "partial" : paymentType,
       });

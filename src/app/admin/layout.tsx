@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { supabase } from "@/lib/supabase";
 import AdminSidebar from "@/app/components/AdminSidebar";
@@ -17,6 +18,17 @@ export default function AdminLayout({
 
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
+
+  // Initialize the central QueryClient instance inside a state wrapper 
+  // to ensure it persists cleanly across client re-renders.
+  const [queryClient] = useState(() => new QueryClient({
+    defaultOptions: {
+      queries: {
+        staleTime: 1000 * 10, // Global baseline: Consider data fresh for 10 seconds
+        refetchOnWindowFocus: true, // Automatically re-sync active views when returning to the tab
+      },
+    },
+  }));
 
   useEffect(() => {
     let mounted = true;
@@ -58,14 +70,10 @@ export default function AdminLayout({
         ========================================================= */
 
         const normalizedProfile: Profile = {
-  ...profileData,
-
-  role: profileData.role ?? "customer",
-
-  created_at:
-    profileData.created_at ??
-    new Date().toISOString(),
-};
+          ...profileData,
+          role: profileData.role ?? "customer",
+          created_at: profileData.created_at ?? new Date().toISOString(),
+        };
 
         /* =========================================================
            STEP 4: ADMIN GUARD
@@ -106,7 +114,7 @@ export default function AdminLayout({
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen text-sm text-neutral-500">
+      <div className="flex items-center justify-center min-h-screen text-sm text-neutral-500 bg-[#0F0A06]">
         Loading admin workspace...
       </div>
     );
@@ -119,16 +127,18 @@ export default function AdminLayout({
   if (!profile) return null;
 
   /* =========================================================
-     DASHBOARD SHELL
+     DASHBOARD SHELL + CACHE SYSTEM PROVIDER
   ========================================================= */
 
   return (
-    <div className="flex min-h-screen bg-neutral-50 text-neutral-900">
-      <AdminSidebar />
+    <QueryClientProvider client={queryClient}>
+      <div className="flex min-h-screen bg-[#0F0A06] text-white">
+        <AdminSidebar />
 
-      <main className="flex-1 min-w-0">
-        {children}
-      </main>
-    </div>
+        <main className="flex-1 min-w-0">
+          {children}
+        </main>
+      </div>
+    </QueryClientProvider>
   );
 }
