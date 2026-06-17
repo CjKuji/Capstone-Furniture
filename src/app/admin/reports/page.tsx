@@ -320,12 +320,6 @@ export default function AdminReportsPage() {
     );
 }
 
-
-    /* =========================================================
-       KPI CARD
-    ========================================================= */
-
-    function KpiCard({
         label,
         value,
         sub,
