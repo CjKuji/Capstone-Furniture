@@ -13,7 +13,8 @@ interface InquiryChargesModalProps {
   supabaseClient?: SupabaseClient;
   currentAdminId?: string;
   adminId?: string;
-  status?: string;
+  inquiryStatus?: string; // Clarified name
+  chargeStatus?: string;  // Added distinct column prop
   readOnly?: boolean;
 }
 
@@ -32,7 +33,8 @@ export default function InquiryChargesModal({
   supabaseClient,
   currentAdminId,
   adminId,
-  status = "none",
+  inquiryStatus = "none",
+  chargeStatus = "none",
   readOnly = false,
 }: InquiryChargesModalProps) {
   const activeAdminId = adminId || currentAdminId || "";
@@ -47,20 +49,25 @@ export default function InquiryChargesModal({
     deleteCharge,
   } = useAdminInquiryCharges({ supabase: activeSupabase, inquiryId });
 
-  // Single draft state representing the current list configuration
   const [draftCharges, setDraftCharges] = useState<ChargeRow[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const initializedRef = useRef(false);
 
-  // FIXED: Read-only logic explicitly locks down if status is 'accepted' OR if it isn't one of the allowed editable stages
+  // FIXED: Separated workflow stage check from customer selection column check
   const isReadOnly = useMemo(() => {
     if (readOnly) return true;
-    if (status === "accepted") return true;
     
-    const allowedEditableStatuses = ["under_review", "pending", "rejected", "none"];
-    return !allowedEditableStatuses.includes(status);
-  }, [status, readOnly]);
+    const normalizedWorkflow = inquiryStatus?.toLowerCase().trim() || "";
+    const normalizedCharge = chargeStatus?.toLowerCase().trim() || "";
+
+    // If the customer already accepted the quote breakdown, freeze edits
+    if (normalizedCharge === "accepted") return true;
+    
+    // Edits are only permitted during early negotiation states
+    const allowedEditableStatuses = ["under_review", "pending", "rejected", "none", "requested"];
+    return !allowedEditableStatuses.includes(normalizedWorkflow);
+  }, [inquiryStatus, chargeStatus, readOnly]);
 
   const isBusy = isLoading || isSaving || isReadOnly;
 
@@ -73,10 +80,7 @@ export default function InquiryChargesModal({
 
   /* ── SYNC SERVER → LOCAL STATE ── */
   useEffect(() => {
-    // Break out if the modal isn't open or data is still over-the-wire loading
     if (!open || isLoading) return;
-    
-    // Only block execution if we have already successfully populated data into the draft
     if (initializedRef.current) return;
 
     if (existingCharges) {
@@ -89,13 +93,11 @@ export default function InquiryChargesModal({
           is_additive: c.is_additive ?? true,
         }))
       );
-      
-      // Mark as initialized once we have synced data from the loaded state
       initializedRef.current = true;
     }
   }, [open, existingCharges, isLoading]);
 
-  /* ── ESCAPE AND SCROLL CLOSURES ── */
+  /* ── ESCAPE CLOSURES ── */
   useEffect(() => {
     if (!open) return;
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -132,7 +134,7 @@ export default function InquiryChargesModal({
   };
 
   const updateLocalCharge = (index: number, field: keyof ChargeRow, value: any) => {
-    if (isReadOnly) return; // Prevent state changes via keystrokes if view-only
+    if (isReadOnly) return;
     setDraftCharges((prev) =>
       prev.map((c, i) => {
         if (i !== index) return c;
@@ -149,11 +151,11 @@ export default function InquiryChargesModal({
   };
 
   const handleDeleteLocal = (index: number) => {
-    if (isBusy) return; // Block row structural deletions if locked down or saving
+    if (isBusy) return;
     setDraftCharges((prev) => prev.filter((_, i) => i !== index));
   };
 
-  /* ── ATOMIC BATCH PERSISTENCE LAYER PROCESSING ── */
+  /* ── ATOMIC BATCH PERSISTENCE LAYER ── */
   const handleFinalizeCharges = async () => {
     if (isBusy) return;
     setFormError(null);
@@ -216,7 +218,7 @@ export default function InquiryChargesModal({
           </button>
         </div>
 
-        {/* LOCKED BANNER (RENDERS ACCORDINGLY ON INHERITED READ ONLY STATE) */}
+        {/* LOCKED BANNER */}
         {isReadOnly && (
           <div className="mx-6 mt-4 p-3 bg-emerald-950/20 border border-emerald-500/20 rounded-xl flex items-center gap-2.5 text-emerald-400 text-xs">
             <Lock className="w-3.5 h-3.5 shrink-0" />
@@ -290,7 +292,6 @@ export default function InquiryChargesModal({
                     <option value="deduct">− Deduct</option>
                   </select>
                   
-                  {/* Remove CTA Row completely hidden if view only */}
                   {!isReadOnly && (
                     <button 
                       type="button"
@@ -309,7 +310,6 @@ export default function InquiryChargesModal({
         {/* FOOTER CONTROLLER LAYER */}
         <div className="border-t border-white/5 bg-black/40 px-6 py-4">
           {isReadOnly ? (
-            /* CLOSE DISMISS BUTTON FOR COMPLIANT LOCK STATES */
             <button 
               type="button"
               onClick={onClose}
@@ -318,7 +318,6 @@ export default function InquiryChargesModal({
               Close Ledger
             </button>
           ) : (
-            /* WRITE ACTION ROW FOR EDITABLE PIPELINE STATES */
             <div className="flex gap-2">
               <button 
                 type="button"

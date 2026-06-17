@@ -20,22 +20,24 @@ const PAYMONGO_SECRET_KEY = process.env.PAYMONGO_SECRET_KEY!;
 const PAYMONGO_BASE_URL = "https://api.paymongo.com/v1";
 
 /**
- * DYNAMIC APP_URL HELPER
- * Ensures redirects point to the correct domain based on environment.
+ * AUTOMATED APP_URL HELPER
+ * Resolves local environments while strictly enforcing your production domain.
  */
 const getBaseUrl = () => {
-  // 1. If we have an explicit APP_URL env (like in Vercel settings), use it
+  // 1. If we have an explicit APP_URL env (like local testing via Ngrok), use it
   if (process.env.NEXT_PUBLIC_APP_URL) return process.env.NEXT_PUBLIC_APP_URL;
 
-  // 2. Client-side fallback
+  // 2. Client-side fallback (Captures the exact browser domain being used)
   if (typeof window !== "undefined") return window.location.origin;
 
-  // 3. Vercel specific fallbacks
-  if (process.env.VERCEL_ENV === "production") return `https://woodforge.vercel.app`;
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  // 3. Vercel Production & Deployment Fallback: Forces everything to woodforge.sbs
+  if (process.env.VERCEL_ENV === "production" || process.env.VERCEL_URL) {
+    return "https://woodforge.sbs";
+  }
 
-  // 4. Local dev fallback
-  return "https://drivable-equipment-dart.ngrok-free.dev";
+  // 4. Local dev / VPS absolute fallback
+  const port = process.env.PORT || 3000;
+  return `http://localhost:${port}`;
 };
 
 const APP_URL = getBaseUrl();
@@ -96,10 +98,11 @@ export async function createPaymongoCheckout({
   }
 
   /**
-   * 3. OPTIONAL SAFE REUSE (UI OPTIMIZATION ONLY)
-   * Note: If you changed the redirect URLs, you might want to comment this out 
-   * once to force a fresh session creation with the new URLs.
+   * 3. CRITICAL ENVIRONMENT FIX: 
+   * Commented out session reuse. Since you are moving between two different Vercel 
+   * URLs, reuse might accidentally force an old domain session on a new domain request.
    */
+  /*
   if (
     payment.status === "pending" &&
     payment.checkout_url &&
@@ -112,6 +115,7 @@ export async function createPaymongoCheckout({
       reused: true,
     };
   }
+  */
 
   /**
    * 4. VALIDATE AMOUNT
@@ -124,14 +128,13 @@ export async function createPaymongoCheckout({
 
   /**
    * 5. DETERMINISTIC CONTEXT & DYNAMIC ROUTES
-   * Fixed: Pointing success/cancel URLs to the main /inquiry landing page.
    */
   const isInquiry = !!payment.inquiry_id;
   
   const defaultName = isInquiry ? "Custom Inquiry Design Fee" : "Furniture Order Payment";
   const finalDescription = description || (isInquiry ? "Custom Workshop Adjustment Charges" : "Furniture Order Payment");
 
-  // REDIRECT LOGIC: Points to /inquiry instead of deep profile links
+  // FIXED DYNAMIC REDIRECTS: Uses the resolved target domain from getBaseUrl()
   const successUrl = isInquiry
     ? `${APP_URL}/inquiry?payment=success&paymentId=${paymentId}&inquiryId=${payment.inquiry_id}`
     : `${APP_URL}/orders?payment=success&paymentId=${paymentId}&orderId=${payment.order_id}`;

@@ -1,13 +1,9 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
-import { supabase } from "@/lib/supabase";
+import React, { useState, useMemo } from "react";
 import { 
   MessageSquare, 
   Layers, 
-  AlertCircle,
-  CreditCard,
-  DollarSign,
   Truck,
   MapPin,
   Package,
@@ -23,7 +19,7 @@ import PayModal from "@/app/components/PayModal";
 // Hooks & Utilities
 import { usePaymentsQuery } from "@/hooks/useFetchPayments"; 
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
-import { InquiryData, InquiryConversation, InquiryItem } from "@/hooks/useUserInquiry";
+import { InquiryData, InquiryItem } from "@/hooks/useUserInquiry";
 
 type HydratedInquiryType = InquiryData & {
   final_total_price?: number | null;
@@ -39,69 +35,46 @@ type InquiryCardProps = {
     shipping_address?: string | null;
     delivery_method?: string | null;
   };
-  conversation: InquiryConversation | null;
+  conversation: {
+    id: string;
+    admin_unread_count: number;
+    customer_unread_count: number;
+  } | null;
   userId: string;
 };
 
-/* ── HIGHLY OPTIMIZED & STREAMLINED CONTEXT MESSAGES ── */
+/* ── SIMPLIFIED & HIGHLY SCANNABLE CORE MESSAGES ── */
 const getInquiryMessage = (inquiry: HydratedInquiryType): string => {
   if (!inquiry) return "Processing blueprint...";
   const { status, charge_status, cancel_status, payment_status } = inquiry;
 
-  // 1. Overrides & Cancellations
   if (status === "cancelled") return "Inquiry cancelled.";
-  if (cancel_status === "requested") return "Cancellation request under administrative review.";
+  if (cancel_status === "requested") return "Cancellation request under review.";
   if (cancel_status === "rejected") return "Cancellation request declined.";
+  if (status === "requested") return "Awaiting administrative review.";
 
-  // 2. Requested Initial State
-  if (status === "requested") {
-    return "Awaiting administrative review.";
-  }
-
-  // 3. Under Review & Pricing Lifecycle Phase
   if (status === "under_review") {
-    if (!charge_status) {
-      return "Design accepted. Admin is preparing your custom quote.";
-    }
-    if (charge_status === "pending") {
-      return "Quote ready. Please review changes to start the process.";
-    }
+    if (!charge_status || charge_status === "none") return "Preparing your custom design quote.";
+    if (charge_status === "pending") return "Quote ready. Please review details below.";
     if (charge_status === "accepted") {
-      if (!payment_status || payment_status === "unpaid") {
-        return "Quote confirmed. Awaiting payment to start production.";
-      }
-      if (payment_status === "partially_paid" || payment_status === "fully_paid") {
-        return "Payment verified. Custom design queued for production.";
-      }
+      if (!payment_status || payment_status === "unpaid") return "Quote approved. Awaiting deposit.";
+      return "Payment verified. Queued for production.";
     }
   }
 
-  // 4. Production Phase
-  if (status === "in_production") {
-    return "Active on production floor.";
-  }
+  if (status === "in_production") return "Active on workshop production floor.";
 
-  // 5. Fulfillment / Release Gating Phase
   if (["ready_for_pickup", "ready_for_shipment"].includes(status)) {
     if (payment_status !== "fully_paid") {
       return status === "ready_for_pickup"
-        ? "Ready for pickup. Balance payment required for release."
-        : "Ready for shipment. Balance payment required for dispatch.";
+        ? "Ready for pickup. Balance due for release."
+        : "Ready for shipment. Balance due for dispatch.";
     }
-    return status === "ready_for_pickup"
-      ? "Ready for release and pickup."
-      : "Ready for shipping dispatch.";
+    return status === "ready_for_pickup" ? "Ready for release and pickup." : "Ready for shipping dispatch.";
   }
 
-  // 6. Transit Track
-  if (status === "in_transit") {
-    return "Custom delivery is currently en route.";
-  }
-
-  // 7. Completed State
-  if (status === "completed") {
-    return "Order completed. Thank you for your business!";
-  }
+  if (status === "in_transit") return "Your order is currently en route.";
+  if (status === "completed") return "Order completed. Thank you!";
 
   return "Processing specifications.";
 };
@@ -109,65 +82,28 @@ const getInquiryMessage = (inquiry: HydratedInquiryType): string => {
 const formatInquiryStatusUI = (status: string) => {
   const statusMap: Record<string, { label: string; color: string }> = {
     requested: { label: "Requested", color: "text-sky-400 border-sky-500/20 bg-sky-500/10" },
-    under_review: { label: "Review", color: "text-amber-500 border-amber-600/20 bg-amber-600/5" },
-    in_production: { label: "Production", color: "text-amber-500 border-amber-600/20 bg-amber-600/5" },
-    ready_for_pickup: { label: "Ready Pickup", color: "text-emerald-400 border-emerald-500/20 bg-emerald-500/10" },
-    ready_for_shipment: { label: "Ready Ship", color: "text-emerald-400 border-emerald-500/20 bg-emerald-500/10" },
-    in_transit: { label: "In Transit", color: "text-amber-500 border-amber-600/20 bg-amber-600/5" },
+    under_review: { label: "Reviewing", color: "text-amber-400 border-amber-500/20 bg-amber-500/10" },
+    in_production: { label: "Production", color: "text-amber-500 border-amber-500/20 bg-amber-500/10" },
+    ready_for_pickup: { label: "Ready", color: "text-emerald-400 border-emerald-500/20 bg-emerald-500/10" },
+    ready_for_shipment: { label: "Ready", color: "text-emerald-400 border-emerald-500/20 bg-emerald-500/10" },
+    in_transit: { label: "In Transit", color: "text-indigo-400 border-indigo-500/20 bg-indigo-500/10" },
     completed: { label: "Completed", color: "text-emerald-400 border-emerald-500/20 bg-emerald-500/10" },
     cancelled: { label: "Cancelled", color: "text-rose-400 border-rose-500/20 bg-rose-500/10" },
   };
   return statusMap[status] || { label: status, color: "text-amber-500 border-amber-600/20 bg-amber-600/5" };
 };
 
-export default function InquiryCard({ inquiry: propInquiry, conversation, userId }: InquiryCardProps) {
-  const [inquiry, setInquiry] = useState<HydratedInquiryType>(propInquiry);
-  const [liveChargesOverride, setLiveChargesOverride] = useState<any[] | null>(null);
-  const [liveUnreadCount, setLiveUnreadCount] = useState<number>(conversation?.customer_unread_count ?? 0);
+export default function InquiryCard({ inquiry, conversation, userId }: InquiryCardProps) {
   const [modals, setModals] = useState({ chat: false, detail: false, charges: false, pay: false });
 
   const { data: paymentSummary, isLoading: paymentsLoading, isFetching: paymentsFetching } = usePaymentsQuery(inquiry.id);
 
-  useEffect(() => { setInquiry(propInquiry); }, [propInquiry]);
-
-  useEffect(() => {
-    if (conversation?.customer_unread_count !== undefined) {
-      setLiveUnreadCount(conversation.customer_unread_count);
-    }
-  }, [conversation]);
-
-  /* ── REALTIME SUBSCRIPTIONS ── */
-  useEffect(() => {
-    if (!inquiry.id) return;
-    const channel = supabase
-      .channel(`live-inquiry-customer-${inquiry.id}`)
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "inquiries", filter: `id=eq.${inquiry.id}` }, 
-        (payload) => setInquiry((prev) => ({ ...prev, ...payload.new }))
-      ).subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [inquiry.id]);
-
-  useEffect(() => {
-    if (!inquiry.id) return;
-    const chargesChannel = supabase
-      .channel(`live-inquiry-charges-${inquiry.id}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "inquiry_charges", filter: `inquiry_id=eq.${inquiry.id}` }, 
-        () => {
-          supabase.from("inquiry_charges").select("*").eq("inquiry_id", inquiry.id)
-            .then(({ data }) => { if (data) setLiveChargesOverride(data); });
-        }
-      ).subscribe();
-    return () => { supabase.removeChannel(chargesChannel); };
-  }, [inquiry.id]);
+  const liveUnreadCount = useMemo(() => {
+    return Number(conversation?.customer_unread_count ?? 0);
+  }, [conversation?.customer_unread_count]);
 
   const toggleModal = (key: keyof typeof modals, val: boolean) => {
     setModals((prev) => ({ ...prev, [key]: val }));
-    if (key === "chat" && val === true && conversation?.id) {
-      setLiveUnreadCount(0);
-      supabase.from("conversations")
-        .update({ customer_unread_count: 0, customer_last_read_at: new Date().toISOString() })
-        .eq("id", conversation.id).then();
-    }
   };
 
   const anyModalOpen = Object.values(modals).some(Boolean);
@@ -175,7 +111,7 @@ export default function InquiryCard({ inquiry: propInquiry, conversation, userId
 
   const itemsArray = useMemo(() => (inquiry.inquiry_items ?? []) as InquiryItem[], [inquiry.inquiry_items]);
   const firstItem = itemsArray[0];
-  const charges = useMemo(() => liveChargesOverride !== null ? liveChargesOverride : (inquiry.inquiry_charges ?? []), [inquiry.inquiry_charges, liveChargesOverride]);
+  const charges = useMemo(() => inquiry.inquiry_charges ?? [], [inquiry.inquiry_charges]);
 
   const financialData = useMemo(() => {
     const totalPieces = itemsArray.reduce((sum, i) => sum + Number(i?.quantity ?? 0), 0);
@@ -201,14 +137,9 @@ export default function InquiryCard({ inquiry: propInquiry, conversation, userId
   }, [inquiry, charges, itemsArray, paymentSummary, paymentsLoading, paymentsFetching]);
 
   const { canPay, payButtonLabel } = useMemo(() => {
-    const isChargeAccepted = inquiry.charge_status === "accepted";
-    const hasUnpaidBalance = financialData.remaining > 0;
-    const hasValidCost = financialData.finalTotal > 0;
-    const isNotCancelled = inquiry.status !== "cancelled";
-
     return {
-      canPay: isChargeAccepted && hasUnpaidBalance && hasValidCost && isNotCancelled && !financialData.isSynchronizing,
-      payButtonLabel: financialData.totalPaid > 0 ? "Pay Remaining" : "Pay Secure Deposit",
+      canPay: inquiry.charge_status === "accepted" && financialData.remaining > 0 && financialData.finalTotal > 0 && inquiry.status !== "cancelled" && !financialData.isSynchronizing,
+      payButtonLabel: financialData.totalPaid > 0 ? "Pay Balance" : "Pay Secure Deposit",
     };
   }, [inquiry, financialData]);
 
@@ -221,32 +152,34 @@ export default function InquiryCard({ inquiry: propInquiry, conversation, userId
     
     return {
       isPickup,
-      label: isPickup ? "Pickup Track" : method === "unassigned" ? "Unassigned" : "Shipping Track",
-      address: isPickup ? "Workshop Floor Base Area" : addressString || "No delivery address configured"
+      label: isPickup ? "Pickup" : method === "unassigned" ? "Unassigned" : "Shipping",
+      address: isPickup ? "Workshop Floor Hub Base" : addressString || "No address configured"
     };
   }, [inquiry]);
 
   return (
     <>
-      {/* CARD CONTAINER */}
       <div className="relative flex flex-col w-full h-full rounded-xl overflow-hidden border border-[#362719] bg-gradient-to-b from-[#120D08] to-[#0A0704] shadow-[0_8px_30px_rgba(0,0,0,0.6)] transition-all duration-200 hover:border-[#D4A97A]/40 p-4 gap-3.5">
         
         {/* HEADER BLOCK */}
         <div className="flex items-center justify-between gap-2 border-b border-[#21180F] pb-2.5">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5 text-[10px] font-bold tracking-wider text-[#A68056] uppercase font-mono">
-              <span>Blueprint Ref</span>
+              <span>Ref</span>
               <span className="text-white bg-[#21180F] px-1.5 py-0.5 rounded text-xs font-sans font-semibold">
                 #{inquiry.id.slice(0, 8).toUpperCase()}
               </span>
               <div className={`h-1.5 w-1.5 rounded-full shrink-0 bg-[#D4A97A] ${["requested", "under_review", "in_production"].includes(inquiry.status) ? "animate-pulse shadow-[0_0_6px_#D4A97A]" : ""}`} />
             </div>
+            <p className="text-[10px] text-white/30 truncate mt-1">
+              {new Date(inquiry.created_at).toLocaleDateString(undefined, {month: 'short', day: 'numeric'})} • {new Date(inquiry.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+            </p>
           </div>
           
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0 self-start mt-0.5">
             {liveUnreadCount > 0 && (
               <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-500/10 border border-rose-500/20 text-rose-400 text-[9px] font-bold tracking-wide uppercase animate-pulse">
-                {liveUnreadCount} Msg
+                {liveUnreadCount} MSG
               </span>
             )}
             <span className={`px-2 py-1 rounded-md text-[9px] font-bold uppercase tracking-widest border bg-black/20 ${statusUI.color}`}>
@@ -255,19 +188,18 @@ export default function InquiryCard({ inquiry: propInquiry, conversation, userId
           </div>
         </div>
 
-        {/* PROGRESS TRACKER BAR */}
+        {/* PROGRESS LIFECYCLE LINE TRACKER */}
         <ProgressBar status={inquiry.status} />
 
-        {/* CENTRALIZED DYNAMIC MESSAGE BOX (Fixed height structure layout protection) */}
+        {/* CENTRALIZED DYNAMIC MESSAGE BOX */}
         <div className="flex items-center justify-center text-center bg-white/[0.02] border border-[#21180F] rounded-lg px-3 py-2 min-h-[44px]">
           <p className="text-[12px] text-white/80 font-medium leading-normal tracking-wide">
             {getInquiryMessage({ ...inquiry, payment_status: financialData.currentPaymentStatus })}
           </p>
         </div>
 
-        {/* CORE INFORMATION SUB-GRID */}
+        {/* CORE SPECIFICATIONS SUB-GRID */}
         <div className="flex flex-col gap-2 bg-white/[0.01] border border-[#21180F] p-2.5 rounded-lg text-xs">
-          {/* DESIGN LINE */}
           <div className="flex items-center gap-2 min-w-0">
             <Layers className="w-3.5 h-3.5 text-[#D4A97A] shrink-0" />
             <span className="text-white/40 text-[10px] uppercase tracking-wider font-medium w-12 shrink-0">Design:</span>
@@ -279,7 +211,6 @@ export default function InquiryCard({ inquiry: propInquiry, conversation, userId
             </span>
           </div>
 
-          {/* BLUEPRINT SPECS DESCRIPTION LINE */}
           <div className="flex items-center gap-2 min-w-0 border-t border-[#1C140C] pt-2">
             <FileText className="w-3.5 h-3.5 text-[#A68056] shrink-0" />
             <span className="text-white/40 text-[10px] uppercase tracking-wider font-medium w-12 shrink-0">Specs:</span>
@@ -289,7 +220,7 @@ export default function InquiryCard({ inquiry: propInquiry, conversation, userId
           </div>
         </div>
 
-        {/* COMPACT ROUTING & ROUTE CHANNELS PANEL */}
+        {/* LOGISTICS & TRACK DISTRIBUTION BLOCK */}
         <div className="flex flex-col gap-1.5 bg-white/[0.01] border border-[#21180F] p-2.5 rounded-lg">
           <div className="flex items-center justify-between gap-2 text-[11px]">
             <div className="flex items-center gap-1.5 text-white/40">
@@ -330,6 +261,7 @@ export default function InquiryCard({ inquiry: propInquiry, conversation, userId
           
           <div className="flex items-center justify-between bg-[#0A0704] px-2.5 py-1.5 text-[10px] border-t border-[#291E13]">
             <button 
+              type="button"
               onClick={() => toggleModal("charges", true)}
               className="text-white/40 hover:text-[#D4A97A] underline font-medium tracking-wide text-left"
             >
@@ -341,16 +273,18 @@ export default function InquiryCard({ inquiry: propInquiry, conversation, userId
           </div>
         </div>
 
-        {/* BOTTOM ROW ACTIONS INTERACTION */}
+        {/* BOTTOM ACTION LAYOUT GRID */}
         <div className="mt-auto pt-1 flex flex-col gap-2.5">
           <div className="grid grid-cols-2 gap-2">
             <button
+              type="button"
               onClick={() => toggleModal("detail", true)}
               className="h-8 rounded-lg border border-[#291E13] bg-white/[0.02] text-[10px] font-bold uppercase tracking-wider text-white/70 hover:bg-white/[0.05] transition-all"
             >
               Blueprint
             </button>
             <button
+              type="button"
               onClick={() => toggleModal("chat", true)}
               className="relative h-8 rounded-lg bg-[#C49A6C] hover:bg-[#D4A97A] text-[10px] font-black uppercase tracking-wider text-[#0E0A06] flex items-center justify-center gap-1.5 transition-all"
             >
@@ -364,7 +298,7 @@ export default function InquiryCard({ inquiry: propInquiry, conversation, userId
             </button>
           </div>
 
-          {/* ACTION SUBFOOTER BUTTON TRACKER */}
+          {/* ACTION BUTTON GATEWAY */}
           <div className="w-full pt-2 border-t border-[#21180F] h-10 flex items-end">
             {financialData.isSynchronizing ? (
               <button
@@ -375,6 +309,7 @@ export default function InquiryCard({ inquiry: propInquiry, conversation, userId
               </button>
             ) : canPay ? (
               <button
+                type="button"
                 onClick={() => toggleModal("pay", true)}
                 className="w-full h-8 rounded-lg bg-gradient-to-r from-[#C49A6C] to-[#E8C98A] text-[10px] font-black uppercase tracking-wider text-[#0E0A06] shadow-lg hover:shadow-[#D4A97A]/20 transition-all active:scale-[0.99]"
               >
@@ -396,7 +331,7 @@ export default function InquiryCard({ inquiry: propInquiry, conversation, userId
         </div>
       </div>
 
-      {/* MODALS GATEWAY PORTALS */}
+      {/* PORTAL MODALS SYSTEM */}
       {modals.detail && (
         <InquiryFullDetailModal
           open={modals.detail}
@@ -420,7 +355,6 @@ export default function InquiryCard({ inquiry: propInquiry, conversation, userId
         <UserInquiryChargesModal
           isOpen={modals.charges}
           onClose={() => toggleModal("charges", false)}
-          supabase={supabase}
           inquiryId={inquiry.id}
           userId={userId}
         />
@@ -443,27 +377,42 @@ export default function InquiryCard({ inquiry: propInquiry, conversation, userId
   );
 }
 
-/* ── TIMELINE GRAPH TRACKER SUB-HELPER ── */
+/* ── SCANNABLE PROGRESS TIMELINE TRACKER ── */
 function ProgressBar({ status }: { status: string }) {
-  const stages = ["requested", "under_review", "in_production", "ready", "completed"];
+  const steps = [
+    { key: "requested", label: "Request" },
+    { key: "under_review", label: "Review" },
+    { key: "in_production", label: "Build" },
+    { key: "ready", label: "Ready" },
+    { key: "completed", label: "Done" }
+  ];
   
   let current = status;
   if (["ready_for_pickup", "ready_for_shipment", "in_transit"].includes(status)) {
     current = status === "in_transit" ? "completed" : "ready";
   }
   
-  const idx = stages.indexOf(current);
+  const idx = steps.findIndex(s => s.key === current);
 
   return (
-    <div className="flex items-center justify-between w-full px-0.5">
-      {stages.map((stage, i) => (
-        <div key={stage} className="flex items-center flex-1 last:flex-none">
-          <div className={`h-1.5 w-1.5 rounded-full transition-all duration-300 ${i <= idx ? "bg-[#D4A97A] shadow-[0_0_6px_#D4A97A]" : "bg-white/10"}`} />
-          {i < stages.length - 1 && (
-            <div className={`h-[1px] flex-1 mx-1 ${i < idx ? "bg-[#D4A97A]/30" : "bg-white/5"}`} />
-          )}
-        </div>
-      ))}
+    <div className="w-full px-1 py-1 bg-black/20 rounded-lg border border-[#21180F]">
+      <div className="flex items-center justify-between w-full px-2 pt-1">
+        {steps.map((step, i) => (
+          <div key={step.key} className="flex items-center flex-1 last:flex-none">
+            <div className={`h-2 w-2 rounded-full transition-all duration-300 ${i <= idx ? "bg-[#D4A97A] shadow-[0_0_6px_#D4A97A]" : "bg-white/10"}`} />
+            {i < steps.length - 1 && (
+              <div className={`h-[1px] flex-1 mx-1 ${i < idx ? "bg-[#D4A97A]/40" : "bg-white/5"}`} />
+            )}
+          </div>
+        ))}
+      </div>
+      <div className="flex justify-between items-center w-full px-0.5 mt-1 text-[8px] font-mono uppercase font-bold tracking-tight text-white/30">
+        {steps.map((step, i) => (
+          <span key={step.key} className={`w-10 text-center ${i <= idx ? "text-[#A68056]" : "text-white/20"}`}>
+            {step.label}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }

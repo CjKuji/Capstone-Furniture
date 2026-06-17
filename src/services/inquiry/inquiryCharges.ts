@@ -26,8 +26,7 @@ export const inquiryChargeService = {
     const { error } = await supabase
       .from("inquiries")
       .update({ 
-        charge_status: 'pending' // Changed from 'none' to 'pending'
-        // status: 'quote_ready' remains removed to keep inquiry status under review
+        charge_status: 'pending'
       }) 
       .eq("id", inquiryId);
       
@@ -61,7 +60,6 @@ export const inquiryChargeService = {
 
   /**
    * Fetches charges for a specific inquiry.
-   * Passing an optional userId ensures a customer cannot scrap or see another user's internal charges.
    */
   async getChargesByInquiry(supabase: SupabaseClient, inquiryId: string, userId?: string) {
     let query = supabase
@@ -73,7 +71,6 @@ export const inquiryChargeService = {
       `)
       .eq("inquiry_id", inquiryId);
 
-    // Secure the query to the specific customer if requested from a client-facing context
     if (userId) {
       query = query.eq("inquiry.user_id", userId);
     }
@@ -85,14 +82,13 @@ export const inquiryChargeService = {
   },
 
   /**
-   * Updates only the provided fields of a charge to prevent nullifying existing values.
+   * Updates only the provided fields of a charge.
    */
   async updateCharge(supabase: SupabaseClient, inquiryId: string, input: UpdateInquiryChargeInput) {
     if (input.amount !== undefined && input.amount < 0) {
       throw new Error("Amounts cannot be negative.");
     }
     
-    // Construct payload dynamically to safely handle optional/undefined parameters
     const updatePayload: Record<string, any> = {};
     if (input.type !== undefined) updatePayload.type = input.type;
     if (input.label !== undefined) updatePayload.label = input.label;
@@ -128,8 +124,8 @@ export const inquiryChargeService = {
   },
 
   /**
-   * Finalizes the inquiry status to accepted or rejected.
-   * Clamps the calculated total price to 0 minimum to safeguard against database constraint violations.
+   * Finalizes the inquiry charges.
+   * Keeps the inquiry workflow status safely locked within 'under_review'.
    */
   async finalizeInquiryCharges(
     supabase: SupabaseClient,
@@ -147,7 +143,6 @@ export const inquiryChargeService = {
       return c.is_additive ? acc + Number(c.amount) : acc - Number(c.amount);
     }, 0);
 
-    // Safeguard: clamp total to 0 to satisfy `final_total_price >= 0::numeric` DB constraint
     const total = Math.max(0, computedTotal);
 
     const { error: updateError } = await supabase
@@ -155,8 +150,8 @@ export const inquiryChargeService = {
       .update({
         charge_status: status,
         final_total_price: status === 'accepted' ? total : 0,
-        // If accepted, transition workflow to awaiting_payment
-        status: status === 'accepted' ? 'awaiting_payment' : 'quote_ready'
+        // REMAIN ON UNDER_REVIEW: No intermediate payment states used
+        status: 'under_review'
       })
       .eq("id", inquiryId);
 

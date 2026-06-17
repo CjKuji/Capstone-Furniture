@@ -6,8 +6,7 @@ import { useState } from "react";
  * =========================================================
  * TYPES (ALIGNED WITH BACKEND)
  * =========================================================
- * */
-
+ */
 export type PaymentType = "full" | "partial";
 
 export type PaymentStatus =

@@ -179,7 +179,7 @@ export const inquiryService = {
         admin_id: assignedAdminId || "", // Ensures a string type match. Change fallback if you use a system UUID default instead.
         inquiry_id: assignedInquiryId,
         customer_unread_count: 0,
-        admin_unread_count: 1, 
+        admin_unread_count: 0, 
         last_message: `Inquiry Submitted: "${items[0].title || 'Custom Project Details'}"`,
         last_message_at: new Date().toISOString()
       };

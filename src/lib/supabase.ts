@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/supabase";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -11,17 +11,22 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
  */
 
 declare global {
-
-  var __supabase__: ReturnType<typeof createClient<Database>> | undefined;
+  // Use explicit SupabaseClient type definition instead of ReturnType
+  var __supabase__: SupabaseClient<Database> | undefined;
 }
 
-export const supabase: ReturnType<typeof createClient<Database>> =
+export const supabase: SupabaseClient<Database> =
   globalThis.__supabase__ ??
   createClient<Database>(supabaseUrl, supabaseAnonKey, {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: true,
+      // Bypassing top-level types so the internal GoTrue library receives these config settings smoothly
+      ...({
+        lockType: "custom",
+        acquireTimeout: 1500,
+      } as any),
     },
   });
 

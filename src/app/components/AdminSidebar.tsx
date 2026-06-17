@@ -11,14 +11,11 @@ import {
   Settings,
   Globe,
   LucideIcon,
+  ChevronRight,
 } from "lucide-react";
 
 import { supabase } from "@/lib/supabase";
 import { useUser } from "@/hooks/useUser";
-
-/* =========================================================
-   TYPES
-========================================================= */
 
 type NavItem = {
   label: string;
@@ -31,10 +28,6 @@ type NavGroup = {
   title: string;
   items: NavItem[];
 };
-
-/* =========================================================
-   NAV CONFIG
-========================================================= */
 
 const NAVIGATION: NavGroup[] = [
   {
@@ -66,10 +59,6 @@ const NAVIGATION: NavGroup[] = [
   },
 ];
 
-/* =========================================================
-   COMPONENT
-========================================================= */
-
 export default function AdminSidebar() {
   const router = useRouter();
   const pathname = usePathname();
@@ -90,104 +79,131 @@ export default function AdminSidebar() {
     : "AD";
 
   return (
-    <aside className="h-screen w-64 bg-[#1C1209] border-r border-white/10 flex flex-col sticky top-0">
+    <>
+      {/* BRAND INJECTED GLOBAL SCROLLBAR OVERRIDES */}
+      <style jsx global>{`
+        ::-webkit-scrollbar {
+          width: 8px;
+          height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+          background: #060403; /* Matches Dark Nav Frame */
+        }
+        ::-webkit-scrollbar-thumb {
+          background: rgba(255, 255, 255, 0.08);
+          border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+          background: #D4A97A; /* Highlights into Muted Accent Gold */
+        }
+        html {
+          scrollbar-width: thin;
+          scrollbar-color: rgba(255, 255, 255, 0.08) #060403;
+        }
+      `}</style>
 
-      {/* =========================================================
-          BRAND HEADER
-      ========================================================= */}
-      <div className="px-6 py-5 border-b border-white/10">
-        <h1 className="text-[#D4A97A] font-bold tracking-widest text-sm">
-          WOODFORGE
-        </h1>
+      {/* SIDEBAR CONTAINER: Set to darker #060403 context over page's #0F0A06 */}
+      <aside className="h-screen w-64 bg-[#060403] border-r border-white/[0.03] flex flex-col sticky top-0 z-40 select-none antialiased">
 
-        <p className="text-white/40 text-[11px] mt-1">
-          Admin Control Panel
-        </p>
-      </div>
-
-      {/* =========================================================
-          NAVIGATION
-      ========================================================= */}
-      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-6">
-
-        {NAVIGATION.map((group) => (
-          <div key={group.title}>
-            <p className="px-3 mb-2 text-[10px] uppercase tracking-widest text-white/30">
-              {group.title}
-            </p>
-
-            <div className="space-y-1">
-              {group.items.map((item) => {
-                const Icon = item.icon;
-                const active = isActive(item);
-
-                return (
-                  <button
-                    key={item.path}
-                    onClick={() => router.push(item.path)}
-                    className={`group relative w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition
-                      ${
-                        active
-                          ? "bg-white/5 text-white shadow-[0_0_0_1px_rgba(212,169,122,0.25)]"
-                          : "text-white/60 hover:text-white hover:bg-white/5"
-                      }`}
-                  >
-                    {/* ACTIVE INDICATOR BAR */}
-                    <span
-                      className={`absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 rounded-r-full transition
-                        ${active ? "bg-[#D4A97A]" : "bg-transparent"}`}
-                    />
-
-                    {/* ICON */}
-                    <Icon
-                      size={18}
-                      className={`transition ${
-                        active
-                          ? "text-[#D4A97A]"
-                          : "text-white/40 group-hover:text-white"
-                      }`}
-                    />
-
-                    {/* LABEL */}
-                    <span className="truncate">{item.label}</span>
-                  </button>
-                );
-              })}
-            </div>
+        {/* BRAND HEADER */}
+        <div className="px-6 py-6 border-b border-white/[0.03] relative">
+          <div className="absolute inset-x-0 bottom-0 h-[1px] bg-gradient-to-r from-transparent via-[#D4A97A]/10 to-transparent" />
+          
+          <div className="flex items-center gap-2.5">
+            <div className="h-4 w-1 bg-[#D4A97A] rounded-full shadow-[0_0_8px_rgba(212,169,122,0.3)]" />
+            <h1 className="text-white font-extrabold tracking-[0.2em] text-sm font-sans">
+              WOODFORGE
+            </h1>
           </div>
-        ))}
-      </nav>
-
-      {/* =========================================================
-          FOOTER
-      ========================================================= */}
-      <div className="border-t border-white/10 p-3 space-y-3">
-
-        {/* USER CARD */}
-        <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-white/5 border border-white/10">
-          <div className="w-8 h-8 rounded-full bg-[#D4A97A] text-[#1C1209] flex items-center justify-center font-bold text-xs">
-            {initials}
-          </div>
-
-          <div className="min-w-0">
-            <p className="text-white text-sm truncate">
-              {authUser?.email ?? "Admin"}
-            </p>
-            <p className="text-[#D4A97A] text-[11px] capitalize">
-              {role ?? "admin"}
-            </p>
-          </div>
+          <p className="text-white/20 text-[10px] uppercase font-bold tracking-wider mt-1.5 pl-3.5">
+            Admin Control Shell
+          </p>
         </div>
 
-        {/* LOGOUT */}
-        <button
-          onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-red-400 hover:text-red-300 hover:bg-red-950/20 transition"
-        >
-          <LogOut size={18} />
-          Logout
-        </button>
-      </div>
-    </aside>
+        {/* NAVIGATION FEED */}
+        <nav className="flex-1 overflow-y-auto px-3 py-6 space-y-6">
+          {NAVIGATION.map((group) => (
+            <div key={group.title} className="space-y-1">
+              <p className="px-3 text-[9px] font-black uppercase tracking-[0.18em] text-white/20">
+                {group.title}
+              </p>
+
+              <div className="space-y-0.5">
+                {group.items.map((item) => {
+                  const Icon = item.icon;
+                  const active = isActive(item);
+
+                  return (
+                    <button
+                      key={item.path}
+                      onClick={() => router.push(item.path)}
+                      className={`group relative w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 outline-none
+                        ${
+                          active
+                            ? "bg-white/[0.04] text-white shadow-sm"
+                            : "text-white/40 hover:text-white hover:bg-white/[0.015]"
+                        }`}
+                    >
+                      {/* ACTIVE ACCENT INDICATOR STRIP */}
+                      <span
+                        className={`absolute left-0 top-1/2 -translate-y-1/2 w-[2.5px] h-4 rounded-r-full transition-all duration-200
+                          ${active ? "bg-[#D4A97A] shadow-[0_0_8px_rgba(212,169,122,0.5)]" : "bg-transparent opacity-0"}`}
+                      />
+
+                      {/* CONTENT FRAME */}
+                      <div className="flex items-center gap-3 min-w-0">
+                        <Icon
+                          size={15}
+                          className={`transition-all duration-150 shrink-0
+                            ${active ? "text-[#D4A97A]" : "text-white/20 group-hover:text-white/50"}`}
+                        />
+                        <span className="truncate tracking-wide">{item.label}</span>
+                      </div>
+
+                      {/* TRAILING ACCENT */}
+                      {!active && (
+                        <ChevronRight 
+                          size={11} 
+                          className="text-white/0 -translate-x-1 opacity-0 group-hover:text-white/30 group-hover:translate-x-0 group-hover:opacity-100 transition-all duration-150 shrink-0" 
+                        />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </nav>
+
+        {/* FOOTER */}
+        <div className="border-t border-white/[0.03] p-4 space-y-3 bg-[#040302]/40 backdrop-blur-md">
+          <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/[0.01] border border-white/[0.02]">
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#D4A97A]/20 to-[#D4A97A]/5 border border-[#D4A97A]/20 text-[#D4A97A] flex items-center justify-center font-black text-xs shrink-0">
+              {initials}
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <p className="text-white/80 text-xs font-semibold truncate tracking-wide">
+                {authUser?.email ?? "Administrator"}
+              </p>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="h-1 w-1 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]" />
+                <p className="text-[#D4A97A]/80 text-[9px] font-black uppercase tracking-wider truncate">
+                  {role ?? "System Admin"}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-red-400/60 hover:text-red-400 hover:bg-red-500/[0.03] transition-all duration-150 group outline-none"
+          >
+            <LogOut size={14} className="text-red-400/30 group-hover:text-red-400 transitions-transform" />
+            <span className="tracking-wide">Exit Secure Session</span>
+          </button>
+        </div>
+      </aside>
+    </>
   );
 }

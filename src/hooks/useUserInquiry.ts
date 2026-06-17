@@ -77,8 +77,7 @@ export const inquiryKeys = {
 };
 
 /**
- * 1. FETCH USER INQUIRIES HOOK (FIXED SUBSCRIPTION FLOW)
- * Now accepts optional TanStack Query Options configuration object.
+ * 1. FETCH USER INQUIRIES HOOK (FIXED SUBSCRIPTION & DATA MAPPING FLOW)
  */
 export const useUserInquiries = (
   options?: Partial<UseQueryOptions<InquiryData[], Error>>
@@ -90,21 +89,35 @@ export const useUserInquiries = (
     queryFn: async () => {
       const rawData = await inquiryService.fetchUserInquiries();
       
-      return (rawData ?? []).map((inquiry: any) => ({
-        ...inquiry,
-        created_at: inquiry.created_at ?? new Date().toISOString(),
-        status: inquiry.status ?? "requested", 
-        charge_status: inquiry.charge_status ?? "none",
-        inquiry_items: (inquiry.inquiry_items ?? []).map((item: any) => ({
-          ...item,
-          inquiry_images: item.inquiry_images ?? []
-        })),
-        inquiry_charges: inquiry.inquiry_charges ?? [],
-        conversations: inquiry.conversations ?? [],
-      })) as InquiryData[];
+      return (rawData ?? []).map((inquiry: any) => {
+        // PARITY FIX: Fallback layout checks matching your clean admin mapper
+        let conversationData: any[] = [];
+        if (inquiry.conversations) {
+          conversationData = Array.isArray(inquiry.conversations) ? inquiry.conversations : [inquiry.conversations];
+        } else if (inquiry.conversation) {
+          conversationData = Array.isArray(inquiry.conversation) ? inquiry.conversation : [inquiry.conversation];
+        }
+
+        return {
+          ...inquiry,
+          created_at: inquiry.created_at ?? new Date().toISOString(),
+          status: inquiry.status ?? "requested", 
+          charge_status: inquiry.charge_status ?? "none",
+          inquiry_items: (inquiry.inquiry_items ?? []).map((item: any) => ({
+            ...item,
+            inquiry_images: item.inquiry_images ?? []
+          })),
+          inquiry_charges: inquiry.inquiry_charges ?? [],
+          conversations: conversationData.map((c: any) => ({
+            ...c,
+            customer_unread_count: Number(c.customer_unread_count ?? 0),
+            admin_unread_count: Number(c.admin_unread_count ?? 0)
+          })),
+        };
+      }) as InquiryData[];
     },
     staleTime: 2 * 60 * 1000,
-    ...options, // Overrides baseline defaults with parameters sent via layout components
+    ...options,
   });
 
   useEffect(() => {
@@ -118,9 +131,9 @@ export const useUserInquiries = (
       if (!currentUserId || !isMounted) return;
 
       const inquiriesTopic = `user-inquiries-row-sync-${currentUserId}`;
-      const conversationsTopic = `user-inquiries-chat-sync-${currentUserId}`;
+      const conversationsTopic = `user-conversations-live-sync-${currentUserId}`;
 
-      // Clear any outdated structural channels before registering fresh hooks
+      // Clear any outdated channels cleanly before allocating fresh hooks
       const oldInquiries = supabase.getChannels().find(
         c => c.topic === `realtime:${inquiriesTopic}` || c.topic === inquiriesTopic
       );
@@ -145,11 +158,10 @@ export const useUserInquiries = (
           () => {
             queryClient.invalidateQueries({ queryKey: inquiryKeys.lists() });
           }
-        );
-        
-      inquiriesChannel.subscribe();
+        )
+        .subscribe();
 
-      // Realtime Conversations Sync pipeline
+      // Realtime Conversations Sync pipeline (PARITY FIX: Dropped rigid inline filters)
       conversationsChannel = supabase
         .channel(conversationsTopic)
         .on(
@@ -158,14 +170,19 @@ export const useUserInquiries = (
             event: "*",
             schema: "public",
             table: "conversations",
-            filter: `user_id=eq.${currentUserId}`,
           },
-          () => {
-            queryClient.invalidateQueries({ queryKey: inquiryKeys.lists() });
+          (payload: any) => {
+            // Verify if the modified row record relates to the authenticated customer session context
+            const newRow = payload.new;
+            const oldRow = payload.old;
+            const belongsToUser = (newRow?.user_id === currentUserId) || (oldRow?.user_id === currentUserId);
+            
+            if (belongsToUser) {
+              queryClient.invalidateQueries({ queryKey: inquiryKeys.lists() });
+            }
           }
-        );
-
-      conversationsChannel.subscribe();
+        )
+        .subscribe();
     });
 
     return () => {

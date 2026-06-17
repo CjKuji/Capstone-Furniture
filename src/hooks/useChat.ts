@@ -56,8 +56,9 @@ export function useChat({
       });
     },
     enabled: hasValidContext,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0, // 🌟 FIXED: Set to 0 so re-opening the modal forces an immediate network verification sync
     gcTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: true,
   });
 
   const conversationId = conversationQuery.data?.id ?? null;
@@ -148,6 +149,18 @@ export function useChat({
         (payload) => {
           syncMessage(payload.new as Message);
           queryClient.invalidateQueries({ queryKey: chatKeys.conversation(contextCacheKey) });
+          // Invalidate parent dashboard list caches when new messages pop in live
+          queryClient.invalidateQueries({ queryKey: ["conversations"], exact: false });
+        }
+      )
+      // WATCH UPDATE BINDINGS: Synchronizes counter indicators globally when any workspace agent triggers a read mutation
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "conversations", filter: `id=eq.${conversationId}` },
+        (payload) => {
+          queryClient.setQueryData(chatKeys.conversation(contextCacheKey), payload.new);
+          // 🌟 Push update layout signals instantly out to the parent view lists
+          queryClient.invalidateQueries({ queryKey: ["conversations"], exact: false });
         }
       )
       .subscribe();
@@ -184,7 +197,6 @@ export function useChat({
     },
   });
 
-  // FIXED: Destructured both naming variations and used initialized readerType to block casing/undefined bugs
   const send = async ({ 
     message, 
     file, 
@@ -236,11 +248,13 @@ export function useChat({
     });
 
     try {
-      // 2. Correctly use the chatService function to match your database parameter layout (conv_id)
+      // 2. Correctly use the chatService function to match your database parameter layout
       await markConversationAsRead({ conversationId, readerType });
       
       // 3. Keep cache states strictly synchronized with your database records
       queryClient.invalidateQueries({ queryKey: convKey });
+      // 🌟 FIXED: Tell TanStack to instantly flag your dashboard parent page lists to update badge interfaces
+      queryClient.invalidateQueries({ queryKey: ["conversations"], exact: false });
     } catch (err) {
       console.error("Failed to update conversation unread row indicators:", err);
       queryClient.invalidateQueries({ queryKey: convKey });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, Suspense } from "react";
+import { useEffect, useMemo, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
 import {
@@ -23,7 +23,7 @@ import { useUser } from "@/hooks/useUser";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 
 /* ─────────────────────────────────────────────────────────────
-   PAYMENT MODAL — Isolated Search Params Boundary
+    PAYMENT MODAL — Isolated Search Params Boundary
 ───────────────────────────────────────────────────────────── */
 function PaymentSuccessModal() {
   const searchParams = useSearchParams();
@@ -77,11 +77,12 @@ function PaymentSuccessModal() {
 }
 
 /* ─────────────────────────────────────────────────────────────
-   MAIN PAGE CONTENT
+    MAIN PAGE CONTENT
 ───────────────────────────────────────────────────────────── */
 function CustomerOrdersContent() {
   const router = useRouter();
   const { user } = useUser();
+  const searchParams = useSearchParams();
 
   const {
     data: orders = [],
@@ -96,6 +97,21 @@ function CustomerOrdersContent() {
     userId: user?.id ?? "",
     role: "customer",
   });
+
+  // Balanced Synchronization Realtime Handler for Post-checkout hooks
+  useEffect(() => {
+    const paymentStatus = searchParams.get("payment");
+    const paymentOrderId = searchParams.get("orderId");
+
+    if (paymentStatus === "success" && paymentOrderId) {
+      // 150ms debounce window protects against remote pipeline execution lag
+      const syncTimeout = setTimeout(() => {
+        refetch();
+      }, 150);
+
+      return () => clearTimeout(syncTimeout);
+    }
+  }, [searchParams, refetch]);
 
   const conversationMap = useMemo(() => {
     return new Map(conversations.map((c) => [c.order_id, c]));
@@ -265,7 +281,7 @@ function CustomerOrdersContent() {
                       <OrderCard
                         order={order}
                         userId={user?.id ?? ""}
-                        conversation={conversationMap.get(order.id) || null}
+                        conversation={conversationMap.get(order.id) || undefined}
                       />
                     </Reveal>
                   </div>
@@ -284,5 +300,9 @@ function CustomerOrdersContent() {
 }
 
 export default function CustomerOrdersPage() {
-  return <CustomerOrdersContent />;
+  return (
+    <Suspense fallback={null}>
+      <CustomerOrdersContent />
+    </Suspense>
+  );
 }

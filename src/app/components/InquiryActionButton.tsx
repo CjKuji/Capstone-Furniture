@@ -1,25 +1,34 @@
 "use client";
 
-import React from "react";
+import React, { useMemo } from "react";
 import { SupabaseClient } from "@supabase/supabase-js";
 import { useUpdateInquiryStatus } from "@/hooks/useAdminInquiry"; 
-import { CustomInquiryStatus } from "@/types/inquiry";
+
+export type SynchronizedInquiryStatus = 
+  | "requested" 
+  | "under_review" 
+  | "cancelled" 
+  | "in_production" 
+  | "in_transit" 
+  | "completed" 
+  | "ready_for_pickup" 
+  | "ready_for_shipment" 
+  | "shipped";
 
 interface InquiryActionButtonsProps {
   inquiry: {
     id: string;
-    status: CustomInquiryStatus;
-    charge_status?: "pending" | "accepted" | "rejected" | string | null;
-    delivery_method?: "pickup" | "delivery" | null;
-    payment_status?: "unpaid" | "partially_paid" | "fully_paid" | string | null;
+    status: SynchronizedInquiryStatus;
+    charge_status?: string | null;
+    chargeStatus?: string | null;
+    delivery_method?: string | null;
+    payment_status?: string | null;
+    inquiry_charges?: any[] | null; 
   };
   supabaseClient: SupabaseClient; 
   currentAdminId?: string;       
 }
 
-/* =========================================================
-    DESIGN SYSTEM BUTTON PRIMITIVES (MATCHES ORDERS UI/UX)
-========================================================= */
 const baseBtnClass =
   "flex items-center justify-center h-9 w-full rounded-xl text-[10px] font-black uppercase tracking-wider transition-all duration-200 border backdrop-blur-sm text-center active:scale-[0.97] select-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed";
 
@@ -38,47 +47,66 @@ export const InquiryActionButtons: React.FC<InquiryActionButtonsProps> = ({
 }) => {
   const { mutateAsync: updateStatus, isPending } = useUpdateInquiryStatus();
 
-  const { id: inquiryId, status, charge_status, delivery_method, payment_status } = inquiry;
-
-  const handleTransition = async (targetStatus: CustomInquiryStatus) => {
-    try {
-      console.log(`Action initiated by admin session: "${currentAdminId}" using client instance: ${!!supabaseClient}`);
-      await updateStatus({ inquiryId, status: targetStatus });
-    } catch (error) {
-      console.error(`Failed executing transition step to ${targetStatus}:`, error);
+  // 1. ULTRA DEFENSIVE PROPERTY EVALUATION (MATCHING USER-SIDE COMPUTATIONS)
+  const evaluatedMetrics = useMemo(() => {
+    const chargesArray = inquiry.inquiry_charges ?? [];
+    
+    // Fallback parsing strategy checking nested structures and variation names
+    const directChargeString = (inquiry.charge_status || inquiry.chargeStatus || "").toLowerCase().trim();
+    
+    let resolvedChargesAccepted = directChargeString === "accepted";
+    
+    // If the top level property is missing or out of sync, check relational data values explicitly
+    if (!resolvedChargesAccepted && chargesArray.length > 0) {
+      // Strategy A: Check if any charges exist and if an explicit parent override token evaluates true
+      const hasAcceptedRowProperty = (inquiry as any).explicitChargeStatus === "accepted";
+      
+      // Strategy B: Pull directly from properties nested inside your relational charge objects 
+      const inlineRowStatus = (chargesArray[0] as any)?.charge_status?.toLowerCase().trim();
+      
+      if (hasAcceptedRowProperty || inlineRowStatus === "accepted") {
+        resolvedChargesAccepted = true;
+      }
     }
-  };
 
-  // Guardrail Logic Variables
-  const isChargesAccepted = charge_status === "accepted";
-  const isPaymentReceived = payment_status === "partially_paid" || payment_status === "fully_paid";
-  
-  // Rule: Start production only if charges are accepted AND deposit/full payment is received
-  const isClearedForProduction = isChargesAccepted && isPaymentReceived;
-  
-  // Rule: Balance must be 100% settled for logistics clearance or closing
-  const isClearedForLogisticsAndCompletion = payment_status === "fully_paid";
+    const normalizedStatus = inquiry.status?.toLowerCase().trim() || "";
+    const normalizedPaymentStatus = inquiry.payment_status?.toLowerCase().trim() || "unpaid";
+    const normalizedDeliveryMethod = inquiry.delivery_method?.toLowerCase() || "unassigned";
+    
+    const isPickupTrack = normalizedDeliveryMethod.includes("pickup");
+    const isPaymentReceived = normalizedPaymentStatus === "partially_paid" || normalizedPaymentStatus === "fully_paid";
+    const isClearedForProduction = resolvedChargesAccepted && isPaymentReceived;
+    const isFullyPaid = normalizedPaymentStatus === "fully_paid";
 
-  // Build an active stack array to cleanly compute layout spacing dynamically like Orders Bar
+    return {
+      normalizedStatus,
+      isPickupTrack,
+      isChargesAccepted: resolvedChargesAccepted,
+      isClearedForProduction,
+      isFullyPaid
+    };
+  }, [inquiry]);
+
+  const { normalizedStatus, isPickupTrack, isChargesAccepted, isClearedForProduction, isFullyPaid } = evaluatedMetrics;
   const activeButtons: React.ReactNode[] = [];
 
-  // 1. ACCEPT INQUIRY -> MOVE TO UNDER REVIEW
-  if (status === "requested") {
+  // ── PHASE 1: REQUESTED INCOMING STATE ──
+  if (normalizedStatus === "requested") {
     activeButtons.push(
       <button
         key="accept-inquiry"
         type="button"
         disabled={isPending}
         className={`${baseBtnClass} ${styles.primary}`}
-        onClick={() => handleTransition("under_review")}
+        onClick={() => updateStatus({ inquiryId: inquiry.id, status: "under_review" })}
       >
-        {isPending ? "Accepting Configuration..." : "Accept Inquiry"}
+        {isPending ? "Accepting..." : "Accept Inquiry"}
       </button>
     );
   }
 
-  // 2. START PRODUCTION
-  if (status === "under_review") {
+  // ── PHASE 2: ADMINISTRATIVE REVIEW AND PRICING LIFECYCLE ──
+  if (normalizedStatus === "under_review") {
     if (isClearedForProduction) {
       activeButtons.push(
         <button
@@ -86,9 +114,9 @@ export const InquiryActionButtons: React.FC<InquiryActionButtonsProps> = ({
           type="button"
           disabled={isPending}
           className={`${baseBtnClass} ${styles.success}`}
-          onClick={() => handleTransition("in_production")}
+          onClick={() => updateStatus({ inquiryId: inquiry.id, status: "in_production" })}
         >
-          {isPending ? "Deploying Blueprint..." : "Start Production"}
+          {isPending ? "Deploying..." : "Start Production"}
         </button>
       );
     } else {
@@ -105,8 +133,8 @@ export const InquiryActionButtons: React.FC<InquiryActionButtonsProps> = ({
     }
   }
 
-  // 3. MARK PRODUCTION COMPLETE -> ROUTE TO READY STATE
-  if (status === "in_production") {
+  // ── PHASE 3: LIVE ACTIVE PRODUCTION RUNS ──
+  if (normalizedStatus === "in_production") {
     activeButtons.push(
       <button
         key="production-done"
@@ -114,9 +142,10 @@ export const InquiryActionButtons: React.FC<InquiryActionButtonsProps> = ({
         disabled={isPending}
         className={`${baseBtnClass} ${styles.warning}`}
         onClick={() =>
-          handleTransition(
-            delivery_method === "pickup" ? "ready_for_pickup" : "ready_for_shipment"
-          )
+          updateStatus({
+            inquiryId: inquiry.id,
+            status: isPickupTrack ? "ready_for_pickup" : "ready_for_shipment"
+          })
         }
       >
         {isPending ? "Completing Run..." : "Production Done"}
@@ -124,18 +153,18 @@ export const InquiryActionButtons: React.FC<InquiryActionButtonsProps> = ({
     );
   }
 
-  // 4. SHIP LINE (Only for delivery items)
-  if (status === "ready_for_shipment" && delivery_method !== "pickup") {
-    if (isClearedForLogisticsAndCompletion) {
+  // ── PHASE 4: DISPATCH OR LOGISTICS SHIPMENT GATES ──
+  if (normalizedStatus === "ready_for_shipment" && !isPickupTrack) {
+    if (isFullyPaid) {
       activeButtons.push(
         <button
           key="mark-in-transit"
           type="button"
           disabled={isPending}
           className={`${baseBtnClass} ${styles.primary}`}
-          onClick={() => handleTransition("in_transit")}
+          onClick={() => updateStatus({ inquiryId: inquiry.id, status: "in_transit" })}
         >
-          {isPending ? "Routing Dispatch..." : "Mark In Transit"}
+          {isPending ? "Routing..." : "Mark In Transit"}
         </button>
       );
     } else {
@@ -146,29 +175,30 @@ export const InquiryActionButtons: React.FC<InquiryActionButtonsProps> = ({
           disabled
           className={`${baseBtnClass} ${styles.dark}`}
         >
-          Collect Balance To Ship
+          Collect Full Payment To Ship
         </button>
       );
     }
   }
 
-  // 5. ARCHIVE / COMPLETE RECORD (Handles delivery in-transit or direct pickup bypass)
-  const isEligibleForCompletion = 
-    (status === "ready_for_shipment" && delivery_method === "pickup") || 
-    status === "ready_for_pickup" || 
-    status === "in_transit";
+  // ── PHASE 5: ARCHIVAL COMPLETION LOGISTICS CLOSURES ──
+  const isStagedForCompletion = 
+    normalizedStatus === "ready_for_pickup" || 
+    normalizedStatus === "in_transit" || 
+    normalizedStatus === "shipped" ||
+    (normalizedStatus === "ready_for_shipment" && isPickupTrack);
 
-  if (isEligibleForCompletion) {
-    if (isClearedForLogisticsAndCompletion) {
+  if (isStagedForCompletion) {
+    if (isFullyPaid) {
       activeButtons.push(
         <button
           key="mark-complete"
           type="button"
           disabled={isPending}
           className={`${baseBtnClass} ${styles.success}`}
-          onClick={() => handleTransition("completed")}
+          onClick={() => updateStatus({ inquiryId: inquiry.id, status: "completed" })}
         >
-          {isPending ? "Archiving Record..." : "Mark Complete"}
+          {isPending ? "Archiving..." : "Mark Complete"}
         </button>
       );
     } else {
@@ -179,7 +209,7 @@ export const InquiryActionButtons: React.FC<InquiryActionButtonsProps> = ({
           disabled
           className={`${baseBtnClass} ${styles.dark}`}
         >
-          Awaiting Final Settlement
+          Awaiting Full Payment
         </button>
       );
     }
@@ -188,11 +218,7 @@ export const InquiryActionButtons: React.FC<InquiryActionButtonsProps> = ({
   if (activeButtons.length === 0) return null;
 
   return (
-    <div
-      className={`grid gap-2 w-full pt-1 shrink-0 ${
-        activeButtons.length === 1 ? "grid-cols-1" : "grid-cols-2"
-      }`}
-    >
+    <div className={`grid gap-2 w-full pt-1 shrink-0 ${activeButtons.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
       {activeButtons}
     </div>
   );

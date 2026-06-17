@@ -86,8 +86,12 @@ interface OrderItemRow {
     furniture_snapshot: any;
 }
 
+/**
+ * Normalizes date timestamps into consistent chronological graph points
+ */
 function monthLabel(dateStr: string): string {
     const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return "Unknown";
     return d.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
 }
 
@@ -113,7 +117,7 @@ export async function getAnalytics(): Promise<AnalyticsData> {
             .select("id, inquiry_id, last_message, updated_at")
             .limit(100),
         supabase
-            .from("order_charges") // Assumed name or fallback array for order-side adjustments matrix
+            .from("order_charges")
             .select("id, order_id, inquiry_id, amount, is_additive")
             .limit(1000)
     ]);
@@ -125,7 +129,9 @@ export async function getAnalytics(): Promise<AnalyticsData> {
     const conversations = conversationsRes.data ?? [];
     const allCharges = (chargesRes.data as unknown as ChargeRow[]) ?? [];
 
-    // 1. FINANCIAL CALCULATION LAYER
+    // =========================================================
+    // 1. FINANCIAL CALCULATION LAYER (Orders + Inquiries Combined)
+    // =========================================================
     const paidPayments = payments.filter(p => p.status === "paid");
     const totalRevenue = paidPayments.reduce((sum, p) => sum + Number(p.amount ?? 0), 0);
     const totalPaid = totalRevenue;
@@ -133,7 +139,7 @@ export async function getAnalytics(): Promise<AnalyticsData> {
     const totalOrders = orders.length;
     const totalInquiries = inquiries.length;
 
-    // Strict alignment with verified pipeline metrics
+    // Strict alignment with active internal operational matrices
     const pendingOrders = orders.filter(
         (o) =>
             o.order_status === "requested" ||
@@ -141,7 +147,7 @@ export async function getAnalytics(): Promise<AnalyticsData> {
             o.order_status === "in_production"
     ).length;
 
-    // Map modifiers to structural buckets
+    // Compute dynamic lookup maps to match against underlying financial ledger
     const paidByOrder: Record<string, number> = {};
     const paidByInquiry: Record<string, number> = {};
     const chargesByOrder: Record<string, number> = {};
@@ -158,10 +164,12 @@ export async function getAnalytics(): Promise<AnalyticsData> {
         }
     });
 
+    // =========================================================
     // 2. RECONCILIATION AUDIT LAYER
+    // =========================================================
     const mismatches: DataMismatch[] = [];
 
-    // Audit Orders using layout engine equations
+    // Audit Store Checkout Orders 
     orders.forEach(o => {
         const actualPaid = paidByOrder[o.id] ?? 0;
         const items = orderItems.filter(item => item.order_id === o.id);
@@ -185,7 +193,7 @@ export async function getAnalytics(): Promise<AnalyticsData> {
         }
     });
 
-    // Audit Inquiries using dynamic ledger profiles
+    // Audit Custom Requests & Configurator Inquiries
     inquiries.forEach(i => {
         const actualPaid = paidByInquiry[i.id] ?? 0;
         const expectedPrice = Number(i.final_total_price ?? 0);
@@ -208,11 +216,14 @@ export async function getAnalytics(): Promise<AnalyticsData> {
         }
     });
 
+    // =========================================================
     // 3. GRAPHING AND MAP REDUCTIONS
+    // =========================================================
     const monthMap: Record<string, number> = {};
     paidPayments.forEach((p) => {
         if (!p.created_at) return;
         const label = monthLabel(p.created_at);
+        if (label === "Unknown") return;
         monthMap[label] = (monthMap[label] ?? 0) + Number(p.amount ?? 0);
     });
     
@@ -220,7 +231,7 @@ export async function getAnalytics(): Promise<AnalyticsData> {
         .slice(-6)
         .map(([month, revenue]) => ({ month, revenue }));
 
-    // Orders Status Processing (Cleaned from ghost values)
+    // Catalog Orders Volume Aggregates
     const orderStatusMap: Record<string, number> = {};
     orders.forEach((o) => {
         const s = o.order_status ?? "requested";
@@ -230,7 +241,7 @@ export async function getAnalytics(): Promise<AnalyticsData> {
         ([status, count]) => ({ status, count })
     );
 
-    // Inquiries Status Processing
+    // Custom Inquiries Volume Aggregates
     const inquiryStatusMap: Record<string, number> = {};
     inquiries.forEach((i) => {
         const s = i.status ?? "requested"; 
@@ -240,7 +251,7 @@ export async function getAnalytics(): Promise<AnalyticsData> {
         ([status, count]) => ({ status, count })
     );
 
-    // Catalog Matrix Mapping
+    // Top Selling Products Map
     const productMap: Record<string, { orders: number; revenue: number }> = {};
     orderItems.forEach((item) => {
         const name = (item.furniture_snapshot as { name?: string } | null)?.name ?? "Unknown Design Piece";
@@ -255,9 +266,11 @@ export async function getAnalytics(): Promise<AnalyticsData> {
         .slice(0, 5)
         .map(([name, v]) => ({ name, ...v }));
 
-    // 4. PIPELINE FLATTENING FEEDS
+    // =========================================================
+    // 4. PIPELINE FLATTENING FEEDS (Real-time Views)
+    // =========================================================
 
-    // Recent Orders Stream
+    // Recent Store Orders Pipeline Feed
     const recentOrders: RecentOrder[] = orders.slice(0, 8).map((o) => {
         const items = orderItems.filter(item => item.order_id === o.id);
         const subtotal = items.reduce((sum, i) => sum + Number(i?.total_price ?? 0), 0);
@@ -279,7 +292,7 @@ export async function getAnalytics(): Promise<AnalyticsData> {
         };
     });
 
-    // Recent Inquiries Stream
+    // Recent Custom Inquiries Pipeline Feed
     const recentInquiries: RecentInquiry[] = inquiries.slice(0, 8).map((i) => {
         const targetChat = conversations.find(c => c.inquiry_id === i.id);
         const actualPaid = paidByInquiry[i.id] ?? 0;

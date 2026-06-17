@@ -96,7 +96,6 @@ export default function AdminOrderCard({ order: propOrder, conversation, adminId
             filter: `id=eq.${conversation.id}` 
           },
           (payload) => {
-            // Added explicit type assertion to payload.new to resolve your compiler error cleanly
             const newConv = payload.new as Partial<Conversation> | null;
             const newCount = newConv?.admin_unread_count;
             if (typeof newCount === "number") {
@@ -121,7 +120,6 @@ export default function AdminOrderCard({ order: propOrder, conversation, adminId
           },
           (payload) => {
             if (payload.new) {
-              // Casted payload down to type safety matching your operational entity shape
               const updatedOrder = payload.new as Partial<Order>;
               setOrder((prev) => ({ ...prev, ...updatedOrder }));
             }
@@ -151,7 +149,11 @@ export default function AdminOrderCard({ order: propOrder, conversation, adminId
 
   /* ── DATA INTEGRATION HOOKS ── */
   const { charges = [] as OrderCharge[] } = useOrderCharges(order.id);
-  const { data: payments, isLoading: paymentsLoading } = usePaymentsQuery(order.id);
+  
+  const { data: payments, isLoading: paymentsLoading } = usePaymentsQuery(order.id, {
+    type: "order"
+  });
+  
   const { approveCancel, rejectCancel, isLoading: isProcessingCancel } = useCancelReview();
 
   const items: OrderItem[] = useMemo(() => order.order_items ?? [], [order.order_items]);
@@ -251,13 +253,20 @@ export default function AdminOrderCard({ order: propOrder, conversation, adminId
               </p>
             </div>
 
-            <span className={`
-              flex-shrink-0 px-3 py-1 rounded-full
-              text-[9px] font-black uppercase tracking-[0.15em]
-              border backdrop-blur-sm bg-black/30 shadow-inner ${statusUI.color}
-            `}>
-              {statusUI.label}
-            </span>
+            <div className="flex items-center gap-1.5 shrink-0 self-start mt-0.5">
+              {liveUnreadCount > 0 && (
+                <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-500/10 border border-rose-500/20 text-rose-400 text-[9px] font-bold tracking-wide uppercase animate-pulse">
+                  {liveUnreadCount} MSG
+                </span>
+              )}
+              <span className={`
+                flex-shrink-0 px-3 py-1 rounded-full
+                text-[9px] font-black uppercase tracking-[0.15em]
+                border backdrop-blur-sm bg-black/30 shadow-inner ${statusUI.color}
+              `}>
+                {statusUI.label}
+              </span>
+            </div>
           </div>
         </div>
 

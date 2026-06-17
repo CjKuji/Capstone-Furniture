@@ -85,21 +85,23 @@ export default function ChatModal({
     readerType: senderType,
   });
 
-  /* ── MARK AS READ: Bulletproof, Dynamic Realtime Invalidation ── */
+  /* ── 🌟 BULLETPROOF RE-OPEN READ EFFECTOR ── */
   useEffect(() => {
-    // Halt execution if modal is shut or conversation references aren't ready
-    if (!open || !conversationId || !conversation) return;
+    // If the window isn't currently displayed or the backend context thread isn't ready, halt
+    if (!open || !conversationId) return;
 
-    // Direct data resolution from current cache snapshot state
-    const currentUnreadCount = senderType === "customer"
-      ? conversation.customer_unread_count
-      : conversation.admin_unread_count;
+    // 🌟 FIXED: Fire this unconditionally on mount/activation. Avoid checking stale cached fields!
+    markAsRead();
 
-    // Trigger update if there are outstanding messages to clear
-    if (typeof currentUnreadCount === "number" && currentUnreadCount > 0) {
+  }, [open, conversationId, markAsRead]); 
+
+  /* ── CLEANUP ON CLOSE INTERACTION ── */
+  const handleClose = useCallback(() => {
+    if (conversationId) {
       markAsRead();
     }
-  }, [open, conversationId, conversation, senderType, markAsRead]);
+    onClose();
+  }, [conversationId, markAsRead, onClose]);
 
   /* ── AUTO-SCROLL LOGIC ── */
   useEffect(() => {
@@ -156,11 +158,11 @@ export default function ChatModal({
   useEffect(() => {
     if (!open) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") handleClose();
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [open, onClose]);
+  }, [open, handleClose]);
 
   const handleSend = async () => {
     const text = message.trim();
@@ -204,7 +206,12 @@ export default function ChatModal({
             </div>
             <h2 className="text-sm font-semibold text-white/80">Support Conversation</h2>
           </div>
-          <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-full border border-[#2A1F14] bg-white/[0.03] text-white/35 text-xs hover:bg-white/[0.07] transition-all">✕</button>
+          <button 
+            onClick={handleClose} 
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-[#2A1F14] bg-white/[0.03] text-white/35 text-xs hover:bg-white/[0.07] transition-all"
+          >
+            ✕
+          </button>
         </header>
 
         <main ref={scrollContainerRef} className="flex-1 overflow-y-auto px-4 py-5 scrollbar-thin scrollbar-thumb-[#2A1F14] scrollbar-track-transparent">

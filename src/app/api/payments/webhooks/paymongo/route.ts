@@ -19,7 +19,7 @@ export async function POST(req: Request) {
 
     /**
      * 1. EXTRACT EVENT DATA
-     */
+          */
     const eventType = payload?.data?.attributes?.type;
     const eventData = payload?.data?.attributes?.data?.attributes;
 
@@ -153,7 +153,6 @@ export async function POST(req: Request) {
 
       totalPaidSum = paidPayments?.reduce((sum, p) => sum + Number(p.amount || 0), 0) || 0;
 
-      // Determine Order Status Assignment
       if (totalPaidSum <= 0) {
         computedPaymentStatus = "unpaid";
       } else if (totalPaidSum < finalCalculatedTotal) {
@@ -176,7 +175,6 @@ export async function POST(req: Request) {
 
     } else if (payment.inquiry_id) {
       // --- WORKFLOW BRANCH: CUSTOM WORKSHOP INQUIRY ---
-      // FIXED: Cast via 'as any' to allow selecting 'final_total_price' even if local definitions are stale
       const { data: inquiryData, error: inquiryError } = await supabaseAdmin
         .from("inquiries")
         .select("id, final_total_price" as any)
@@ -188,8 +186,6 @@ export async function POST(req: Request) {
       }
 
       const inquiry = inquiryData as any;
-
-      // Now evaluating directly against your absolute source of truth database column!
       finalCalculatedTotal = Number(inquiry.final_total_price ?? 0);
 
       const { data: paidPayments, error: paidError } = await supabaseAdmin
@@ -204,7 +200,6 @@ export async function POST(req: Request) {
 
       totalPaidSum = paidPayments?.reduce((sum, p) => sum + Number(p.amount || 0), 0) || 0;
 
-      // Determine Inquiry Status Assignment
       if (totalPaidSum <= 0) {
         computedPaymentStatus = "unpaid";
       } else if (totalPaidSum < finalCalculatedTotal) {
@@ -213,8 +208,10 @@ export async function POST(req: Request) {
         computedPaymentStatus = "fully_paid";
       }
 
-      // Dynamic workflow phase router matching the target layout conditions
-      let dynamicWorkflowStatus = "awaiting_payment";
+      // STREAMLINED PIPELINE ROUTER:
+      // If fully paid, send it straight to 'in_production'.
+      // If it's only partially paid or unpaid, it safely remains under review ('under_review').
+      let dynamicWorkflowStatus = "under_review";
       if (computedPaymentStatus === "fully_paid") {
         dynamicWorkflowStatus = "in_production";
       }

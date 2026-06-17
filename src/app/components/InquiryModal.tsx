@@ -28,7 +28,7 @@ export default function CreateInquiryModal({ isOpen, onClose }: CreateInquiryMod
   const [deliveryMethod, setDeliveryMethod] = useState<"pickup" | "delivery">("delivery");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [deliveryAddress, setDeliveryAddress] = useState("");
-  const [pickupLocation] = useState("Main Craftsman Warehouse - Gate 2");
+  const [pickupLocation] = useState("BL Sash Factory, 92 Upper Kalaklan Olongapo City");
   const [isTransmitting, setIsTransmitting] = useState(false);
   
   const [items, setItems] = useState<LocalInquiryItem[]>([

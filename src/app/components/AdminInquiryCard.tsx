@@ -1,38 +1,29 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
-import { supabase } from "@/lib/supabase";
+import React, { useMemo, useState, useCallback } from "react";
 import { 
   MessageSquare, 
   Layers, 
   User, 
-  AlertCircle,
-  CreditCard,
-  DollarSign,
-  Truck,
-  MapPin,
-  Package
+  Truck, 
+  MapPin, 
+  Package 
 } from "lucide-react";
 
 // Components & Modals
 import ChatModal from "@/app/components/chat/ChatModal";
 import InquiryFullDetailModal from "@/app/components/InquiryFullDetailModal"; 
 import AdminInquiryCharges from "@/app/components/AdminInquiryCharges"; 
-import { InquiryActionButtons } from "@/app/components/InquiryActionButton";
+import { InquiryActionButtons, type SynchronizedInquiryStatus } from "@/app/components/InquiryActionButton";
 
 // Hooks & Utilities
-import { markConversationAsRead } from "@/services/chat/chatService";
+import { supabase } from "@/lib/supabase";
+import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import { AdminInquiryComposite } from "@/hooks/useAdminInquiry";
-import { CustomInquiryStatus } from "@/types/inquiry";
 import { usePaymentsQuery } from "@/hooks/useFetchPayments"; 
 
 type AdminInquiryCardProps = {
-  inquiry: AdminInquiryComposite & { 
-    final_total_price?: number | null;
-    charge_status?: string | null;
-    shipping_address?: string | null;
-    delivery_method?: string | null;
-  };
+  inquiry: AdminInquiryComposite;
   conversation: {
     id: string;
     admin_unread_count: number;
@@ -41,89 +32,146 @@ type AdminInquiryCardProps = {
   adminId: string;
 };
 
-/* ── ADMINISTRATIVE HIGH-DENSITY WORKFLOW MATRIX ── */
-const getAdminInquiryMessage = (inquiry: any, paymentStatus: string): string => {
-  if (!inquiry) return "Processing blueprint...";
-  const { status, charge_status } = inquiry;
+/* ── ADMINISTRATIVE WORKFLOW MATRIX MESSAGE GENERATOR ── */
+const getAdminInquiryMessage = (
+  inquiry: AdminInquiryComposite, 
+  paymentStatus: "unpaid" | "partially_paid" | "fully_paid" | string,
+  resolvedChargeStatus: string
+): string => {
+  if (!inquiry) return "Loading data.";
+  
+  const normalizedStatus = inquiry.status?.toLowerCase().trim() || "";
+  const normalizedPaymentStatus = paymentStatus?.toLowerCase().trim() || "unpaid";
 
-  if (status === "cancelled") return "Inquiry cancelled by system or user.";
-  if (status === "requested") return "New incoming request. Review specifications and files.";
+  if (normalizedStatus === "cancelled") return "This inquiry has been cancelled.";
+  if (normalizedStatus === "requested") return "New request received. Review specs and accept to start the design step.";
   
-  if (status === "under_review") {
-    if (!charge_status) return "Awaiting initial cost estimate and statement configuration.";
-    if (charge_status === "pending") return "Quote sent to client. Awaiting user approval.";
+  if (normalizedStatus === "under_review") {
+    if (resolvedChargeStatus === "none" || !resolvedChargeStatus) {
+      return "Quote needed. Review details and use Build Invoice Plan to submit pricing.";
+    }
+    if (resolvedChargeStatus === "pending") {
+      return "Quote sent. Waiting for the client to review and approve pricing.";
+    }
+    if (resolvedChargeStatus === "rejected") {
+      return "Quote rejected. Review chat with client for required layout adjustments.";
+    }
+    if (resolvedChargeStatus === "accepted") {
+      if (normalizedPaymentStatus === "partially_paid" || normalizedPaymentStatus === "fully_paid") {
+        return "Quote approved and payment verified. Ready to send to production.";
+      }
+      return "Quote approved. Waiting for the client to submit payment before production.";
+    }
   }
-
-  if (status === "quote_ready") return "Pricing finalized. Waiting for customer sign-off.";
-  if (status === "awaiting_payment") return "Approved by customer. Awaiting initial invoice ledger payment.";
-  if (status === "verifying_payment") return "Payment transaction recorded. Awaiting processing confirmation.";
-  if (status === "in_production") return "Active production floor tracking sequence running.";
   
-  if (["ready_for_pickup", "ready_for_shipment"].includes(status)) {
-    return paymentStatus !== "fully_paid" 
-      ? "Fulfillment ready. Gated pending outstanding balance settlement." 
-      : "Paid in full. Cleared for release and final logistics execution.";
+  if (normalizedStatus === "in_production") {
+    return "Item is currently on the workshop floor in active production.";
   }
   
-  if (status === "in_transit") return "Logistics route active. Dispatch package en route.";
-  if (status === "completed") return "Order archive settled. Project cycle finalized.";
+  if (["ready_for_pickup", "ready_for_shipment"].includes(normalizedStatus)) {
+    return normalizedPaymentStatus !== "fully_paid" 
+      ? "Production complete but final balance is due. Hold release until paid." 
+      : "Paid in full. Cleared for customer release or courier handoff.";
+  }
+  
+  if (normalizedStatus === "in_transit" || normalizedStatus === "shipped") {
+    return "Package has been dispatched and is currently in transit.";
+  }
+  
+  if (normalizedStatus === "completed") {
+    return "Order fulfilled and closed out.";
+  }
 
   return "Review project state records.";
 };
 
-const formatInquiryStatusUI = (status: CustomInquiryStatus) => {
-  const statusMap: Record<CustomInquiryStatus, { label: string; color: string }> = {
-    requested: { label: "Requested", color: "text-sky-400 border-sky-500/20 bg-sky-500/10" },
-    under_review: { label: "Review", color: "text-amber-500 border-amber-600/20 bg-amber-600/5" },
-    quote_ready: { label: "Price Ready", color: "text-amber-400 border-amber-500/20 bg-amber-500/10" },
-    awaiting_payment: { label: "Awaiting Pay", color: "text-amber-400 border-amber-500/20 bg-amber-500/10" },
-    verifying_payment: { label: "Verifying Pay", color: "text-amber-500 border-amber-600/20 bg-amber-600/5" },
-    in_production: { label: "Production", color: "text-amber-500 border-amber-600/20 bg-amber-600/5" },
-    ready_for_pickup: { label: "Ready Pickup", color: "text-emerald-400 border-emerald-500/20 bg-emerald-500/10" },
-    ready_for_shipment: { label: "Ready Ship", color: "text-emerald-400 border-emerald-500/20 bg-emerald-500/10" },
-    in_transit: { label: "In Transit", color: "text-amber-500 border-amber-600/20 bg-amber-600/5" },
-    completed: { label: "Completed", color: "text-emerald-400 border-emerald-500/20 bg-emerald-500/10" },
-    cancelled: { label: "Cancelled", color: "text-rose-400 border-rose-500/20 bg-rose-500/10" },
-  };
-  return statusMap[status] || { label: status, color: "text-amber-500 border-amber-600/20 bg-amber-600/5" };
+/* ── STATUS CHIP DESCRIPTOR FORMATTING ── */
+const formatInquiryStatusUI = (status: SynchronizedInquiryStatus, chargeStatus: string) => {
+  const normalizedStatus = status?.toLowerCase().trim() || "";
+  const normalizedCharge = chargeStatus?.toLowerCase().trim() || "";
+
+  if (normalizedStatus === "requested") {
+    return { label: "NEW REQUEST", color: "text-sky-400 border-sky-500/30 bg-sky-500/10" };
+  }
+  if (normalizedStatus === "under_review") {
+    if (normalizedCharge === "" || normalizedCharge === "none") return { label: "NEED QUOTE", color: "text-rose-400 border-rose-500/30 bg-rose-500/10" };
+    if (normalizedCharge === "pending") return { label: "QUOTE SENT", color: "text-amber-400 border-amber-500/20 bg-amber-500/10" };
+    if (normalizedCharge === "accepted") return { label: "QUOTE APPROVED", color: "text-emerald-400 border-emerald-500/20 bg-emerald-500/10" };
+    if (normalizedCharge === "rejected") return { label: "REJECTED QUOTE", color: "text-rose-500 border-rose-500/30 bg-rose-500/15" };
+  }
+  if (normalizedStatus === "in_production") {
+    return { label: "IN PRODUCTION", color: "text-amber-500 border-amber-600/20 bg-amber-600/5" };
+  }
+  if (normalizedStatus === "ready_for_pickup") {
+    return { label: "READY PICKUP", color: "text-emerald-400 border-emerald-500/20 bg-emerald-500/10" };
+  }
+  if (normalizedStatus === "ready_for_shipment") {
+    return { label: "READY SHIP", color: "text-emerald-400 border-emerald-500/20 bg-emerald-500/10" };
+  }
+  if (normalizedStatus === "in_transit" || normalizedStatus === "shipped") {
+    return { label: "IN TRANSIT", color: "text-sky-400 border-sky-500/20 bg-sky-500/10" };
+  }
+  if (normalizedStatus === "completed") {
+    return { label: "COMPLETED", color: "text-emerald-400 border-emerald-500/20 bg-emerald-500/10" };
+  }
+  if (normalizedStatus === "cancelled") {
+    return { label: "CANCELLED", color: "text-white/20 border-white/10 bg-white/5" };
+  }
+  return { label: status.toUpperCase(), color: "text-amber-500 border-amber-600/20 bg-amber-600/5" };
 };
 
 export default function AdminInquiryCard({ inquiry, conversation, adminId }: AdminInquiryCardProps) {
-  const [hasClearedChat, setHasClearedChat] = useState<boolean>(false);
   const [modals, setModals] = useState({ chat: false, detail: false, charges: false });
 
-  const { data: paymentSummary, isLoading: paymentsLoading } = usePaymentsQuery(inquiry.id);
+  // TanStack asynchronous hook handling
+  const { data: paymentSummary, isLoading: paymentsLoading, isFetching: paymentsFetching } = usePaymentsQuery(inquiry.id);
 
   const liveUnreadCount = useMemo(() => {
-    if (hasClearedChat) return 0;
-    return conversation?.admin_unread_count ?? 0;
-  }, [conversation?.admin_unread_count, hasClearedChat]);
+    return Number(conversation?.admin_unread_count ?? 0);
+  }, [conversation?.admin_unread_count]);
 
   const toggleModal = (key: keyof typeof modals, val: boolean) => {
     setModals((prev) => ({ ...prev, [key]: val }));
-    if (key === "chat" && val === true && conversation?.id) {
-      setHasClearedChat(true);
-      markConversationAsRead({
-        conversationId: conversation.id,
-        readerType: "admin"
-      }).catch((err) => console.error("Error clearing admin chat:", err));
-    }
   };
+
+  const anyModalOpen = Object.values(modals).some(Boolean);
+  useBodyScrollLock(anyModalOpen);
 
   const itemsArray = useMemo(() => inquiry.inquiry_items ?? [], [inquiry.inquiry_items]);
   const firstItem = itemsArray[0];
   const charges = useMemo(() => inquiry.inquiry_charges ?? [], [inquiry.inquiry_charges]);
 
+  /* ── SELF-HEALING FINANCIAL INFERENCE LAYER ── */
+  const explicitChargeStatus = useMemo(() => {
+    if (!inquiry) return "";
+    
+    const statusField = inquiry.charge_status?.toString().toLowerCase().trim();
+    if (statusField && statusField !== "null" && statusField !== "undefined" && statusField !== "") {
+      return statusField;
+    }
+
+    const totalPaid = Number(paymentSummary?.totalPaid ?? (paymentSummary as any)?.amount_paid ?? 0);
+    if (totalPaid > 0) {
+      return "accepted";
+    }
+
+    if (charges && charges.length > 0) {
+      return "pending";
+    }
+
+    return "none";
+  }, [inquiry, charges, paymentSummary]);
+
   const financialData = useMemo(() => {
-    const totalPieces = itemsArray.reduce((sum, i) => sum + Number(i?.quantity ?? 0), 0);
-    const chargesTotal = charges.reduce((total, c) => 
+    const totalPieces = itemsArray.reduce((sum: number, i: any) => sum + Number(i?.quantity ?? 0), 0);
+    const chargesTotal = charges.reduce((total: number, c: any) => 
       c?.is_additive ? total + Number(c?.amount ?? 0) : total - Number(c?.amount ?? 0), 0
     );
     const finalTotal = inquiry.final_total_price !== null && inquiry.final_total_price !== undefined
       ? Number(inquiry.final_total_price)
       : chargesTotal;
 
-    const totalPaid = Number(paymentSummary?.totalPaid ?? 0);
+    const totalPaid = Number(paymentSummary?.totalPaid ?? (paymentSummary as any)?.amount_paid ?? 0);
     const remaining = Math.max(finalTotal - totalPaid, 0);
     const isAwaitingQuote = charges.length === 0 && (inquiry.final_total_price === null || inquiry.final_total_price === undefined);
 
@@ -132,8 +180,10 @@ export default function AdminInquiryCard({ inquiry, conversation, adminId }: Adm
       currentPaymentStatus = remaining <= 0 ? "fully_paid" : "partially_paid";
     }
 
-    return { totalPieces, chargesTotal, finalTotal, totalPaid, remaining, isAwaitingQuote, currentPaymentStatus };
-  }, [inquiry, charges, itemsArray, paymentSummary]);
+    const isSynchronizing = paymentsLoading || paymentsFetching;
+
+    return { totalPieces, chargesTotal, finalTotal, totalPaid, remaining, isAwaitingQuote, currentPaymentStatus, isSynchronizing };
+  }, [inquiry.final_total_price, charges, itemsArray, paymentSummary, paymentsLoading, paymentsFetching]);
 
   const clientIdentifier = useMemo(() => {
     return inquiry.profiles?.first_name 
@@ -141,37 +191,36 @@ export default function AdminInquiryCard({ inquiry, conversation, adminId }: Adm
       : inquiry.profiles?.email || "Anonymous Client";
   }, [inquiry.profiles]);
 
-  // Read-only mode is active for everything EXCEPT "under_review" and "accepted"
   const isReadOnlyStatus = useMemo(() => {
-    return !["under_review", "accepted"].includes(inquiry.status);
-  }, [inquiry.status]);
+    const normalizedStatus = inquiry.status?.toLowerCase().trim() || "";
+    return !(normalizedStatus === "requested" || (normalizedStatus === "under_review" && explicitChargeStatus !== "accepted"));
+  }, [inquiry.status, explicitChargeStatus]);
 
-  const statusUI = formatInquiryStatusUI(inquiry.status);
+  const statusUI = formatInquiryStatusUI(inquiry.status, explicitChargeStatus);
 
   const logisticsData = useMemo(() => {
     const method = inquiry.delivery_method?.toLowerCase() || "unassigned";
     const isPickup = method.includes("pickup");
-    const addressString = inquiry.shipping_address || (inquiry as any).address;
+    const addressString = inquiry.shipping_address || inquiry.delivery_address;
     
     return {
       isPickup,
-      label: isPickup ? "Pickup Track" : method === "unassigned" ? "Unassigned" : "Shipping Track",
-      address: isPickup ? "Workshop Floor Base Area" : addressString || "No delivery address configured"
+      label: isPickup ? "Pickup" : method === "unassigned" ? "Unassigned" : "Shipping",
+      address: isPickup ? "Workshop Floor Hub Base" : addressString || "No address configured"
     };
   }, [inquiry]);
 
   return (
     <>
-      {/* COMPACT HIGH DENSITY CARD CONTAINER */}
       <div className="relative flex flex-col w-full h-full rounded-xl overflow-hidden border border-[#362719] bg-gradient-to-b from-[#120D08] to-[#0A0704] shadow-[0_8px_30px_rgba(0,0,0,0.6)] transition-all duration-200 hover:border-[#D4A97A]/40 p-4 gap-3.5">
         
         {/* HEADER BLOCK */}
         <div className="flex items-center justify-between gap-2 border-b border-[#21180F] pb-2.5">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5 text-[10px] font-bold tracking-wider text-[#A68056] uppercase font-mono">
-              <span>Blueprint Ref</span>
+              <span>Ref</span>
               <span className="text-white bg-[#21180F] px-1.5 py-0.5 rounded text-xs font-sans font-semibold">
-                #{inquiry.id.slice(0, 8).toUpperCase()}
+                #{inquiry.id?.slice(0, 8).toUpperCase()}
               </span>
               <div className={`h-1.5 w-1.5 rounded-full shrink-0 bg-[#D4A97A] ${["requested", "under_review", "in_production"].includes(inquiry.status) ? "animate-pulse shadow-[0_0_6px_#D4A97A]" : ""}`} />
             </div>
@@ -183,7 +232,7 @@ export default function AdminInquiryCard({ inquiry, conversation, adminId }: Adm
           <div className="flex items-center gap-1.5 shrink-0 self-start mt-0.5">
             {liveUnreadCount > 0 && (
               <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-500/10 border border-rose-500/20 text-rose-400 text-[9px] font-bold tracking-wide uppercase animate-pulse">
-                {liveUnreadCount} Msg
+                {liveUnreadCount} MSG
               </span>
             )}
             <span className={`px-2 py-1 rounded-md text-[9px] font-bold uppercase tracking-widest border bg-black/20 ${statusUI.color}`}>
@@ -192,19 +241,18 @@ export default function AdminInquiryCard({ inquiry, conversation, adminId }: Adm
           </div>
         </div>
 
-        {/* PROGRESS TRACKER BAR */}
+        {/* PROGRESS LIFECYCLE LINE TRACKER */}
         <ProgressBar status={inquiry.status} />
 
-        {/* CENTRALIZED DYNAMIC MESSAGE BOX (Fixed height structure layout protection) */}
+        {/* CENTRALIZED DYNAMIC MESSAGE BOX */}
         <div className="flex items-center justify-center text-center bg-white/[0.02] border border-[#21180F] rounded-lg px-3 py-2 min-h-[44px]">
           <p className="text-[12px] text-white/80 font-medium leading-normal tracking-wide">
-            {getAdminInquiryMessage(inquiry, financialData.currentPaymentStatus)}
+            {getAdminInquiryMessage(inquiry, financialData.currentPaymentStatus, explicitChargeStatus)}
           </p>
         </div>
 
-        {/* CORE INFORMATION SUB-GRID */}
+        {/* CORE SPECIFICATIONS SUB-GRID */}
         <div className="flex flex-col gap-2 bg-white/[0.01] border border-[#21180F] p-2.5 rounded-lg text-xs">
-          {/* CLIENT LINE WITH PHONE NUMBER STACKED BELOW */}
           <div className="flex items-start gap-2 min-w-0">
             <User className="w-3.5 h-3.5 text-[#A68056] shrink-0 mt-0.5" />
             <span className="text-white/40 text-[10px] uppercase tracking-wider font-medium w-12 shrink-0 mt-0.5">Client:</span>
@@ -220,7 +268,6 @@ export default function AdminInquiryCard({ inquiry, conversation, adminId }: Adm
             </div>
           </div>
 
-          {/* BLUEPRINT LINE */}
           <div className="flex items-center gap-2 min-w-0 border-t border-[#1C140C] pt-2">
             <Layers className="w-3.5 h-3.5 text-[#D4A97A] shrink-0" />
             <span className="text-white/40 text-[10px] uppercase tracking-wider font-medium w-12 shrink-0">Design:</span>
@@ -233,7 +280,7 @@ export default function AdminInquiryCard({ inquiry, conversation, adminId }: Adm
           </div>
         </div>
 
-        {/* COMPACT ROUTING & ROUTE CHANNELS PANEL */}
+        {/* LOGISTICS & TRACK DISTRIBUTION BLOCK */}
         <div className="flex flex-col gap-1.5 bg-white/[0.01] border border-[#21180F] p-2.5 rounded-lg">
           <div className="flex items-center justify-between gap-2 text-[11px]">
             <div className="flex items-center gap-1.5 text-white/40">
@@ -256,28 +303,29 @@ export default function AdminInquiryCard({ inquiry, conversation, adminId }: Adm
         <div className="border border-[#291E13] rounded-lg overflow-hidden bg-[#050402]">
           <div className="grid grid-cols-3 divide-x divide-[#291E13]">
             <FinStat
-              label="Total Cost"
+              label="Gross Price"
               value={financialData.isAwaitingQuote ? "—" : `₱${financialData.finalTotal.toLocaleString()}`}
               color="text-[#E8C98A] text-xs font-bold"
             />
             <FinStat
-              label="Paid"
-              value={paymentsLoading ? "…" : `₱${financialData.totalPaid.toLocaleString()}`}
+              label="Paid Total"
+              value={financialData.isSynchronizing ? "…" : `₱${financialData.totalPaid.toLocaleString()}`}
               color="text-emerald-400 text-xs font-bold"
             />
             <FinStat
-              label="Balance"
-              value={financialData.isAwaitingQuote ? "—" : `₱${financialData.remaining.toLocaleString()}`}
+              label="Balance Due"
+              value={financialData.isSynchronizing ? "…" : financialData.isAwaitingQuote ? "—" : `₱${financialData.remaining.toLocaleString()}`}
               color={financialData.remaining > 0 && !financialData.isAwaitingQuote ? "text-amber-500 font-bold" : "text-emerald-400"}
             />
           </div>
           
           <div className="flex items-center justify-between bg-[#0A0704] px-2.5 py-1.5 text-[10px] border-t border-[#291E13]">
             <button 
+              type="button"
               onClick={() => toggleModal("charges", true)}
               className="text-white/40 hover:text-[#D4A97A] underline font-medium tracking-wide text-left"
             >
-              {isReadOnlyStatus ? "View Price Breakdown →" : financialData.isAwaitingQuote ? "Build Invoice Plan →" : "Manage Calculations →"}
+              {isReadOnlyStatus ? "View Locked Ledger →" : financialData.isAwaitingQuote ? "Build Invoice Plan →" : "Adjust Cost Matrix →"}
             </button>
             <span className="font-mono text-white/30 truncate max-w-[50%]">
               {financialData.chargesTotal >= 0 ? "+" : ""}₱{financialData.chargesTotal.toLocaleString()} Adj
@@ -285,16 +333,18 @@ export default function AdminInquiryCard({ inquiry, conversation, adminId }: Adm
           </div>
         </div>
 
-        {/* BOTTOM MANAGEMENT ROW INTERACTION FOOTHOLD */}
+        {/* BOTTOM ACTION LAYOUT GRID */}
         <div className="mt-auto pt-1 flex flex-col gap-2.5">
           <div className="grid grid-cols-2 gap-2">
             <button
+              type="button"
               onClick={() => toggleModal("detail", true)}
               className="h-8 rounded-lg border border-[#291E13] bg-white/[0.02] text-[10px] font-bold uppercase tracking-wider text-white/70 hover:bg-white/[0.05] transition-all"
             >
               Blueprint
             </button>
             <button
+              type="button"
               onClick={() => toggleModal("chat", true)}
               className="relative h-8 rounded-lg bg-[#C49A6C] hover:bg-[#D4A97A] text-[10px] font-black uppercase tracking-wider text-[#0E0A06] flex items-center justify-center gap-1.5 transition-all"
             >
@@ -308,31 +358,41 @@ export default function AdminInquiryCard({ inquiry, conversation, adminId }: Adm
             </button>
           </div>
 
-          {/* ACTIVE STEP WORKFLOW PIPELINE BUTTONS */}
+          {/* ACTION BUTTON GATEWAY */}
           <div className="w-full pt-2 border-t border-[#21180F] h-10 flex items-end">
-            <InquiryActionButtons 
-              inquiry={{
-                id: inquiry.id,
-                status: inquiry.status,
-                charge_status: inquiry.charge_status,
-                delivery_method: inquiry.delivery_method as any,
-                payment_status: financialData.currentPaymentStatus
-              }}
-              supabaseClient={supabase}
-              currentAdminId={adminId}
-            />
+            {financialData.isSynchronizing ? (
+              <button
+                disabled
+                className="w-full h-8 rounded-lg bg-white/[0.02] border border-[#21180F] text-[10px] font-black uppercase tracking-wider text-white/20 select-none cursor-not-allowed"
+              >
+                Syncing System Ledger...
+              </button>
+            ) : (
+              <InquiryActionButtons 
+                inquiry={{
+                  id: inquiry.id,
+                  status: inquiry.status,
+                  charge_status: explicitChargeStatus,
+                  inquiry_charges: charges, 
+                  delivery_method: inquiry.delivery_method,
+                  payment_status: financialData.currentPaymentStatus
+                }}
+                supabaseClient={supabase}
+                currentAdminId={adminId}
+              />
+            )}
           </div>
         </div>
       </div>
 
-      {/* MODALS */}
+      {/* PORTAL MODALS SYSTEM */}
       {modals.detail && (
         <InquiryFullDetailModal 
           open={modals.detail} 
           onClose={() => toggleModal("detail", false)} 
-          inquiry_items={itemsArray.map(item => ({
+          inquiry_items={itemsArray.map((item: any) => ({
             ...item,
-            updated_at: (item as any).updated_at || inquiry.created_at
+            updated_at: item.updated_at || inquiry.created_at
           }))} 
         />
       )}
@@ -343,7 +403,6 @@ export default function AdminInquiryCard({ inquiry, conversation, adminId }: Adm
           onClose={() => toggleModal("charges", false)}
           inquiryId={inquiry.id}
           adminId={adminId}
-          status={inquiry.status}
           readOnly={isReadOnlyStatus}
         />
       )}
@@ -361,31 +420,44 @@ export default function AdminInquiryCard({ inquiry, conversation, adminId }: Adm
   );
 }
 
-/* ── LAYOUT SUB-HELPERS ── */
-
-function ProgressBar({ status }: { status: string }) {
-  const stages = ["requested", "under_review", "in_production", "ready", "completed"];
+/* ── SCANNABLE PROGRESS TIMELINE TRACKER ── */
+function ProgressBar({ status }: { status: SynchronizedInquiryStatus }) {
+  const steps = [
+    { key: "requested", label: "Request" },
+    { key: "under_review", label: "Review" },
+    { key: "in_production", label: "Build" },
+    { key: "ready", label: "Ready" },
+    { key: "completed", label: "Done" }
+  ];
   
-  let current = status;
-  if (["ready_for_pickup", "ready_for_shipment", "in_transit"].includes(status)) {
-    current = status === "in_transit" ? "completed" : "ready";
-  }
-  if (status === "awaiting_payment" || status === "verifying_payment" || status === "quote_ready") {
-    current = "under_review";
+  const normalizedStatus = status?.toLowerCase().trim() || "";
+  let current: string = normalizedStatus;
+  
+  if (["ready_for_pickup", "ready_for_shipment", "in_transit", "shipped"].includes(normalizedStatus)) {
+    current = ["in_transit", "shipped"].includes(normalizedStatus) ? "completed" : "ready";
   }
   
-  const idx = stages.indexOf(current);
+  const idx = steps.findIndex(s => s.key === current);
 
   return (
-    <div className="flex items-center justify-between w-full px-0.5">
-      {stages.map((stage, i) => (
-        <div key={stage} className="flex items-center flex-1 last:flex-none">
-          <div className={`h-1.5 w-1.5 rounded-full transition-all duration-300 ${i <= idx ? "bg-[#D4A97A] shadow-[0_0_6px_#D4A97A]" : "bg-white/10"}`} />
-          {i < stages.length - 1 && (
-            <div className={`h-[1px] flex-1 mx-1 ${i < idx ? "bg-[#D4A97A]/30" : "bg-white/5"}`} />
-          )}
-        </div>
-      ))}
+    <div className="w-full px-1 py-1 bg-black/20 rounded-lg border border-[#21180F]">
+      <div className="flex items-center justify-between w-full px-2 pt-1">
+        {steps.map((step, i) => (
+          <div key={step.key} className="flex items-center flex-1 last:flex-none">
+            <div className={`h-2 w-2 rounded-full transition-all duration-300 ${i <= idx ? "bg-[#D4A97A] shadow-[0_0_6px_#D4A97A]" : "bg-white/10"}`} />
+            {i < steps.length - 1 && (
+              <div className={`h-[1px] flex-1 mx-1 ${i < idx ? "bg-[#D4A97A]/40" : "bg-white/5"}`} />
+            )}
+          </div>
+        ))}
+      </div>
+      <div className="flex justify-between items-center w-full px-0.5 mt-1 text-[8px] font-mono uppercase font-bold tracking-tight text-white/30">
+        {steps.map((step, i) => (
+          <span key={step.key} className={`w-10 text-center ${i <= idx ? "text-[#A68056]" : "text-white/20"}`}>
+            {step.label}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }

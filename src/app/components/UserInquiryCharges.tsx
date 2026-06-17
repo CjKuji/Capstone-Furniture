@@ -4,11 +4,13 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useUserInquiryCharges } from "@/hooks/useUserInquiryCharges"; 
 import { useQuery } from "@tanstack/react-query";
 import { SupabaseClient } from "@supabase/supabase-js";
+// Import your pre-configured browser client utility here
+import { supabase as defaultSupabase } from "@/lib/supabase"; 
 
 interface UserInquiryChargesModalProps {
   isOpen: boolean;
   onClose: () => void;
-  supabase: SupabaseClient;
+  supabase?: SupabaseClient; // Made optional to prevent parent-side crash errors
   inquiryId: string;
   userId?: string; 
 }
@@ -16,10 +18,13 @@ interface UserInquiryChargesModalProps {
 export const UserInquiryChargesModal: React.FC<UserInquiryChargesModalProps> = ({
   isOpen,
   onClose,
-  supabase,
+  supabase: passedSupabase,
   inquiryId,
   userId,
 }) => {
+  // Fallback gracefully to the application default browser client if not explicitly passed
+  const clientInstance = passedSupabase || defaultSupabase;
+
   // 1. Core data hook for managing charges line items and mutations
   const {
     charges,
@@ -29,13 +34,13 @@ export const UserInquiryChargesModal: React.FC<UserInquiryChargesModalProps> = (
     rejectCharges,
     isFinalizing,
     finalizeError,
-  } = useUserInquiryCharges({ supabase, inquiryId, userId, enabled: isOpen });
+  } = useUserInquiryCharges({ supabase: clientInstance, inquiryId, userId, enabled: isOpen });
 
   // 2. Fetch the parent inquiry safely using the verified schema column configuration
   const { data: inquiry, isLoading: isLoadingInquiry } = useQuery({
     queryKey: ["inquiries", inquiryId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await clientInstance
         .from("inquiries")
         .select("charge_status") 
         .eq("id", inquiryId)
@@ -227,7 +232,7 @@ export const UserInquiryChargesModal: React.FC<UserInquiryChargesModalProps> = (
             <div className="flex items-center justify-between px-4 py-3 border-b border-[#2A1F14]">
               <p className="text-[9px] font-black uppercase tracking-[0.2em] text-white/25">Charges Breakdown</p>
               <span className="text-[9px] font-black text-[#7A5C3A]">
-                {isLoading ? "..." : `${charges.length} line item${charges.length !== 1 ? "s" : ""}`}
+                {isLoading ? "..." : `${charges?.length ?? 0} line item${charges?.length !== 1 ? "s" : ""}`}
               </span>
             </div>
 
@@ -243,7 +248,7 @@ export const UserInquiryChargesModal: React.FC<UserInquiryChargesModalProps> = (
               </div>
             ) : (
               <div className="divide-y divide-[#1A1106]">
-                {charges.map((charge) => {
+                {(charges ?? []).map((charge) => {
                   const amount = Number(charge.amount ?? 0);
                   const isAdditive = charge.is_additive;
                   return (

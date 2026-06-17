@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { getAdminDashboardStats, AdminDashboardData } from "@/services/dashboardService";
 import { useUser } from "@/hooks/useUser";
@@ -10,11 +10,16 @@ import {
   Layers, 
   Truck, 
   Package, 
-  ChevronRight, 
   TrendingUp, 
   Activity, 
-  Coins,
-  CheckCircle2
+  CheckCircle2, 
+  AlertCircle, 
+  Users, 
+  Calendar, 
+  Filter,
+  X,
+  ArrowUpRight,
+  ClipboardList
 } from "lucide-react";
 
 /* =========================================================
@@ -41,12 +46,16 @@ export default function AdminDashboard() {
   const typedUser = user as UserWithProfile | null;
   const email = typedUser?.email ?? typedUser?.profile?.email ?? null;
 
+  // --- Core Dashboard State ---
   const [data, setData] = useState<AdminDashboardData>(
     dashboardCache ?? {
       pendingQuotes: 0,
       unreadMessages: 0,
       paidAwaitingProduction: 0,
+      pendingStoreOrdersCount: 0,
+      pendingCustomRequestsCount: 0,
       totalFurnitureCatalogCount: 0,
+      currentUsersCount: 0,
       completedOrdersCount: 0,
       completedInquiriesCount: 0,
       activeProduction: 0,
@@ -57,9 +66,13 @@ export default function AdminDashboard() {
   );
 
   const [loading, setLoading] = useState(!dashboardCache);
+  
+  // --- Chronological Filter States ---
+  const [selectedMonth, setSelectedMonth] = useState<string>("ALL");
+  const [selectedYear, setSelectedYear] = useState<string>("ALL");
 
   /* =========================================================
-      DATA FETCHING
+      DATA FETCHING & SYNC
   ========================================================= */
   useEffect(() => {
     let mounted = true;
@@ -67,14 +80,13 @@ export default function AdminDashboard() {
     const loadDashboardData = async () => {
       const now = Date.now();
       
-      // Explicitly check for cache existence here to satisfy TypeScript's type guard
       if (dashboardCache && now - dashboardCacheTime < CACHE_TTL) {
         setData(dashboardCache);
         setLoading(false);
         return;
       }
 
-      if (!dashboardCache) setLoading(true);
+    if (!dashboardCache) setLoading(true);
 
       try {
         const stats = await getAdminDashboardStats();
@@ -97,212 +109,377 @@ export default function AdminDashboard() {
     };
   }, []);
 
-  /* =========================================================
-      UI RENDER
-  ========================================================= */
+  // --- Dynamic Option Mappings Derived From Activity Logs ---
+  const { availableYears, availableMonths } = useMemo(() => {
+    const yearsSet = new Set<string>();
+    const monthsMap = new Map<number, string>();
+
+    data.recentActivity.forEach((log) => {
+      if (!log.createdAt) return;
+      const date = new Date(log.createdAt);
+      if (isNaN(date.getTime())) return;
+
+      yearsSet.add(date.getFullYear().toString());
+      monthsMap.set(date.getMonth(), date.toLocaleString("default", { month: "long" }));
+    });
+
+    const sortedYears = Array.from(yearsSet).sort((a, b) => b.localeCompare(a));
+    const sortedMonths = Array.from(monthsMap.entries())
+      .sort((a, b) => b[0] - a[0])
+      .map(([_, monthName]) => monthName);
+
+    return {
+      availableYears: sortedYears,
+      availableMonths: sortedMonths
+    };
+  }, [data.recentActivity]);
+
+  // --- Reactive Sorting & Filter Evaluation (Ensures Newest Stays on Top) ---
+  const filteredActivity = useMemo(() => {
+    return data.recentActivity
+      .filter((log) => {
+        if (!log.createdAt) return true;
+        const date = new Date(log.createdAt);
+        if (isNaN(date.getTime())) return true;
+
+        const logYear = date.getFullYear().toString();
+        const logMonth = date.toLocaleString("default", { month: "long" });
+
+        const matchesYear = selectedYear === "ALL" || logYear === selectedYear;
+        const matchesMonth = selectedMonth === "ALL" || logMonth === selectedMonth;
+
+        return matchesYear && matchesMonth;
+      })
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [data.recentActivity, selectedMonth, selectedYear]);
+
+  const hasPendingItems = data.pendingQuotes > 0 || data.pendingStoreOrdersCount > 0;
+  const isFiltering = selectedMonth !== "ALL" || selectedYear !== "ALL";
+
+  const clearFilters = () => {
+    setSelectedMonth("ALL");
+    setSelectedYear("ALL");
+  };
+
   return (
-    <main className="min-h-screen bg-[#0F0A06] text-white p-6 space-y-6">
+    <main className="min-h-screen bg-[#0F0A06] text-white p-4 md:p-8 space-y-10 antialiased font-sans print:bg-white print:text-black">
       
-      {/* HEADER SECTION */}
-      <div className="flex items-end justify-between border-b border-white/5 pb-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Operational Command Center
-          </h1>
-          <p className="text-sm text-white/40 mt-1">
-            {email ? `Logged in as ${email}` : "System live monitor"}
+      {/* =========================================================
+          SECTION 0: HEADER
+          ========================================================= */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-white/[0.1] print:border-black/20 pb-6">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2.5">
+            <div className="h-4 w-1 bg-[#D4A97A] rounded-full shadow-[0_0_8px_rgba(212,169,122,0.3)] print:bg-amber-700 print:shadow-none" />
+            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-white print:text-black">
+              Store Management Hub
+            </h1>
+          </div>
+          <p className="text-xs md:text-sm text-white/50 print:text-black/60 font-medium">
+            {email ? `Logged in as: ${email}` : "System status monitor active"}
           </p>
         </div>
 
-        <div className="flex items-center space-x-2 text-xs text-white/30 bg-white/[0.02] border border-white/5 px-3 py-1.5 rounded-full">
-          <span className="relative flex h-2 w-2">
+        <div className="flex items-center space-x-3 text-xs bg-white/[0.02] border border-white/[0.08] print:border-black/10 shadow-2xl px-4 py-2 rounded-xl self-start md:self-auto print:shadow-none">
+          <span className="relative flex h-2 w-2 print:hidden">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
             <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
           </span>
-          <span>Live Store Status: <span className="text-emerald-400 font-medium">Operational</span></span>
+          <span className="text-white/60 print:text-black/70 font-medium tracking-wide">
+            Database Status: <span className="text-emerald-400 print:text-emerald-700 font-semibold uppercase tracking-wider ml-0.5">Synced</span>
+          </span>
         </div>
       </div>
 
-      {/* METRIC BADGES GRID */}
-      {loading && !dashboardCache ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-32 rounded-2xl bg-white/5 border border-white/10 animate-pulse" />
-          ))}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          
-          <KpiCard 
-            label="Pending Custom Quotes" 
-            value={data.pendingQuotes} 
-            subtext="Inquiries waiting for a price quote"
-            tone={data.pendingQuotes > 0 ? "warning" : "default"}
-            icon={FileText}
-          />
-
-          {/* COMPLETED TRANSACTIONS COMPACT HUB */}
-          <div className="border rounded-2xl p-4 bg-white/[0.01] border-white/5 hover:border-white/10 transition flex flex-col justify-between h-32">
-            <div className="flex items-start justify-between border-b border-white/5 pb-1.5">
-              <p className="text-xs text-white/40 uppercase tracking-wider font-medium">Completed Transactions</p>
-              <CheckCircle2 size={15} className="text-emerald-500/50" />
-            </div>
-            <div className="grid grid-cols-2 gap-2 text-left pt-2">
-              <div className="border-r border-white/5 pr-2">
-                <span className="text-[10px] text-white/30 block tracking-tight">Store Orders</span>
-                <p className="text-2xl font-bold tracking-tight text-white/90">{data.completedOrdersCount}</p>
-              </div>
-              <div className="pl-1">
-                <span className="text-[10px] text-white/30 block tracking-tight">Custom Requests</span>
-                <p className="text-2xl font-bold tracking-tight text-white/90">{data.completedInquiriesCount}</p>
-              </div>
-            </div>
+      {/* =========================================================
+          SECTION 1: ACTION ITEMS & METRICS
+          ========================================================= */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <ClipboardList size={14} className="text-[#D4A97A] print:text-amber-700" />
+            <h2 className="text-xs font-bold uppercase tracking-widest text-white/50 print:text-black/50">Action Items & Operations</h2>
           </div>
-
-          <KpiCard 
-            label="Pending Production" 
-            value={data.paidAwaitingProduction} 
-            subtext="Paid orders waiting to be built"
-            tone={data.paidAwaitingProduction > 0 ? "warning" : "default"}
-            icon={Hammer}
-          />
-
-          <KpiCard 
-            label="Total Furniture Listed" 
-            value={data.totalFurnitureCatalogCount} 
-            subtext="Active items on your live catalog"
-            tone="default"
-            icon={Layers}
-          />
         </div>
-      )}
-
-      {/* WORKSHOP & DISPATCH STATUS BLOCK */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         
-        {/* ACTIVE PRODUCTION */}
-        <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-5 flex flex-col justify-between group hover:border-white/10 transition">
-          <div className="flex items-start justify-between">
-            <div>
-              <h3 className="text-xs font-medium text-white/40 uppercase tracking-wider">Active Production Floor</h3>
-              <p className="text-3xl font-bold mt-2 text-amber-500">{loading ? "..." : data.activeProduction}</p>
-            </div>
-            <div className="p-2 rounded-xl bg-amber-500/10 text-amber-500">
-              <Hammer size={18} className="group-hover:rotate-12 transition duration-200" />
-            </div>
+        {loading && !dashboardCache ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 print:hidden">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="h-32 rounded-2xl bg-white/[0.02] border border-white/[0.05] animate-pulse" />
+            ))}
           </div>
-          <p className="text-xs text-white/30 mt-4">Total pieces currently being built in the workshop right now.</p>
-        </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            
+            {/* NEW REQUESTS CARD */}
+            <DashboardCard
+              label="New Requests"
+              tone={hasPendingItems ? "warning" : "default"}
+              icon={AlertCircle}
+            >
+              <div className="grid grid-cols-2 w-full h-full items-end">
+                <div className="relative group/metric pr-2">
+                  <p className="text-3xl font-extrabold tracking-tight text-white print:text-black transition-colors group-hover/metric:text-[#D4A97A]">
+                    {data.pendingQuotes}
+                  </p>
+                  <span className="text-[10px] text-white/40 print:text-black/50 font-medium mt-1 block whitespace-normal break-words">Custom Quotes</span>
+                </div>
+                <div className="relative border-l border-white/[0.1] print:border-black/20 pl-4 group/metric h-full flex flex-col justify-end">
+                  <p className="text-3xl font-extrabold tracking-tight text-white print:text-black transition-colors group-hover/metric:text-[#D4A97A]">
+                    {data.pendingStoreOrdersCount}
+                  </p>
+                  <span className="text-[10px] text-white/40 print:text-black/50 font-medium mt-1 block whitespace-normal break-words">Store Orders</span>
+                </div>
+              </div>
+            </DashboardCard>
 
-        {/* LOGISTICS: PARTIALLY PAID STAGING */}
-        <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-5 flex flex-col justify-between group hover:border-white/10 transition border-l-amber-500/10">
-          <div className="flex items-start justify-between">
-            <div className="w-full">
-              <div className="flex items-center space-x-1.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
-                <h3 className="text-xs font-medium text-white/40 uppercase tracking-wider">Balances Due (Partially Paid)</h3>
-              </div>
-              <div className="grid grid-cols-2 gap-4 mt-3">
-                <div>
-                  <p className="text-xs text-white/40 flex items-center gap-1">
-                    <Truck size={12} className="text-amber-400" /> Ready for Transit
-                  </p>
-                  <p className="text-xl font-semibold mt-0.5 text-white">{loading ? "..." : data.partiallyPaidQueue.readyForDeliveryCount}</p>
-                  <span className="text-[10px] text-white/30 block mt-0.5">Collect on delivery</span>
-                </div>
-                <div>
-                  <p className="text-xs text-white/40 flex items-center gap-1">
-                    <Package size={12} className="text-purple-400" /> Ready to Complete
-                  </p>
-                  <p className="text-xl font-semibold mt-0.5 text-white">{loading ? "..." : data.partiallyPaidQueue.readyForPickupCount}</p>
-                  <span className="text-[10px] text-white/30 block mt-0.5">Collect on pickup</span>
-                </div>
-              </div>
-            </div>
-            <div className="p-2 rounded-xl bg-white/5 text-amber-400/60">
-              <Coins size={16} />
-            </div>
+            {/* STAGED FOR PRODUCTION CARD */}
+            <DashboardCard 
+              label="Staged for Production" 
+              tone={data.paidAwaitingProduction > 0 ? "warning" : "default"}
+              icon={Hammer}
+            >
+              <p className="text-3xl font-extrabold tracking-tight text-white print:text-black">{data.paidAwaitingProduction}</p>
+              <p className="text-[10px] text-white/40 print:text-black/50 font-medium mt-1 whitespace-normal break-words">Approved / Deposits Received</p>
+            </DashboardCard>
+
+            {/* ACTIVE PRODUCTION CARD */}
+            <DashboardCard 
+              label="Active Production" 
+              tone={data.activeProduction > 0 ? "warning" : "default"}
+              icon={Activity}
+            >
+              <p className="text-3xl font-extrabold tracking-tight text-white print:text-black">{data.activeProduction}</p>
+              <p className="text-[10px] text-white/40 print:text-black/50 font-medium mt-1 whitespace-normal break-words">Items currently being built</p>
+            </DashboardCard>
+
+            <DashboardCard 
+              label="Total Products" 
+              tone="default"
+              icon={Layers}
+            >
+              <p className="text-3xl font-extrabold tracking-tight text-white print:text-black">{data.totalFurnitureCatalogCount}</p>
+              <p className="text-[10px] text-white/40 print:text-black/50 font-medium mt-1 whitespace-normal break-words">Active catalog listings</p>
+            </DashboardCard>
+
+            <DashboardCard 
+              label="Registered Customers" 
+              tone="default"
+              icon={Users}
+            >
+              <p className="text-3xl font-extrabold tracking-tight text-white print:text-black">{data.currentUsersCount}</p>
+              <p className="text-[10px] text-white/40 print:text-black/50 font-medium mt-1 whitespace-normal break-words">Total user accounts</p>
+            </DashboardCard>
           </div>
-          <p className="text-xs text-white/30 mt-4">Finished items requiring balance collection during handover steps.</p>
-        </div>
-
-        {/* LOGISTICS: FULLY PAID STAGING */}
-        <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-5 flex flex-col justify-between group hover:border-white/10 transition border-l-emerald-500/10">
-          <div className="flex items-start justify-between">
-            <div className="w-full">
-              <div className="flex items-center space-x-1.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                <h3 className="text-xs font-medium text-white/40 uppercase tracking-wider">Cleared Items (Fully Paid)</h3>
-              </div>
-              <div className="grid grid-cols-2 gap-4 mt-3">
-                <div>
-                  <p className="text-xs text-white/40 flex items-center gap-1">
-                    <Truck size={12} className="text-emerald-400" /> Safe to Dispatch
-                  </p>
-                  <p className="text-xl font-semibold mt-0.5 text-white">{loading ? "..." : data.fullyPaidQueue.readyForDeliveryCount}</p>
-                  <span className="text-[10px] text-white/30 block mt-0.5">Fully paid delivery</span>
-                </div>
-                <div>
-                  <p className="text-xs text-white/40 flex items-center gap-1">
-                    <Package size={12} className="text-purple-400" /> Safe to Release
-                  </p>
-                  <p className="text-xl font-semibold mt-0.5 text-white">{loading ? "..." : data.fullyPaidQueue.readyForPickupCount}</p>
-                  <span className="text-[10px] text-white/30 block mt-0.5">Fully paid pickup</span>
-                </div>
-              </div>
-            </div>
-            <div className="p-2 rounded-xl bg-white/5 text-emerald-400/60">
-              <CheckCircle2 size={16} />
-            </div>
-          </div>
-          <p className="text-xs text-white/30 mt-4">Fully cleared orders. These items can leave your inventory immediately.</p>
-        </div>
-
+        )}
       </div>
 
-      {/* LOWER PANEL INTERFACE */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      {/* =========================================================
+          SECTION 2: LOGISTICS WORKFLOW PILLOWS
+          ========================================================= */}
+      <div className="space-y-4">
+        <div className="flex items-center space-x-2">
+          <Truck size={14} className="text-white/50 print:text-black/50" />
+          <h2 className="text-xs font-bold uppercase tracking-widest text-white/50 print:text-black/50">Fulfillment Stages & Logistics</h2>
+        </div>
 
-        {/* RECENT TIMELINE STREAM LOGS */}
-        <div className="lg:col-span-2 bg-white/[0.03] border border-white/10 rounded-2xl p-5">
-          <div className="flex items-center space-x-2 border-b border-white/5 pb-3">
-            <Activity size={16} className="text-emerald-400" />
-            <h2 className="text-sm font-semibold text-white tracking-wide">
-              Real-Time System Activity Feed
-            </h2>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          
+          {/* PARTIAL PAYMENTS WORK QUEUE */}
+          <div className="bg-white/[0.01] border border-white/[0.1] print:border-black/20 rounded-2xl p-6 flex flex-col justify-between hover:border-white/20 transition duration-300 relative group shadow-xl print:shadow-none">
+            <div className="absolute top-0 left-6 right-6 h-[1px] bg-gradient-to-r from-transparent via-[#D4A97A]/20 to-transparent print:hidden" />
+            <div>
+              <div className="flex items-center space-x-2.5">
+                <span className="h-2 w-2 rounded-full bg-yellow-500 shadow-[0_0_10px_rgba(234,179,8,0.4)] shrink-0 print:shadow-none" />
+                <h3 className="text-xs font-bold text-white/90 print:text-black/80 uppercase tracking-widest">Partial Payments (Balances Remaining)</h3>
+              </div>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-5">
+                <div className="bg-white/[0.01] border border-white/[0.06] print:border-black/10 rounded-xl p-4 flex flex-col justify-between hover:bg-white/[0.02] transition duration-200">
+                  <p className="text-xs text-white/50 print:text-black/60 flex items-center gap-2 font-semibold tracking-wide">
+                    <Truck size={14} className="text-yellow-500 shrink-0" /> <span>Shipments Awaiting Payment</span>
+                  </p>
+                  <p className="text-3xl font-black mt-3 text-white print:text-black">{loading ? "..." : data.partiallyPaidQueue.readyForDeliveryCount}</p>
+                  <span className="text-[10px] text-white/40 print:text-black/50 block mt-2 font-medium">Full payment required to leave warehouse</span>
+                </div>
+                
+                <div className="bg-white/[0.01] border border-white/[0.06] print:border-black/10 rounded-xl p-4 flex flex-col justify-between hover:bg-white/[0.02] transition duration-200">
+                  <p className="text-xs text-white/50 print:text-black/60 flex items-center gap-2 font-semibold tracking-wide">
+                    <Package size={14} className="text-purple-400 print:text-purple-700 shrink-0" /> <span>Pickups Awaiting Payment</span>
+                  </p>
+                  <p className="text-3xl font-black mt-3 text-white print:text-black">{loading ? "..." : data.partiallyPaidQueue.readyForPickupCount}</p>
+                  <span className="text-[10px] text-white/40 print:text-black/50 block mt-2 font-medium">Collect final settlement at checkout counter</span>
+                </div>
+              </div>
+            </div>
+            <p className="text-[11px] text-white/40 print:text-black/50 mt-5 border-t border-white/[0.06] print:border-black/10 pt-4 italic font-medium leading-relaxed">
+              * Production finalized. Stalled in storage awaiting settlement of remaining accounts before dispatch approval.
+            </p>
           </div>
 
-          <div className="mt-4 space-y-3">
+          {/* FULLY PAID DISPATCH PIPELINE */}
+          <div className="bg-white/[0.01] border border-white/[0.1] print:border-black/20 rounded-2xl p-6 flex flex-col justify-between hover:border-white/20 transition duration-300 relative group shadow-xl print:shadow-none">
+            <div className="absolute top-0 left-6 right-6 h-[1px] bg-gradient-to-r from-transparent via-emerald-500/20 to-transparent print:hidden" />
+            <div>
+              <div className="flex items-center space-x-2.5">
+                <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.4)] shrink-0 print:shadow-none" />
+                <h3 className="text-xs font-bold text-white/90 print:text-black/80 uppercase tracking-widest">Fully Paid Items (Ready to Dispatch)</h3>
+              </div>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-5">
+                <div className="bg-white/[0.01] border border-white/[0.06] print:border-black/10 rounded-xl p-4 flex flex-col justify-between hover:bg-white/[0.02] transition duration-200">
+                  <p className="text-xs text-white/50 print:text-black/60 flex items-center gap-2 font-semibold tracking-wide">
+                    <Truck size={14} className="text-emerald-400 print:text-emerald-700 shrink-0" /> <span>Delivery & Transit Pipeline</span>
+                  </p>
+                  <p className="text-3xl font-black mt-3 text-white print:text-black">{loading ? "..." : data.fullyPaidQueue.readyForDeliveryCount}</p>
+                  <span className="text-[10px] text-white/40 print:text-black/50 block mt-2 font-medium">Cleared for delivery transit or actively en route</span>
+                </div>
+                
+                <div className="bg-white/[0.01] border border-white/[0.06] print:border-black/10 rounded-xl p-4 flex flex-col justify-between hover:bg-white/[0.02] transition duration-200">
+                  <p className="text-xs text-white/50 print:text-black/60 flex items-center gap-2 font-semibold tracking-wide">
+                    <Package size={14} className="text-blue-400 print:text-blue-700 shrink-0" /> <span>Cleared For Pickup</span>
+                  </p>
+                  <p className="text-3xl font-black mt-3 text-white print:text-black">{loading ? "..." : data.fullyPaidQueue.readyForPickupCount}</p>
+                  <span className="text-[10px] text-white/40 print:text-black/50 block mt-2 font-medium">Ready for immediate client release</span>
+                </div>
+              </div>
+            </div>
+            <p className="text-[11px] text-white/40 print:text-black/50 mt-5 border-t border-white/[0.06] print:border-black/10 pt-4 italic font-medium leading-relaxed">
+              * Fully paid items. Records automatically archive from this view once their status transitions to completed.
+            </p>
+          </div>
+
+        </div>
+      </div>
+
+      {/* =========================================================
+          SECTION 3: REAL-TIME ACTIVITY & NAVIGATION LINKS
+          ========================================================= */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+        
+        {/* RECENT ACTIVITY STREAM (NEWEST AT THE VERY TOP) */}
+        <div className="lg:col-span-2 bg-white/[0.01] border border-white/[0.1] print:border-black/20 rounded-2xl p-6 space-y-5 shadow-2xl print:shadow-none">
+          
+          <div className="flex flex-col gap-4 border-b border-white/[0.06] print:border-black/10 pb-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center space-x-2.5 min-w-0">
+                <Activity size={16} className="text-emerald-400 print:text-emerald-700 shrink-0" />
+                <h2 className="text-xs font-bold text-white/90 print:text-black/80 uppercase tracking-widest">
+                  Recent Store Activity
+                </h2>
+              </div>
+              
+              {isFiltering && (
+                <button 
+                  onClick={clearFilters}
+                  className="flex items-center gap-1.5 px-3 py-1 text-[11px] bg-white/5 hover:bg-white/10 border border-white/10 text-white/80 rounded-lg transition-all shadow-inner font-medium print:hidden"
+                >
+                  <X size={12} /> Reset Filters
+                </button>
+              )}
+            </div>
+
+            {/* DATE CONTROLS */}
+            <div className="flex flex-col gap-2.5 bg-white/[0.01] border border-white/[0.06] print:border-black/10 rounded-xl p-3.5 print:hidden">
+              {/* Year Selector row */}
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+                <span className="text-[11px] font-bold text-white/40 uppercase tracking-wider flex items-center gap-1 shrink-0 w-16">
+                  <Calendar size={12} className="text-white/20" /> Year
+                </span>
+                <button
+                  onClick={() => setSelectedYear("ALL")}
+                  className={`px-2.5 py-1 text-xs rounded-lg transition-all duration-150 font-medium ${
+                    selectedYear === "ALL" 
+                      ? "bg-white/10 text-white border border-white/[0.08]" 
+                      : "text-white/50 hover:text-white/70"
+                  }`}
+                >
+                  All
+                </button>
+                {availableYears.map((year) => (
+                  <button
+                    key={year}
+                    onClick={() => setSelectedYear(year)}
+                    className={`px-2.5 py-1 text-xs rounded-lg transition-all duration-150 font-medium ${
+                      selectedYear === year 
+                        ? "bg-[#D4A97A]/10 border border-[#D4A97A]/30 text-[#D4A97A]" 
+                        : "text-white/50 hover:text-white/70"
+                    }`}
+                  >
+                    {year}
+                  </button>
+                ))}
+              </div>
+
+              {/* Month Selector row */}
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 border-t border-white/[0.04] pt-2.5 scrollbar-none">
+                <span className="text-[11px] font-bold text-white/40 uppercase tracking-wider flex items-center gap-1 shrink-0 w-16">
+                  <Filter size={11} className="text-white/20" /> Month
+                </span>
+                <button
+                  onClick={() => setSelectedMonth("ALL")}
+                  className={`px-2.5 py-1 text-xs rounded-lg transition-all duration-150 font-medium ${
+                    selectedMonth === "ALL" 
+                      ? "bg-white/10 text-white border border-white/[0.08]" 
+                      : "text-white/50 hover:text-white/70"
+                  }`}
+                >
+                  All
+                </button>
+                {availableMonths.map((month) => (
+                  <button
+                    key={month}
+                    onClick={() => setSelectedMonth(month)}
+                    className={`px-2.5 py-1 text-xs rounded-lg transition-all duration-150 font-medium ${
+                      selectedMonth === month 
+                        ? "bg-[#D4A97A]/10 border border-[#D4A97A]/30 text-[#D4A97A]" 
+                        : "text-white/50 hover:text-white/70"
+                    }`}
+                  >
+                    {month}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* DYNAMIC ACTIVITY CONTAINER */}
+          <div className="space-y-2 max-h-[400px] print:max-h-none overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-white/[0.06] scrollbar-track-transparent">
             {loading && data.recentActivity.length === 0 ? (
-              <p className="text-xs text-white/30 animate-pulse py-4">Syncing up live store updates...</p>
-            ) : data.recentActivity.length === 0 ? (
-              <p className="text-xs text-white/30 py-4">No recent activity found today.</p>
+              <p className="text-xs text-white/40 animate-pulse py-4 font-medium italic">Updating activity items...</p>
+            ) : filteredActivity.length === 0 ? (
+              <div className="text-center py-16 border border-dashed border-white/[0.08] print:border-black/20 rounded-xl bg-white/[0.005]">
+                <Filter size={24} className="text-white/20 mx-auto mb-3" />
+                <p className="text-xs text-white/50 print:text-black/50 font-medium">No activity records found matching these filters.</p>
+              </div>
             ) : (
-              data.recentActivity.map((log) => (
+              filteredActivity.map((log) => (
                 <div 
                   key={log.id} 
-                  className="flex items-start justify-between bg-white/[0.02] border border-white/5 rounded-xl p-3 text-sm hover:bg-white/[0.04] transition"
+                  className="flex flex-col sm:flex-row sm:items-center justify-between bg-white/[0.01] border border-white/[0.06] print:border-black/10 rounded-xl p-3.5 gap-3 hover:bg-white/[0.02] hover:border-white/[0.12] transition duration-200 group break-inside-avoid"
                 >
-                  <div className="space-y-1">
-                    <div className="flex items-center space-x-2">
-                      <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
-                        log.type === "catalog_order" ? "bg-blue-500/10 text-blue-400 border border-blue-500/20" :
-                        log.type === "custom_inquiry" ? "bg-purple-500/10 text-purple-400 border border-purple-500/20" :
-                        "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                  <div className="space-y-1.5 min-w-0 flex-1 sm:pr-4">
+                    <div className="flex items-center space-x-2.5 flex-wrap gap-y-1">
+                      <span className={`text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-md ${
+                        log.type === "catalog_order" ? "bg-blue-500/10 text-blue-400 border border-blue-500/20 print:text-blue-800 print:border-blue-300" :
+                        log.type === "custom_inquiry" ? "bg-purple-500/10 text-purple-400 border border-purple-500/20 print:text-purple-800 print:border-purple-300" :
+                        "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 print:text-emerald-800 print:border-emerald-300"
                       }`}>
                         {log.type === "catalog_order" ? "Store Order" : log.type === "custom_inquiry" ? "Custom Request" : "Payment"}
                       </span>
-                      <span className="font-medium text-white/90">{log.title}</span>
+                      <span className="font-semibold text-white/90 print:text-black text-xs sm:text-sm tracking-tight break-words whitespace-normal">{log.title}</span>
                     </div>
-                    <p className="text-xs text-white/50">{log.description}</p>
+                    <p className="text-xs text-white/50 print:text-black/60 break-words whitespace-normal font-normal leading-relaxed">{log.description}</p>
                   </div>
 
-                  <div className="text-right space-y-1">
-                    {log.amount !== undefined && log.amount > 0 && (
-                      <p className="font-semibold text-white text-xs">₱{log.amount.toLocaleString()}</p>
+                  <div className="text-left sm:text-right shrink-0 border-t sm:border-t-0 border-white/[0.04] print:border-black/10 pt-2 sm:pt-0 w-full sm:w-auto flex sm:flex-col justify-between sm:justify-center items-center sm:items-end gap-1">
+                    {log.amount !== undefined && log.amount > 0 ? (
+                      <p className="font-bold text-[#D4A97A] print:text-amber-800 text-xs sm:text-sm font-mono">₱{log.amount.toLocaleString()}</p>
+                    ) : (
+                      <p className="text-[10px] text-white/30 print:text-black/40 italic font-medium">No Balance</p>
                     )}
-                    <p className="text-[10px] text-white/30 font-mono">
-                      {new Date(log.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    <p className="text-[10px] text-white/40 print:text-black/50 font-medium tracking-tight">
+                      {new Date(log.createdAt).toLocaleDateString([], { month: "short", day: "2-digit" })} &bull; {new Date(log.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </p>
                   </div>
                 </div>
@@ -311,123 +488,140 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* OPERATIONAL NAVIGATION CONTROLS */}
-        <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-5 flex flex-col justify-between">
-          <div>
-            <h2 className="text-sm font-semibold text-white tracking-wide">
-              Quick Shortcuts & Modules
-            </h2>
-            <p className="text-xs text-white/40 mt-1 mb-4">Direct links to manage different system data</p>
+        {/* CUMULATIVE TOTALS & GATEWAYS */}
+        <div className="space-y-5">
+          
+          {/* ARCHIVED VOLUME AGGREGATES */}
+          <div className="bg-white/[0.01] border border-white/[0.08] print:border-black/20 rounded-2xl p-5 space-y-4 shadow-xl print:shadow-none">
+            <h3 className="text-xs font-bold text-white/50 print:text-black/50 uppercase tracking-widest flex items-center gap-2">
+              <CheckCircle2 size={13} className="text-emerald-500/80" /> Lifetime Completed Items
+            </h3>
             
-            <div className="space-y-2 text-sm">
-              <button 
-                onClick={() => router.push("/admin/furniture")}
-                className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 hover:bg-white/10 text-white/80 transition flex items-center justify-between group"
-              >
-                <div className="flex items-center space-x-3">
-                  <Layers size={16} className="text-white/40 group-hover:text-white transition" />
-                  <span className="font-medium">Furniture Catalog</span>
-                </div>
-                <ChevronRight size={14} className="text-white/20 group-hover:text-white group-hover:translate-x-0.5 transition" />
-              </button>
-
-              <button 
-                onClick={() => router.push("/admin/inquiry")}
-                className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 hover:bg-white/10 text-white/80 transition flex items-center justify-between group"
-              >
-                <div className="flex items-center space-x-3">
-                  <FileText size={16} className="text-white/40 group-hover:text-white transition" />
-                  <span className="font-medium">Custom Inquiries</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  {data.pendingQuotes > 0 && (
-                    <span className="text-[10px] px-2 py-0.5 rounded font-medium bg-amber-500/10 border border-amber-500/20 text-amber-400">
-                      {data.pendingQuotes} Pricing
-                    </span>
-                  )}
-                  <ChevronRight size={14} className="text-white/20 group-hover:text-white group-hover:translate-x-0.5 transition" />
-                </div>
-              </button>
-
-              <button 
-                onClick={() => router.push("/admin/orders")}
-                className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 hover:bg-white/10 text-white/80 transition flex items-center justify-between group"
-              >
-                <div className="flex items-center space-x-3">
-                  <Package size={16} className="text-white/40 group-hover:text-white transition" />
-                  <span className="font-medium">Catalog Orders</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  {data.paidAwaitingProduction > 0 && (
-                    <span className="text-[10px] px-2 py-0.5 rounded font-medium bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
-                      {data.paidAwaitingProduction} Paid
-                    </span>
-                  )}
-                  <ChevronRight size={14} className="text-white/20 group-hover:text-white group-hover:translate-x-0.5 transition" />
-                </div>
-              </button>
-
-              <button 
-                onClick={() => router.push("/admin/reports")}
-                className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 hover:bg-white/10 text-white/80 transition flex items-center justify-between group"
-              >
-                <div className="flex items-center space-x-3">
-                  <TrendingUp size={16} className="text-white/40 group-hover:text-white transition" />
-                  <span className="font-medium">Financial Reports</span>
-                </div>
-                <ChevronRight size={14} className="text-white/20 group-hover:text-white group-hover:translate-x-0.5 transition" />
-              </button>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-white/[0.01] border border-white/[0.06] print:border-black/10 rounded-xl p-3.5 text-left group hover:bg-white/[0.02] transition">
+                <span className="text-[10px] text-white/40 print:text-black/50 block tracking-wider uppercase font-bold">Store Orders</span>
+                <p className="text-2xl font-extrabold tracking-tight text-white print:text-black mt-1 group-hover:text-emerald-400 transition-colors">{data.completedOrdersCount}</p>
+              </div>
+              <div className="bg-white/[0.01] border border-white/[0.06] print:border-black/10 rounded-xl p-3.5 text-left group hover:bg-white/[0.02] transition">
+                <span className="text-[10px] text-white/40 print:text-black/50 block tracking-wider uppercase font-bold">Custom Orders</span>
+                <p className="text-2xl font-extrabold tracking-tight text-white print:text-black mt-1 group-hover:text-emerald-400 transition-colors">{data.completedInquiriesCount}</p>
+              </div>
             </div>
           </div>
 
-          <div className="border-t border-white/5 pt-4 mt-6 text-[10px] text-white/20 font-mono text-center">
-            Secured Admin Workspace Session Active
+          {/* QUICK CHANNELS PANEL */}
+          <div className="bg-white/[0.01] border border-white/[0.1] print:border-black/20 rounded-2xl p-5 space-y-4 shadow-2xl print:shadow-none print:break-inside-avoid">
+            <h2 className="text-xs font-bold text-white/50 print:text-black/50 uppercase tracking-widest">
+              Management Gateways
+            </h2>
+            
+            <div className="space-y-2">
+              <ShortcutButton 
+                label="Product Catalog" 
+                icon={Layers} 
+                onClick={() => router.push("/admin/furniture")} 
+              />
+
+              <ShortcutButton 
+                label="Custom Requests" 
+                icon={FileText} 
+                onClick={() => router.push("/admin/inquiry")}
+                badge={data.pendingQuotes > 0 ? { text: `${data.pendingQuotes} New`, variant: "warning" } : undefined}
+              />
+
+              <ShortcutButton 
+                label="Store Checkout Orders" 
+                icon={Package} 
+                onClick={() => router.push("/admin/orders")}
+                badge={data.pendingStoreOrdersCount > 0 ? { text: `${data.pendingStoreOrdersCount} New`, variant: "info" } : undefined}
+              />
+
+              <ShortcutButton 
+                label="Financial Reports" 
+                icon={TrendingUp} 
+                onClick={() => router.push("/admin/reports")} 
+              />
+            </div>
+
+            <div className="border-t border-white/[0.04] print:border-black/10 pt-4 text-[10px] font-medium tracking-wider uppercase text-white/20 print:text-black/30 text-center">
+              Secure Administrative Access
+            </div>
           </div>
         </div>
+
       </div>
     </main>
   );
 }
 
 /* =========================================================
-   SUB-COMPONENT: FIXED KPI CONTAINER CARD WITH FLEX LAYOUT
+   SUB-COMPONENT: DASHBOARD CARD
 ========================================================= */
-function KpiCard({
+function DashboardCard({
   label,
-  value,
-  subtext,
   tone = "default",
   icon: IconComponent,
+  children
 }: {
   label: string;
-  value: number;
-  subtext: string;
-  tone?: "default" | "warning" | "danger";
+  tone?: "default" | "warning";
   icon: React.ComponentType<{ size?: number; className?: string }>;
+  children: React.ReactNode;
 }) {
-  const toneStyles = {
-    default: "text-white border-white/5 hover:border-white/10",
-    warning: "text-amber-400 border-amber-500/20 bg-amber-500/[0.01] hover:border-amber-500/30",
-    danger: "text-rose-400 border-rose-500/20 bg-rose-500/[0.01] hover:border-rose-500/30",
-  };
+  const containerStyles = tone === "warning"
+    ? "border-[#D4A97A]/30 print:border-amber-600/40 text-[#D4A97A] print:text-amber-900 bg-gradient-to-b from-[#D4A97A]/[0.02] to-transparent hover:border-[#D4A97A]/50 shadow-[0_4px_20px_rgba(212,169,122,0.02)] print:shadow-none"
+    : "border-white/[0.1] print:border-black/10 text-white print:text-black bg-gradient-to-b from-white/[0.02] to-transparent hover:border-white/20 shadow-lg print:shadow-none";
 
-  const iconColors = {
-    default: "text-white/30",
-    warning: "text-amber-500/40",
-    danger: "text-rose-500/40",
-  };
+  const iconColors = tone === "warning" ? "text-[#D4A97A]/60 print:text-amber-700" : "text-white/30 print:text-black/40";
 
   return (
-    <div className={`border rounded-2xl p-4 transition flex flex-col justify-between h-32 bg-white/[0.01] ${toneStyles[tone]}`}>
-      <div className="flex items-start justify-between gap-2">
-        <p className="text-xs text-white/40 uppercase tracking-wider font-medium truncate">{label}</p>
-        <IconComponent size={15} className={`shrink-0 ${iconColors[tone]}`} />
+    <div className={`border rounded-2xl p-5 transition-all duration-300 flex flex-col justify-between group break-inside-avoid ${containerStyles}`}>
+      <div className="flex items-start justify-between gap-2 border-b border-white/[0.06] print:border-black/10 pb-2.5 w-full">
+        <p className="text-xs text-white/50 print:text-black/50 uppercase tracking-widest font-bold whitespace-normal break-words">{label}</p>
+        <IconComponent size={14} className={`shrink-0 mt-0.5 transition-transform group-hover:scale-110 duration-200 ${iconColors}`} />
       </div>
-      
-      <div className="flex flex-col justify-end mt-auto pt-2">
-        <p className="text-3xl font-bold tracking-tight leading-none text-white">{value}</p>
-        <p className="text-[10px] text-white/30 tracking-tight mt-1 truncate">{subtext}</p>
+      <div className="flex flex-col justify-end pt-4 min-h-[4rem] w-full">
+        {children}
       </div>
     </div>
+  );
+}
+
+/* =========================================================
+   SUB-COMPONENT: SHORTCUT LINK BUTTON
+========================================================= */
+function ShortcutButton({
+  label,
+  icon: Icon,
+  onClick,
+  badge
+}: {
+  label: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  onClick: () => void;
+  badge?: { text: string; variant: "warning" | "info" };
+}) {
+  return (
+    <button 
+      onClick={onClick}
+      className="w-full px-4 py-3 rounded-xl bg-white/[0.01] border border-white/[0.06] print:border-black/10 hover:border-white/[0.15] hover:bg-white/[0.03] text-white/80 print:text-black/80 hover:text-white transition-all duration-200 flex items-center justify-between group gap-3 shadow-sm print:shadow-none"
+    >
+      <div className="flex items-center space-x-3 min-w-0">
+        <Icon size={14} className="text-white/40 print:text-black/40 group-hover:text-[#D4A97A] print:group-hover:text-amber-800 transition-colors shrink-0" />
+        <span className="font-semibold text-xs tracking-wide truncate">{label}</span>
+      </div>
+      <div className="flex items-center space-x-2 shrink-0">
+        {badge && (
+          <span className={`text-[9px] px-2 py-0.5 rounded-md font-bold uppercase tracking-wider border ${
+            badge.variant === "warning" 
+              ? "bg-[#D4A97A]/10 border-[#D4A97A]/30 text-[#D4A97A] print:bg-amber-100 print:border-amber-300 print:text-amber-800" 
+              : "bg-blue-500/10 border-blue-500/30 text-blue-400 print:bg-blue-100 print:border-blue-300 print:text-blue-800"
+          }`}>
+            {badge.text}
+          </span>
+        )}
+        <ArrowUpRight size={13} className="text-white/20 print:text-black/20 group-hover:text-white print:group-hover:text-black transition-all duration-200 transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+      </div>
+    </button>
   );
 }

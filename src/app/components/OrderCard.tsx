@@ -21,23 +21,16 @@ import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import { getOrderStatusUI } from "@/lib/orderUserStatusUI";
 import { calculatePaymentBreakdown } from "@/utils/paymentCalculator";
 
-/* ── REVISED STATUS MESSAGE LOGIC BASED ON PIPELINE FLOW ── */
 const getOrderMessage = (order: Order): string => {
   if (!order) return "Processing manifest details...";
   
   const { order_status, payment_status, cancel_status, charge_status } = order;
 
-  // 1. Absolute Overrides
   if (order_status === "cancelled") return "This order has been cancelled.";
   if (cancel_status === "requested") return "Your cancellation request is currently under review.";
   if (cancel_status === "rejected") return "Your cancellation request was reviewed and declined.";
+  if (order_status === "requested") return "Your order request is awaiting admin review.";
 
-  // 2. Requested Phase
-  if (order_status === "requested") {
-    return "Your order request is awaiting admin review.";
-  }
-
-  // 3. Accepted Phase Execution Blocks
   if (order_status === "accepted") {
     if (charge_status === "pending") {
       return "Order recognized. Waiting for administrative pricing confirmation and custom quote updates.";
@@ -50,12 +43,10 @@ const getOrderMessage = (order: Order): string => {
     }
   }
 
-  // 4. Production Phase
   if (order_status === "in_production") {
     return "Your custom furniture pieces are currently being crafted in production.";
   }
 
-  // 5. Fulfillment / Release Phase
   if (["ready_for_pickup", "ready_for_shipment"].includes(order_status)) {
     if (payment_status !== "fully_paid") {
       return order_status === "ready_for_pickup"
@@ -67,12 +58,10 @@ const getOrderMessage = (order: Order): string => {
       : "Your furniture is ready for full release and shipment dispatch.";
   }
 
-  // 6. Transit & Delivery
   if (order_status === "shipped" || order_status === "in_transit") {
     return "Your custom furniture delivery is currently on its way.";
   }
 
-  // 7. Completed End-State
   if (order_status === "completed") {
     return "Order completed. Thank you for choosing us!";
   }
@@ -167,15 +156,6 @@ export default function OrderCard({ order: propOrder, userId, conversation: prop
 
   const toggleModal = (key: keyof typeof modals, val: boolean) => {
     setModals((prev) => ({ ...prev, [key]: val }));
-    
-    if (key === "chat" && val === true && propConversation?.id) {
-      setLiveUnreadCount(0);
-      supabase
-        .from("conversations")
-        .update({ customer_unread_count: 0, customer_last_read_at: new Date().toISOString() })
-        .eq("id", propConversation.id)
-        .then();
-    }
   };
 
   const anyModalOpen = Object.values(modals).some(Boolean);
@@ -183,8 +163,37 @@ export default function OrderCard({ order: propOrder, userId, conversation: prop
 
   /* ── DATA HOOKS ── */
   const { charges = [] } = useOrderCharges(order.id);
-  const { data: payments, isLoading: paymentsLoading } = usePaymentsQuery(order.id);
+  
+  const { data: payments, isLoading: paymentsLoading, refetch: refetchPayments } = usePaymentsQuery(order.id, {
+    type: "order"
+  });
+  
   const { cancelOrder, isLoading: isCancelling } = useCancelOrder();
+
+  /* ── REALTIME SUBSCRIPTION: FORCE REFETCH PAYMENTS ON NEW ENTRY ── */
+  useEffect(() => {
+    if (!order.id) return;
+
+    const paymentsChannel = supabase
+      .channel(`live-payments-tracker-${order.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "payments",
+          filter: `order_id=eq.${order.id}`,
+        },
+        () => {
+          refetchPayments();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(paymentsChannel);
+    };
+  }, [order.id, refetchPayments]);
 
   /* ── CALCULATIONS ── */
   const financialData = useMemo(() => {
@@ -206,10 +215,13 @@ export default function OrderCard({ order: propOrder, userId, conversation: prop
         ? Number(order.final_total_price ?? baseTotal)
         : baseTotal + chargesTotal;
 
-    const totalPaid = Number(payments?.totalPaid ?? 0);
-    const breakdown = calculatePaymentBreakdown(finalTotal, totalPaid, "partial");
+    const extractedPaid = payments && typeof payments === "object" && "totalPaid" in payments 
+      ? Number((payments as any).totalPaid ?? 0) 
+      : Number(payments ?? 0);
 
-    return { totalPieces, subtotal, chargesTotal, baseTotal, finalTotal, totalPaid, breakdown };
+    const breakdown = calculatePaymentBreakdown(finalTotal, extractedPaid, "partial");
+
+    return { totalPieces, subtotal, chargesTotal, baseTotal, finalTotal, totalPaid: extractedPaid, breakdown };
   }, [order, charges, payments]);
 
   const { canCancel, cancelMode, canPay, payButtonLabel } = useMemo(() => {
@@ -218,6 +230,9 @@ export default function OrderCard({ order: propOrder, userId, conversation: prop
     const pricingNotLocked = order.charge_status !== "accepted";
 
     const qualifiesForInstantCancel = isUnpaid && order.order_status !== "cancelled";
+    
+    // Explicit condition check: Only mark label as "Pay Remaining" if a genuine down payment value exists
+    const balanceExists = financialData.totalPaid > 0;
 
     return {
       canCancel:
@@ -228,9 +243,9 @@ export default function OrderCard({ order: propOrder, userId, conversation: prop
         order.charge_status === "accepted" &&
         order.order_status !== "cancelled" &&
         order.payment_status !== "fully_paid",
-      payButtonLabel: financialData.totalPaid > 0 ? "Pay Remaining Balance" : "Pay Deposit / Now",
+      payButtonLabel: balanceExists ? "Pay Remaining Balance" : "Pay Deposit / Now",
     };
-  }, [order, financialData]);
+  }, [order, financialData.totalPaid]);
 
   const statusUI = getOrderStatusUI(order.order_status);
 
@@ -247,7 +262,7 @@ export default function OrderCard({ order: propOrder, userId, conversation: prop
       <div className="relative flex flex-col w-full max-w-md mx-auto h-full rounded-2xl overflow-hidden border border-[#423120] bg-gradient-to-b from-[#140F0A] to-[#0E0A06] shadow-[0_12px_40px_rgba(0,0,0,0.7)] transition-all duration-300 hover:border-[#D4A97A]/50">
         <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-[#D4A97A]/80 to-transparent flex-shrink-0" />
 
-        {/* ── HEADER CONTAINER ── */}
+        {/* Header Container */}
         <div className="px-5 pt-4 pb-2 flex-shrink-0">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
@@ -262,15 +277,20 @@ export default function OrderCard({ order: propOrder, userId, conversation: prop
               </p>
             </div>
             
-            {/* TOP-RIGHT CONTROLS STACK */}
             <div className="flex flex-col items-end gap-2 shrink-0">
-              <span
-                className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-[0.15em] border backdrop-blur-sm bg-black/30 shadow-inner ${statusUI?.color}`}
-              >
-                {statusUI?.label || "Processing"}
-              </span>
+              <div className="flex items-center gap-1.5 shrink-0 self-start mt-0.5">
+                {liveUnreadCount > 0 && (
+                  <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-500/10 border border-rose-500/20 text-rose-400 text-[9px] font-bold tracking-wide uppercase animate-pulse">
+                    {liveUnreadCount} MSG
+                  </span>
+                )}
+                <span
+                  className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-[0.15em] border backdrop-blur-sm bg-black/30 shadow-inner ${statusUI?.color}`}
+                >
+                  {statusUI?.label || "Processing"}
+                </span>
+              </div>
 
-              {/* CANCELLATION TRIGGER */}
               {canCancel && (
                 <button
                   onClick={() => toggleModal("cancel", true)}
@@ -284,12 +304,12 @@ export default function OrderCard({ order: propOrder, userId, conversation: prop
           </div>
         </div>
 
-        {/* PROGRESS BAR TRACKER */}
+        {/* Progress Bar */}
         <div className="px-5 mb-4 flex-shrink-0">
           <ProgressBar status={order.order_status} />
         </div>
 
-        {/* ITEM BRIEF INFO */}
+        {/* Item Specs Brief */}
         <div className="px-5 mb-2.5 flex-shrink-0">
           <div className="flex items-center gap-2 bg-white/[0.02] border border-[#2A1F14] rounded-xl px-3 py-1.5">
             <span className="text-[11px] font-black text-[#D4A97A] bg-[#D4A97A]/10 px-1.5 py-0.5 rounded-md">
@@ -301,7 +321,7 @@ export default function OrderCard({ order: propOrder, userId, conversation: prop
           </div>
         </div>
 
-        {/* METRICS PANELS */}
+        {/* Financial Badges Metric Layout */}
         <div className="mx-5 mb-2.5 flex-shrink-0">
           <div className="grid grid-cols-3 divide-x divide-[#38291A] rounded-t-xl border-t border-x border-[#38291A] bg-[#070503]">
             <FinStat
@@ -342,7 +362,7 @@ export default function OrderCard({ order: propOrder, userId, conversation: prop
           </div>
         </div>
 
-        {/* LIVE WORKFLOW CONTEXT MESSAGE */}
+        {/* Workflow Message Bubble */}
         <div className="mx-5 mb-2.5 flex-shrink-0">
           <div className="flex items-start gap-2.5 rounded-xl bg-[#1B120A] border border-[#38291A] px-3.5 py-2 min-h-[50px]">
             <div
@@ -371,7 +391,7 @@ export default function OrderCard({ order: propOrder, userId, conversation: prop
           />
         </div>
 
-        {/* ── FOOTER ACTIONS ── */}
+        {/* Actions Footer */}
         <div className="mt-auto border-t border-[#2A1F14] bg-[#080604] px-5 py-3.5 flex flex-col gap-3 flex-shrink-0">
           <div className="flex items-center justify-between border-b border-[#1C150E] pb-2 h-7">
             <div className="flex flex-col gap-0.5">
@@ -418,7 +438,6 @@ export default function OrderCard({ order: propOrder, userId, conversation: prop
             </button>
           </div>
 
-          {/* ACTION BUTTON CONTAINER */}
           <div className="h-9 shrink-0">
             {paymentsLoading ? (
               <button
@@ -458,39 +477,46 @@ export default function OrderCard({ order: propOrder, userId, conversation: prop
           order={order}
         />
       )}
-      <ChatModal
-        open={modals.chat}
-        onClose={() => toggleModal("chat", false)}
-        order={order}
-        currentUserId={userId}
-        senderType="customer"
-      />
-      <UserChargesModal
-        open={modals.charges}
-        onClose={() => toggleModal("charges", false)}
-        charges={charges}
-        order={order}
-        userId={userId}
-      />
-      <PayModal
-        open={modals.pay}
-        onClose={() => toggleModal("pay", false)}
-        order={order}
-        totalAmount={financialData.finalTotal}
-      />
-      <CancelOrderModal
-        open={modals.cancel}
-        onClose={() => toggleModal("cancel", false)}
-        order={order}
-        mode={cancelMode}
-        onConfirm={handleConfirmCancel}
-      />
+      {modals.chat && (
+        <ChatModal
+          open={modals.chat}
+          onClose={() => toggleModal("chat", false)}
+          order={order}
+          currentUserId={userId}
+          senderType="customer"
+        />
+      )}
+      {modals.charges && (
+        <UserChargesModal
+          open={modals.charges}
+          onClose={() => toggleModal("charges", false)}
+          charges={charges}
+          order={order}
+          userId={userId}
+        />
+      )}
+      {modals.pay && (
+        <PayModal
+          open={modals.pay}
+          onClose={() => toggleModal("pay", false)}
+          order={order}
+          totalAmount={financialData.finalTotal}
+        />
+      )}
+      {modals.cancel && (
+        <CancelOrderModal
+          open={modals.cancel}
+          onClose={() => toggleModal("cancel", false)}
+          order={order}
+          mode={cancelMode}
+          onConfirm={handleConfirmCancel}
+        />
+      )}
     </>
   );
 }
 
 /* ── COMPONENT HELPERS ── */
-
 function ProgressBar({ status }: { status: OrderStatus }) {
   const stages: OrderStatus[] = [
     "requested",
@@ -525,15 +551,7 @@ function ProgressBar({ status }: { status: OrderStatus }) {
   );
 }
 
-function FinStat({
-  label,
-  value,
-  color,
-}: {
-  label: string;
-  value: string;
-  color: string;
-}) {
+function FinStat({ label, value, color }: { label: string; value: string; color: string }) {
   return (
     <div className="flex flex-col items-center py-2">
       <p className="text-[8px] font-black uppercase text-white/30 mb-0.5 tracking-tighter">
@@ -544,25 +562,14 @@ function FinStat({
   );
 }
 
-function InfoRow({
-  label,
-  value,
-  truncate,
-}: {
-  label: string;
-  value: string;
-  truncate?: boolean;
-}) {
+// Fixed to ensure correct structural styling constraints remain unharmed
+function InfoRow({ label, value, truncate }: { label: string; value: string; truncate?: boolean }) {
   return (
     <div className="flex items-baseline justify-between gap-4">
       <span className="text-[9px] font-black uppercase text-white/35 tracking-widest">
         {label}
       </span>
-      <span
-        className={`text-[11px] font-medium text-white/80 ${
-          truncate ? "truncate max-w-[180px]" : ""
-        }`}
-      >
+      <span className={`text-[11px] font-medium text-white/80 ${truncate ? "truncate max-w-[180px]" : ""}`}>
         {value}
       </span>
     </div>

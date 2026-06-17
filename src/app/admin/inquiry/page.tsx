@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useMemo } from "react";
-import { Loader2, AlertTriangle, RefreshCw, ShieldCheck, Eye, Layers, FileText, CheckCircle2 } from "lucide-react";
+import React from "react";
+import { Loader2, AlertTriangle, RefreshCw, ShieldCheck, Eye } from "lucide-react";
 import PageTransition from "@/app/components/PageTransition";
 import Reveal from "@/app/components/Reveal";
 import AdminInquiryCard from "@/app/components/AdminInquiryCard"; 
@@ -9,11 +9,6 @@ import { useAdminInquiries } from "@/hooks/useAdminInquiry";
 import { useUser } from "@/hooks/useUser"; 
 
 export default function AdminInquiriesPage() {
-  /**
-   * REFINED: Dynamically extract the live database profile context.
-   * This completely avoids hardcoded placeholders and secures your RLS / tracking audits
-   * using a structurally valid UUID directly from your session store.
-   */
   const { user } = useUser();
   const currentAdminId = user?.id ?? "";
 
@@ -21,8 +16,6 @@ export default function AdminInquiriesPage() {
   const { data: inquiries, isLoading, error, refetch } = useAdminInquiries({
     limit: 50,
   });
-
- 
 
   return (
     <PageTransition>
@@ -94,7 +87,6 @@ export default function AdminInquiriesPage() {
           ) : (
             
             /* 4. RESPONSIVE OPTIMIZED COMPONENT DISPLAY GRID */
-            /* Adjusted grid columns from max-4 to max-3 layout to provide standard widescreen dimensions */
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 items-start">
               {inquiries.map((inquiry) => {
                 const activeChatRow = inquiry.conversations && inquiry.conversations.length > 0 
@@ -121,21 +113,5 @@ export default function AdminInquiriesPage() {
         </main>
       </div>
     </PageTransition>
-  );
-}
-
-/* ── PIPELINE STATS WIDGET SUB-HELPER ── */
-
-function MetricSummaryCard({ label, count, icon }: { label: string; count: number; icon: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between p-4 rounded-2xl border border-[#2A1F14] bg-gradient-to-b from-[#140F0A] to-[#0E0A06]">
-      <div className="space-y-0.5">
-        <p className="text-[10px] font-bold uppercase tracking-wider text-white/40">{label}</p>
-        <p className="text-xl font-bold font-mono text-white">{count}</p>
-      </div>
-      <div className="p-2.5 rounded-xl bg-white/[0.02] border border-white/5">
-        {icon}
-      </div>
-    </div>
   );
 }

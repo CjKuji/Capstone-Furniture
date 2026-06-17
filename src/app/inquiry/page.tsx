@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, Suspense } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { 
   Plus, 
@@ -21,7 +21,7 @@ import { useUserInquiries } from "@/hooks/useUserInquiry";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 
 /* ─────────────────────────────────────────────────────────────
-   PAYMENT MODAL — Isolated Search Params Boundary
+    PAYMENT MODAL — Isolated Search Params Boundary
 ───────────────────────────────────────────────────────────── */
 function PaymentSuccessModal() {
   const searchParams = useSearchParams();
@@ -75,14 +75,30 @@ function PaymentSuccessModal() {
 }
 
 /* ─────────────────────────────────────────────────────────────
-   MAIN INQUIRY CONTENT
+    MAIN INQUIRY CONTENT
 ───────────────────────────────────────────────────────────── */
 function InquiryManagementContent() {
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const searchParams = useSearchParams();
   const { data: inquiries, isLoading, error, refetch } = useUserInquiries();
 
   const handleOpenModal = () => setIsModalOpen(true);
   const handleCloseModal = () => setIsModalOpen(false);
+
+  // Balanced Synchronization Realtime Handler for Post-checkout hooks
+  useEffect(() => {
+    const paymentStatus = searchParams.get("payment");
+    const paymentOrderId = searchParams.get("orderId");
+
+    if (paymentStatus === "success" && paymentOrderId) {
+      // 150ms debounce window protects against remote pipeline execution lag
+      const syncTimeout = setTimeout(() => {
+        refetch();
+      }, 150);
+
+      return () => clearTimeout(syncTimeout);
+    }
+  }, [searchParams, refetch]);
 
   return (
     <div className="relative bg-[#0F0A06] min-h-screen font-sans text-white antialiased selection:bg-[#D4A97A]/30">
@@ -190,7 +206,7 @@ function InquiryManagementContent() {
           /* DISPLAY RENDER GRID MAP SYSTEM (Updated to dynamic 3-column layout) */
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 items-start">
             {inquiries.map((inquiry) => {
-              const conversation = inquiry.conversations?.[0] || null;
+              const conversation = inquiry.conversations?.[0] || undefined;
 
               return (
                 <InquiryCard 
@@ -222,7 +238,9 @@ function InquiryManagementContent() {
 export default function InquiryManagementPage() {
   return (
     <PageTransition>
-      <InquiryManagementContent />
+      <Suspense fallback={null}>
+        <InquiryManagementContent />
+      </Suspense>
     </PageTransition>
   );
 }

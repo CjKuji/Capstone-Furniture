@@ -19,7 +19,7 @@ type CustomInquiry = {
 type Props = {
   open: boolean;
   onClose: () => void;
-  order?: Order | null;       // Made optional to support dual pipelines
+  order?: Order | null;       // Optional to support dual pipelines
   inquiry?: CustomInquiry | null; // Added to support workshop workflows
   totalAmount: number;
 };
@@ -27,13 +27,22 @@ type Props = {
 export default function PayModal({ open, onClose, order, inquiry, totalAmount }: Props) {
   const { pay, loading, error, resetError } = usePayment();
 
-  // 1. DYNAMICALLY CHOOSE THE SOURCE CONTEXT ID
+  // 1. DYNAMICALLY CHOOSE THE SOURCE CONTEXT ID AND ROUTE TYPE
   const activeTargetId = order?.id || inquiry?.id || "";
+  const targetType = order?.id ? "order" : "inquiry";
   
-  // Use unified payments query query hook matching your backend wrappers
-  const { data: paymentsData } = usePaymentsQuery(activeTargetId);
+  // Pass the target context type configuration directly to the query hook wrapper
+  const { data: paymentsData } = usePaymentsQuery(activeTargetId, { type: targetType });
 
-  const totalPaid       = paymentsData?.totalPaid ?? 0;
+  // 2. SAFE EXTRACTOR: Gracefully unpacks object payloads { totalPaid: X } OR raw primitive numeric streams
+  const totalPaid = useMemo(() => {
+    if (!paymentsData) return 0;
+    if (typeof paymentsData === "object" && "totalPaid" in paymentsData) {
+      return Number((paymentsData as any).totalPaid ?? 0);
+    }
+    return Number(paymentsData ?? 0);
+  }, [paymentsData]);
+
   const hasPaidAnything = totalPaid > 0;
 
   const safeTotalAmount = useMemo(() => {
@@ -41,37 +50,49 @@ export default function PayModal({ open, onClose, order, inquiry, totalAmount }:
     return !parsed || parsed <= 0 || isNaN(parsed) ? 0 : parsed;
   }, [totalAmount]);
 
+  // If a down payment already exists, force the dynamic state selector to fall back to regular collection pipeline
   const [paymentType, setPaymentType] = useState<PaymentType>("partial");
 
+  // Synchronize payment options when historical ledger balances arrive
+  useEffect(() => {
+    if (hasPaidAnything) {
+      setPaymentType("full");
+    } else {
+      setPaymentType("partial");
+    }
+  }, [hasPaidAnything]);
+
   const breakdown = useMemo(
-    () => calculatePaymentBreakdown(safeTotalAmount, totalPaid, paymentType),
-    [safeTotalAmount, totalPaid, paymentType]
+    () => calculatePaymentBreakdown(safeTotalAmount, totalPaid, hasPaidAnything ? "full" : paymentType),
+    [safeTotalAmount, totalPaid, paymentType, hasPaidAnything]
   );
 
-  const payNowAmount      = breakdown.payNow ?? 0;
+  const payNowAmount       = breakdown.payNow ?? 0;
   const remainingBalance  = Math.max(safeTotalAmount - totalPaid, 0);
-  const showPaymentOptions = totalPaid === 0;
+  
+  // Enforce absolute rule: Hide variable split parameters completely if a partial collection signature is found
+  const showPaymentOptions = totalPaid === 0 && !hasPaidAnything;
 
   const payButtonLabel = hasPaidAnything
-    ? "Pay Remaining"
+    ? "Pay Remaining Balance"
     : paymentType === "full"
-    ? "Pay Full"
-    : "Pay Partial";
+    ? "Pay Full Amount"
+    : "Pay Deposit (50%)";
 
   /* ── DERIVE DISCARDABLE COMPONENT PRESENTATION METADATA ── */
   const contextMeta = useMemo(() => {
     if (inquiry) {
       return {
-        typeLabel: "Custom Inquiry",
+        typeLabel: "Custom Request",
         referenceCode: inquiry.inquiry_reference_code || inquiry.id?.substring(0, 8).toUpperCase() || "N/A",
         customerName: inquiry.customer_name || "Custom Client",
         deliveryMethod: inquiry.delivery_method || "Standard Delivery",
       };
     }
     return {
-      typeLabel: "Order",
+      typeLabel: "Store Order",
       referenceCode: order?.order_reference_code || "N/A",
-      customerName: order?.customer_name || "Unknown",
+      customerName: order?.customer_name || "Unknown Customer",
       deliveryMethod: order?.delivery_method || "Standard",
     };
   }, [order, inquiry]);
@@ -98,10 +119,10 @@ export default function PayModal({ open, onClose, order, inquiry, totalAmount }:
       
       // Conditionally pack parameters safely to align with database entity routers
       await pay({
-        orderId: order?.id || "",
-        inquiryId: inquiry?.id || "",
+        orderId: order?.id || undefined,
+        inquiryId: inquiry?.id || undefined,
         userId: order?.user_id || inquiry?.user_id || "",
-        type: hasPaidAnything ? "partial" : paymentType,
+        type: hasPaidAnything ? "full" : paymentType, // Forces full checkout resolution if working down an active balance due
       });
     } catch (err) {
       console.error(err);
@@ -113,7 +134,7 @@ export default function PayModal({ open, onClose, order, inquiry, totalAmount }:
   return (
     /* ── OVERLAY ── */
     <div
-      className="fixed inset-0 z-[99999] flex justify-center p-4 pb-6 md:pb-8 backdrop-blur-md overflow-hidden bg-black/70"
+      className="fixed inset-0 z-[99999] flex justify-center p-4 pb-6 md:pb-8 backdrop-blur-md overflow-hidden bg-black/75"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       {/* ── RESPONSIVE SHEET / CONTAINER ── */}
@@ -121,34 +142,33 @@ export default function PayModal({ open, onClose, order, inquiry, totalAmount }:
         className="
           w-full flex flex-col 
           rounded-2xl max-w-lg
-          /* Architecture offsets to guarantee zero navbar overlap layout blockages */
           mt-[76px] h-[calc(100vh-100px)] md:mt-[84px] md:h-[calc(100vh-116px)]
-          shadow-[0_24px_64px_rgba(0,0,0,0.8)] transition-all duration-200 overflow-hidden
-          border border-[#2A1F14] bg-[#0E0A06]
+          shadow-[0_24px_64px_rgba(0,0,0,0.85)] transition-all duration-200 overflow-hidden
+          border border-white/[0.06] bg-[#0A0705]
         "
       >
         {/* TOP ACCENT LINE */}
-        <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-[#D4A97A]/60 to-transparent shrink-0" />
+        <div className="h-[1px] w-full bg-gradient-to-r from-transparent via-[#D4A97A]/40 to-transparent shrink-0" />
 
         {/* ── HEADER ── */}
-        <div className="shrink-0 flex items-center justify-between gap-4 px-5 sm:px-6 py-4 bg-[#0B0704] border-b border-[#2A1F14]">
+        <div className="shrink-0 flex items-center justify-between gap-4 px-6 py-4 bg-[#0E0A07] border-b border-white/[0.04]">
           <div className="min-w-0">
-            <p className="text-[9px] font-black uppercase tracking-[0.22em] text-[#7A5C3A] mb-0.5">
-              {contextMeta.typeLabel} Payment
+            <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#D4A97A] mb-0.5">
+              {contextMeta.typeLabel} Checkout
             </p>
-            <h2 className="text-sm sm:text-base font-bold text-white tracking-tight truncate">
-              Complete Your Payment
+            <h2 className="text-base font-bold text-white tracking-tight truncate">
+              Complete Secure Payment
             </h2>
-            <p className="text-[10px] text-white/30 mt-0.5">
-              Ref ID #{contextMeta.referenceCode}
+            <p className="text-[11px] text-white/40 mt-0.5">
+              Reference #{contextMeta.referenceCode}
             </p>
           </div>
           <button
             onClick={onClose}
             className="
               shrink-0 flex h-8 w-8 items-center justify-center
-              rounded-xl border border-[#2A1F14] bg-white/[0.03]
-              text-white/40 hover:text-white/70 hover:bg-white/[0.07]
+              rounded-xl border border-white/[0.06] bg-white/[0.02]
+              text-white/40 hover:text-white/80 hover:bg-white/5
               transition-all text-xs
             "
           >
@@ -157,46 +177,44 @@ export default function PayModal({ open, onClose, order, inquiry, totalAmount }:
         </div>
 
         {/* ── INTERNAL SCROLLABLE CONTENT BLOCK ── */}
-        <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4 focus:outline-none custom-scrollbar">
+        <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-5 focus:outline-none custom-scrollbar bg-gradient-to-b from-[#0A0705] to-[#070504]">
 
           {/* FINANCIAL STAT SUMMARY STRIP */}
-          <div className="grid grid-cols-3 divide-x divide-[#2A1F14] rounded-xl border border-[#2A1F14] bg-[#0B0704] overflow-hidden shadow-inner">
-            <FinStat label="Invoice Total" value={`₱${safeTotalAmount.toLocaleString()}`} color="text-[#E8C98A]" />
-            <FinStat label="Paid" value={`₱${totalPaid.toLocaleString()}`} color="text-emerald-400" />
+          <div className="grid grid-cols-3 divide-x divide-white/[0.04] rounded-xl border border-white/[0.04] bg-[#0E0A07]/50 overflow-hidden shadow-inner">
+            <FinStat label="Total Cost" value={`₱${safeTotalAmount.toLocaleString()}`} color="text-white/90" />
+            <FinStat label="Total Paid" value={`₱${totalPaid.toLocaleString()}`} color="text-emerald-400" />
             <FinStat
-              label="Balance"
+              label="Remaining"
               value={`₱${remainingBalance.toLocaleString()}`}
-              color={remainingBalance > 0 ? "text-amber-400 font-bold" : "text-emerald-400"}
+              color={remainingBalance > 0 ? "text-[#D4A97A] font-bold" : "text-emerald-400"}
             />
           </div>
 
           {/* CLIENT INFO DESCRIPTION CARD */}
-          <div className="rounded-xl border border-[#2A1F14] bg-[#0B0704] overflow-hidden">
-            <div className="px-4 py-2.5 bg-white/[0.01] border-b border-[#2A1F14]/40">
-              <p className="text-[9px] font-black uppercase tracking-[0.2em] text-white/25">
-                {contextMeta.typeLabel} Details
+          <div className="rounded-xl border border-white/[0.04] bg-[#0E0A07]/30 overflow-hidden">
+            <div className="px-4 py-2 bg-white/[0.01] border-b border-white/[0.04]">
+              <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-white/30">
+                Summary Records
               </p>
             </div>
-            <div className="px-4 py-3 space-y-2">
-              <InfoRow label="Customer" value={contextMeta.customerName} />
-              <InfoRow label="Delivery" value={contextMeta.deliveryMethod} capitalize />
-              <InfoRow label="Already Paid" value={`₱${totalPaid.toLocaleString()}`} />
+            <div className="px-4 py-3 space-y-2.5">
+              <InfoRow label="Client Reference" value={contextMeta.customerName} />
+              <InfoRow label="Logistics Method" value={contextMeta.deliveryMethod} capitalize />
+              <InfoRow label="Ledger History" value={hasPaidAnything ? `Partially Settled (₱${totalPaid.toLocaleString()})` : "No Payments Tracked"} />
             </div>
           </div>
 
           {/* PAYMENT TYPE TOGGLE ACTIONS */}
-          {showPaymentOptions && (
-            <div className="rounded-xl border border-[#2A1F14] bg-[#0B0704] overflow-hidden">
-              <div className="px-4 py-2.5 bg-white/[0.01] border-b border-[#2A1F14]/40">
-                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-white/25">Payment Option</p>
-              </div>
-              <div className="p-3 space-y-2">
+          {showPaymentOptions ? (
+            <div className="space-y-2">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-white/30 px-1">Select Terms</p>
+              <div className="space-y-2">
                 {/* PARTIAL SELECTION */}
                 <OptionButton
                   selected={paymentType === "partial"}
                   onClick={() => setPaymentType("partial")}
-                  title="Partial Payment"
-                  subtitle="Pay 50% now, remaining later"
+                  title="Partial Down Payment"
+                  subtitle="Pay 50% commitment base deposit now"
                   amount={`₱${Math.round(safeTotalAmount * 0.5).toLocaleString()}`}
                 />
 
@@ -204,52 +222,59 @@ export default function PayModal({ open, onClose, order, inquiry, totalAmount }:
                 <OptionButton
                   selected={paymentType === "full"}
                   onClick={() => setPaymentType("full")}
-                  title="Full Payment"
-                  subtitle="Complete the full payment now"
+                  title="Full Direct Payment"
+                  subtitle="Settle entire catalog invoice balance immediately"
                   amount={`₱${safeTotalAmount.toLocaleString()}`}
                 />
               </div>
             </div>
-          )}
+          ) : hasPaidAnything ? (
+            /* CONTEXT MESSAGE REGARDING PREVIOUS PARTIAL PAYMENTS */
+            <div className="rounded-xl border border-[#D4A97A]/20 bg-[#D4A97A]/[0.02] p-4 text-center">
+              <p className="text-xs font-semibold text-[#E5BA8B]">Settling Balance Due</p>
+              <p className="text-[11px] text-white/40 mt-1 max-w-xs mx-auto leading-relaxed">
+                A deposit has already been processed for this transaction. The platform has automatically prepared your final clearance statement.
+              </p>
+            </div>
+          ) : null}
 
           {/* REALTIME AMOUNT DUE PRESENTATION HEADER */}
-          <div className="rounded-xl border border-[#2A1F14] bg-[#0B0704] overflow-hidden">
-            <div className="flex items-center justify-between gap-4 px-4 py-3.5">
+          <div className="rounded-xl border border-white/[0.04] bg-[#0E0A07]/60 overflow-hidden shadow-md">
+            <div className="flex items-center justify-between gap-4 px-5 py-4">
               <div>
-                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-white/25">
-                  {hasPaidAnything ? "Remaining Payment" : "Amount Due Now"}
+                <p className="text-[10px] font-bold uppercase tracking-wider text-white/40">
+                  {hasPaidAnything ? "Final Remainder Outstanding" : "Processing Charge Amount"}
                 </p>
-                <p className="mt-1 text-[22px] sm:text-[26px] font-black tabular-nums text-[#E8C98A] leading-none">
+                <p className="mt-1.5 text-2xl sm:text-3xl font-black tabular-nums text-[#D4A97A] tracking-tight leading-none">
                   ₱{payNowAmount.toLocaleString()}
                 </p>
               </div>
               <div className="text-right shrink-0">
-                <p className="text-[9px] text-white/25 uppercase tracking-wider">Type</p>
-                <p className="mt-0.5 text-[11px] font-bold text-white/60">
-                  {hasPaidAnything ? "Remaining" : paymentType === "full" ? "Full" : "Partial"}
-                </p>
+                <span className="inline-flex items-center rounded-md bg-white/5 px-2.5 py-1 text-[10px] font-medium text-white/70 border border-white/10">
+                  {hasPaidAnything ? "Final Balance" : paymentType === "full" ? "100% Invoice" : "50% Deposit"}
+                </span>
               </div>
             </div>
           </div>
 
           {/* DISMISSABLE ERROR TRACE BOX */}
           {error && (
-            <div className="rounded-xl border border-rose-500/20 bg-rose-500/[0.07] px-4 py-3 text-[11px] text-rose-400">
+            <div className="rounded-xl border border-rose-500/15 bg-rose-500/[0.04] px-4 py-3 text-[11px] text-rose-300 leading-relaxed">
               {error}
             </div>
           )}
         </div>
 
         {/* ── FOOTER DOCK ── */}
-        <div className="shrink-0 border-t border-[#2A1F14] bg-[#0B0704] px-5 sm:px-6 py-4">
-          <div className="flex flex-col-reverse sm:flex-row gap-3 w-full pb-[env(safe-area-inset-bottom)]">
+        <div className="shrink-0 border-t border-white/[0.04] bg-[#0E0A07] px-6 py-4">
+          <div className="flex flex-col-reverse sm:flex-row gap-3 w-full">
             <button
               onClick={onClose}
               disabled={loading}
               className="
-                flex-1 h-10 rounded-xl text-[10px] font-black uppercase tracking-[0.15em] transition
-                border border-[#2A1F14] bg-white/[0.02] text-white/50
-                hover:bg-white/[0.05] hover:text-white/80 active:scale-[0.99] disabled:opacity-40
+                flex-1 h-10 rounded-xl text-[10px] font-bold uppercase tracking-[0.12em] transition
+                border border-white/5 bg-white/[0.01] text-white/40
+                hover:bg-white/[0.03] hover:text-white/70 active:scale-[0.98] disabled:opacity-40
               "
             >
               Cancel
@@ -259,14 +284,14 @@ export default function PayModal({ open, onClose, order, inquiry, totalAmount }:
               onClick={handlePay}
               disabled={loading || payNowAmount <= 0}
               className="
-                flex-[2] h-10 rounded-xl text-[10px] font-black uppercase tracking-[0.12em] text-[#0E0A06] transition
-                bg-gradient-to-r from-[#C49A6C] via-[#D4A97A] to-[#E8C98A]
-                shadow-[0_4px_12px_rgba(212,169,122,0.2)] hover:shadow-[0_4px_20px_rgba(212,169,122,0.45)]
-                hover:brightness-105 active:scale-[0.99]
-                disabled:opacity-50 disabled:cursor-not-allowed
+                flex-[2] h-10 rounded-xl text-[10px] font-bold uppercase tracking-[0.12em] text-[#1C1209] transition
+                bg-[#D4A97A] hover:bg-[#E5BA8B]
+                shadow-[0_4px_20px_rgba(212,169,122,0.15)]
+                active:scale-[0.98]
+                disabled:opacity-30 disabled:cursor-not-allowed disabled:pointer-events-none
               "
             >
-              {loading ? "Processing…" : `${payButtonLabel} · ₱${payNowAmount.toLocaleString()}`}
+              {loading ? "Authorizing Security Node…" : payButtonLabel}
             </button>
           </div>
         </div>
@@ -288,11 +313,11 @@ function FinStat({
   color?: string;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center py-2 px-1">
-      <p className="text-[8px] font-black uppercase tracking-[0.16em] text-white/20 mb-0.5 text-center">
+    <div className="flex flex-col items-center justify-center py-2.5 px-1">
+      <p className="text-[9px] font-semibold uppercase tracking-wider text-white/30 mb-0.5 text-center select-none">
         {label}
       </p>
-      <p className={`text-[12px] font-bold tracking-wide tabular-nums ${color}`}>{value}</p>
+      <p className={`text-[13px] font-bold tracking-tight tabular-nums ${color}`}>{value}</p>
     </div>
   );
 }
@@ -308,10 +333,10 @@ function InfoRow({
 }) {
   return (
     <div className="flex items-baseline justify-between gap-3">
-      <span className="shrink-0 text-[9px] font-black uppercase tracking-[0.16em] text-white/25">
+      <span className="shrink-0 text-[10px] font-medium text-white/30">
         {label}
       </span>
-      <span className={`text-[11px] font-semibold text-white/70 ${capitalize ? "capitalize" : ""}`}>
+      <span className={`text-[12px] font-semibold text-white/70 ${capitalize ? "capitalize" : ""}`}>
         {value}
       </span>
     </div>
@@ -335,29 +360,26 @@ function OptionButton({
     <button
       onClick={onClick}
       className={`
-        w-full rounded-xl border p-3.5 text-left transition-all active:scale-[0.99]
+        w-full rounded-xl border p-4 text-left transition-all active:scale-[0.995]
         ${selected
-          ? "border-[#D4A97A]/40 bg-[#D4A97A]/[0.07]"
-          : "border-[#2A1F14] bg-[#0E0A06] hover:bg-white/[0.02]"}
+          ? "border-[#D4A97A]/40 bg-[#D4A97A]/[0.04] shadow-inner animate-none"
+          : "border-white/[0.04] bg-[#0E0A07]/20 hover:bg-white/[0.02]"}
       `}
     >
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
-          <p className={`text-[12px] font-bold ${selected ? "text-[#E8C98A]" : "text-white/70"}`}>
+          <p className={`text-xs font-bold ${selected ? "text-[#E8C98A]" : "text-white/80"}`}>
             {title}
           </p>
-          <p className="mt-0.5 text-[10px] text-white/30">{subtitle}</p>
+          <p className="mt-0.5 text-[11px] text-white/40">{subtitle}</p>
         </div>
         <div className="text-right shrink-0">
-          <p className={`text-[14px] font-black tabular-nums ${selected ? "text-[#E8C98A]" : "text-white/60"}`}>
+          <p className={`text-[13px] font-bold tabular-nums ${selected ? "text-[#E8C98A]" : "text-white/70"}`}>
             {amount}
           </p>
-          <p className="text-[9px] text-white/25 uppercase tracking-wider">Due now</p>
+          <p className="text-[9px] text-white/30 uppercase tracking-wider">Required</p>
         </div>
       </div>
-      {selected && (
-        <div className="mt-2 h-[1px] w-full bg-gradient-to-r from-transparent via-[#D4A97A]/30 to-transparent" />
-      )}
     </button>
   );
 }

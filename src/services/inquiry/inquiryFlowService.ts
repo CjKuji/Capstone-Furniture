@@ -46,11 +46,11 @@ export class InquiryFlowService {
   }
 
   /**
-   * Transition 2: Complete pricing breakdown and submit to client 
-   * Status change: 'under_review' -> 'quote_ready'
+   * Transition 2: Clear billing records and move directly to the fabrication workshop floor
+   * Status change: 'under_review' -> 'in_production'
    */
-  async markQuoteAsReady(inquiryId: string): Promise<InquiryTransitionResult> {
-    // Condition verification: Ensure line-item calculations exist prior to submittal
+  async approvePaymentToProduction(inquiryId: string): Promise<InquiryTransitionResult> {
+    // Condition verification: Ensure at least one charge item is configured before approving
     const { count, error: countError } = await this.supabase
       .from('inquiry_charges')
       .select('*', { count: 'exact', head: true })
@@ -58,38 +58,15 @@ export class InquiryFlowService {
 
     if (countError) return { success: false, message: `Database checking error: ${countError.message}` };
     if (!count || count === 0) {
-      return { success: false, message: 'Cannot set quote as ready: Add at least one row item charge first.' };
+      return { success: false, message: 'Cannot push to production: Add at least one row item charge first.' };
     }
 
-    return this.transitionStatus(inquiryId, 'quote_ready', ['under_review']);
+    // Directly transitions from under_review to in_production
+    return this.transitionStatus(inquiryId, 'in_production', ['under_review']);
   }
 
   /**
-   * Transition 3: Client proceeds to check out or requests payment invoice link
-   * Status change: 'quote_ready' -> 'awaiting_payment'
-   */
-  async presentPaymentIntent(inquiryId: string): Promise<InquiryTransitionResult> {
-    return this.transitionStatus(inquiryId, 'awaiting_payment', ['quote_ready']);
-  }
-
-  /**
-   * Transition 4: Customer posts verification proof or payment process kicks off
-   * Status change: 'awaiting_payment' -> 'verifying_payment'
-   */
-  async submitForVerification(inquiryId: string): Promise<InquiryTransitionResult> {
-    return this.transitionStatus(inquiryId, 'verifying_payment', ['awaiting_payment']);
-  }
-
-  /**
-   * Transition 5: Clear billing records and move to fabrication workshop floor
-   * Status change: 'verifying_payment' -> 'in_production'
-   */
-  async approvePaymentToProduction(inquiryId: string): Promise<InquiryTransitionResult> {
-    return this.transitionStatus(inquiryId, 'in_production', ['verifying_payment', 'awaiting_payment']);
-  }
-
-  /**
-   * Transition 6: Completed workshop builds and route fulfillment handling
+   * Transition 3: Completed workshop builds and route fulfillment handling
    * Status change: 'in_production' -> 'ready_for_pickup' | 'ready_for_shipment'
    */
   async markProductionComplete(inquiryId: string, deliveryMethod: 'pickup' | 'delivery'): Promise<InquiryTransitionResult> {
@@ -98,7 +75,7 @@ export class InquiryFlowService {
   }
 
   /**
-   * Transition 7: Order dispatched onto courier tracks
+   * Transition 4: Order dispatched onto courier tracks
    * Status change: 'ready_for_shipment' -> 'in_transit'
    */
   async dispatchShipment(inquiryId: string): Promise<InquiryTransitionResult> {
@@ -106,16 +83,14 @@ export class InquiryFlowService {
   }
 
   /**
-   * Transition 8: Finalize the transaction process lifecyle
-   * Status change: Allow completion from final logistical targets
+   * Transition 5: Finalize the transaction process lifecycle
    */
   async completeInquiry(inquiryId: string): Promise<InquiryTransitionResult> {
     return this.transitionStatus(inquiryId, 'completed', ['in_transit', 'ready_for_pickup']);
   }
 
   /**
-   * Transition 9: Master break closure
-   * Status change: Any standard upstream flow state -> 'cancelled'
+   * Transition 6: Master cancel drop control
    */
   async cancelInquiry(inquiryId: string, reason: string): Promise<InquiryTransitionResult> {
     const nonCancellable: CustomInquiryStatus[] = ['completed', 'cancelled'];
@@ -137,7 +112,7 @@ export class InquiryFlowService {
         .update({
           status: 'cancelled' as CustomInquiryStatus,
           cancel_reason: reason,
-          cancel_status: 'approved', // Maps cleanly against cancel_status_enum
+          cancel_status: 'approved',
           updated_at: new Date().toISOString()
         })
         .eq('id', inquiryId)
