@@ -5,7 +5,8 @@ import {
   Home,
   Box,
   ShoppingCart,
-  MessageSquare, // Premium icon clean for Bespoke / Design Inquiries
+  MessageSquare,
+  BarChart2,
   LogOut,
   Settings,
   Globe,
@@ -47,7 +48,13 @@ const NAVIGATION: NavGroup[] = [
     items: [
       { label: "Furniture", path: "/admin/furniture", icon: Box },
       { label: "Orders", path: "/admin/orders", icon: ShoppingCart },
-      { label: "Inquiries", path: "/admin/inquiry", icon: MessageSquare }, // Added Inquiries Tab here
+      { label: "Inquiries", path: "/admin/inquiry", icon: MessageSquare },
+    ],
+  },
+  {
+    title: "Analytics",
+    items: [
+      { label: "Reports", path: "/admin/reports", icon: BarChart2 },
     ],
   },
   {

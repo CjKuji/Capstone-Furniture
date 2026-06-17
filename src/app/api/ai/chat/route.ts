@@ -2,7 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import Groq from "groq-sdk";
 import { createServerClient } from "@/lib/supabase/server";
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY! });
+function getGroqClient(): Groq {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) {
+    throw new Error("GROQ_API_KEY is not configured");
+  }
+  return new Groq({ apiKey });
+}
 
 // ─── AI CALLER ────────────────────────────────────────────────────────────────
 // Swap to Claude by uncommenting the block below and commenting out the Groq one.
@@ -11,6 +17,7 @@ async function callAI(
   systemPrompt: string,
   messages: { role: string; content: string }[]
 ): Promise<string> {
+  const groq = getGroqClient();
   const response = await groq.chat.completions.create({
     model: "llama-3.3-70b-versatile",
     max_tokens: 400, // trimmed from 500 — 400 covers ~300 words, plenty for chat
@@ -197,6 +204,13 @@ async function fetchOrderContext(
 
 export async function POST(req: NextRequest) {
   try {
+    if (!process.env.GROQ_API_KEY) {
+      return NextResponse.json(
+        { error: "AI is not configured on this server (missing GROQ_API_KEY)." },
+        { status: 503 }
+      );
+    }
+
     const body = await req.json();
     const { messages, furnitureContext, userId } = body as {
       messages: { role: string; content: string }[];
