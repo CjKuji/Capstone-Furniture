@@ -2,26 +2,11 @@ import { supabase } from "@/lib/supabase";
 
 /**
  * =========================================================
- * ENVIRONMENT SETTINGS REFERENCE (Keep in your .env.local file)
+ * ENVIRONMENT SETTINGS REFERENCE (Keep in your local .env file only!)
  * =========================================================
- * NEXT_PUBLIC_SUPABASE_URL=https://havfynxlaoaieomuomzy.supabase.co
- * NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
- * SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
- * PAYMONGO_PUBLIC_KEY=pk_test_6EZ279mmTZMX1jVXyCNgWos8
- * PAYMONGO_SECRET_KEY=sk_test_BbCHpHM8QAFPkrfC6WUWzhG7
- * SUPABASE_PROJECT_ID=havfynxlaoaieomuomzy
- * ANTHROPIC_API_KEY=sk-ant-api03-...
- * GROQ_API_KEY=gsk_zw6StKetw1YukRsOi0rWWGdyb3FYu...
- * * -- DOMAIN ENV ROUTING CHOICES --
- * # Production:
- * NEXT_PUBLIC_APP_URL=https://woodforge.sbs/
- * PAYMONGO_WEBHOOK_SECRET=whsk_f3VWVULkABsGra15cYZ8ABFB
- * * # Vercel Preview/Staging:
- * # NEXT_PUBLIC_APP_URL=https://woodforge.vercel.app
- * # PAYMONGO_WEBHOOK_SECRET=whsk_c5MfQHNGidzpuMSzpif2vAFj
- * * # Local Tunneling:
- * # NEXT_PUBLIC_APP_URL=https://drivable-equipment-dart.ngrok-free.dev
- * # PAYMONGO_WEBHOOK_SECRET=whsk_KADxbp9fGC7LeFDq3pUr4ebH
+ * - Keep your API keys and secrets hidden inside your local environment setup.
+ * - Do not paste raw plain-text secret strings inside code comments to protect 
+ * your repository against automated GitHub Git Push Protection sweeps.
  */
 
 /**
