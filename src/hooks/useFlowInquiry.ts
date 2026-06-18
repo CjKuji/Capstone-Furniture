@@ -59,27 +59,6 @@ export function useInquiryQuery({ supabaseClient, options = {} }: UseInquiryQuer
     },
   });
 
-  const markQuoteAsReadyMutation = useMutation({
-    mutationFn: (inquiryId: string) => service.markQuoteAsReady(inquiryId),
-    onSuccess: (res) => {
-      if (res.success) queryClient.invalidateQueries({ queryKey: ['inquiries'] });
-    },
-  });
-
-  const presentPaymentIntentMutation = useMutation({
-    mutationFn: (inquiryId: string) => service.presentPaymentIntent(inquiryId),
-    onSuccess: (res) => {
-      if (res.success) queryClient.invalidateQueries({ queryKey: ['inquiries'] });
-    },
-  });
-
-  const submitForVerificationMutation = useMutation({
-    mutationFn: (inquiryId: string) => service.submitForVerification(inquiryId),
-    onSuccess: (res) => {
-      if (res.success) queryClient.invalidateQueries({ queryKey: ['inquiries'] });
-    },
-  });
-
   const approvePaymentToProductionMutation = useMutation({
     mutationFn: (inquiryId: string) => service.approvePaymentToProduction(inquiryId),
     onSuccess: (res) => {
@@ -128,9 +107,6 @@ export function useInquiryQuery({ supabaseClient, options = {} }: UseInquiryQuer
     // Mutation triggers exposed to UI
     actions: {
       acceptForReview: acceptForReviewMutation.mutateAsync,
-      markQuoteAsReady: markQuoteAsReadyMutation.mutateAsync,
-      presentPaymentIntent: presentPaymentIntentMutation.mutateAsync,
-      submitForVerification: submitForVerificationMutation.mutateAsync,
       approvePaymentToProduction: approvePaymentToProductionMutation.mutateAsync,
       markProductionComplete: markProductionCompleteMutation.mutateAsync,
       dispatchShipment: dispatchShipmentMutation.mutateAsync,
@@ -141,7 +117,7 @@ export function useInquiryQuery({ supabaseClient, options = {} }: UseInquiryQuer
     // Status states for loading indicators per button action
     mutatingStates: {
       isAccepting: acceptForReviewMutation.isPending,
-      isQuoting: markQuoteAsReadyMutation.isPending,
+      isApprovingProduction: approvePaymentToProductionMutation.isPending,
       isCancelling: cancelInquiryMutation.isPending,
     }
   };
