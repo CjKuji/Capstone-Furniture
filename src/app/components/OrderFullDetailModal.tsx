@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import type { Order, OrderItem } from "@/types/order";
 import type { Conversation } from "@/hooks/useConversationList";
@@ -30,32 +30,31 @@ export default function OrderFullDetailModal({
   onClose,
   onViewFull,
 }: Props) {
-  /**
-   * NO scroll-lock useEffect here.
-   *
-   * Previously this component ran:
-   * document.body.style.overflow = "hidden"
-   *
-   * The Navbar ALSO has a scroll-lock useEffect for its mobile menu:
-   * document.body.style.overflow = menuOpen ? "hidden" : ""
-   * cleanup: document.body.style.overflow = ""
-   *
-   * When the modal mounted and set overflow:hidden, any subsequent
-   * re-render of the Navbar (e.g. triggered by the same React batch
-   * that opened the modal) ran that effect's cleanup → reset overflow
-   * to "" → triggered a browser reflow → React flushed pending async
-   * state in useUser → authUser briefly appeared null → Navbar flashed
-   * "Get Started".
-   *
-   * Scroll locking is handled by OrderCard's parent page
-   * (CustomerOrdersPage) which already locks body scroll when the
-   * payment modal is open, and the modal panel itself is overflow-y-auto
-   * so internal scrolling works fine without a body lock.
-   *
-   * If you need scroll lock for this modal specifically, do it in
-   * OrderCard (the direct parent) in a single consolidated effect,
-   * not here — so there is only ever ONE owner of body.style.overflow.
-   */
+  const [isReadyFor3D, setIsReadyFor3D] = useState(false);
+  
+  // Store the previous 'open' prop to track state transitions during render
+  const [prevOpen, setPrevOpen] = useState(open);
+
+  /* ── RENDER-PHASE STATE SYNCHRONIZATION ── */
+  // Official React pattern for adjusting state based on props without Effects
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    if (!open) {
+      setIsReadyFor3D(false); // Safe: React intercepts this and optimizes the frame transition
+    }
+  }
+
+  /* ── 3D ASYNC TIMEOUT EFFECT ── */
+  useEffect(() => {
+    if (!open) return;
+
+    // Yield thread prioritization to CSS layout engine animations safely
+    const timer = setTimeout(() => {
+      setIsReadyFor3D(true);
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [open]);
 
   /* ── MEMOIZED DATA NORMALIZATION ── */
   const items: OrderItem[] = useMemo(() => {
@@ -110,7 +109,7 @@ export default function OrderFullDetailModal({
     [items]
   );
 
-  // Early return if the modal is closed to prevent unnecessary DOM insertions via portal
+  // Early return executed contextually inside the pipeline to maintain persistent reference health in the DOM tree
   if (!open) return null;
 
   if (!order || !order.id) {
@@ -130,12 +129,6 @@ export default function OrderFullDetailModal({
   }
 
   return createPortal(
-    /**
-     * Backdrop is fully opaque from frame 1 — no opacity transition on
-     * the backdrop itself. Only the inner panel animates.
-     * This prevents the Navbar from ever being visible through a
-     * semi-transparent or fading-in backdrop.
-     */
     <div
       className="fixed inset-0 flex items-center justify-center p-0 sm:p-6 backdrop-blur-md overflow-hidden"
       style={{
@@ -159,7 +152,7 @@ export default function OrderFullDetailModal({
           translate-y-0 scale-100 opacity-100
         `}
         style={{ transitionTimingFunction: "cubic-bezier(0.16, 1, 0.3, 1)" }}
-        onClick={(e) => e.stopPropagation()} // Hardens the UI panel against backdrop click bubbles
+        onClick={(e) => e.stopPropagation()}
       >
         <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-[#D4A97A]/50 to-transparent flex-shrink-0" />
 
@@ -250,7 +243,7 @@ export default function OrderFullDetailModal({
                   <div className="lg:col-span-5 w-full min-w-0">
                     {modelUrl ? (
                       <div className="relative w-full rounded-xl overflow-hidden bg-[#050302] aspect-square sm:aspect-video lg:aspect-square border border-white/[0.04] shadow-2xl">
-                        {open ? (
+                        {isReadyFor3D ? (
                           <Furniture3DViewer
                             modelUrl={modelUrl}
                             selectedVariantTextureUrl={variant?.texture_url}
@@ -262,8 +255,8 @@ export default function OrderFullDetailModal({
                           />
                         ) : (
                           <div className="absolute inset-0 flex items-center justify-center bg-[#050302]">
-                            <div className="text-[10px] text-[#D4A97A] font-bold uppercase tracking-[0.25em]">
-                              Loading Space...
+                            <div className="text-[10px] text-[#D4A97A] font-bold uppercase tracking-[0.25em] animate-pulse">
+                              Optimizing Viewport...
                             </div>
                           </div>
                         )}

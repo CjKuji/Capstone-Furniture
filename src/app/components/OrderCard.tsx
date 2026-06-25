@@ -231,7 +231,6 @@ export default function OrderCard({ order: propOrder, userId, conversation: prop
 
     const qualifiesForInstantCancel = isUnpaid && order.order_status !== "cancelled";
     
-    // Explicit condition check: Only mark label as "Pay Remaining" if a genuine down payment value exists
     const balanceExists = financialData.totalPaid > 0;
 
     return {
@@ -469,14 +468,13 @@ export default function OrderCard({ order: propOrder, userId, conversation: prop
         </div>
       </div>
 
-      {/* Modals Mounting */}
-      {modals.detail && (
-        <OrderFullDetailModal
-          open={modals.detail}
-          onClose={() => toggleModal("detail", false)}
-          order={order}
-        />
-      )}
+      {/* Modals Mounting — Kept persistently in tree to maintain proper state transition tracking */}
+      <OrderFullDetailModal
+        open={modals.detail}
+        onClose={() => toggleModal("detail", false)}
+        order={order}
+      />
+      
       {modals.chat && (
         <ChatModal
           open={modals.chat}
@@ -562,7 +560,6 @@ function FinStat({ label, value, color }: { label: string; value: string; color:
   );
 }
 
-// Fixed to ensure correct structural styling constraints remain unharmed
 function InfoRow({ label, value, truncate }: { label: string; value: string; truncate?: boolean }) {
   return (
     <div className="flex items-baseline justify-between gap-4">
