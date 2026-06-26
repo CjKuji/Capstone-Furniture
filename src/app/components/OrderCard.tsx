@@ -5,7 +5,6 @@ import { supabase } from "@/lib/supabase";
 import type { Order, OrderStatus } from "@/types/order";
 
 // Components & Modals
-import OrderFullDetailModal from "@/app/components/OrderFullDetailModal";
 import ChatModal from "@/app/components/chat/ChatModal";
 import UserChargesModal from "@/app/components/UserChargesModal";
 import PayModal from "@/app/components/PayModal";
@@ -73,9 +72,10 @@ type Props = {
   order: Order;
   userId: string;
   conversation?: { id: string; customer_unread_count?: number };
+  onOpenDetails: () => void;
 };
 
-export default function OrderCard({ order: propOrder, userId, conversation: propConversation }: Props) {
+export default function OrderCard({ order: propOrder, userId, conversation: propConversation, onOpenDetails }: Props) {
   const [order, setOrder] = useState<Order>(propOrder);
   const [liveUnreadCount, setLiveUnreadCount] = useState<number>(
     propConversation?.customer_unread_count ?? 0
@@ -147,7 +147,6 @@ export default function OrderCard({ order: propOrder, userId, conversation: prop
 
   /* ── MODAL STATES ── */
   const [modals, setModals] = useState({
-    detail: false,
     chat: false,
     charges: false,
     pay: false,
@@ -419,7 +418,7 @@ export default function OrderCard({ order: propOrder, userId, conversation: prop
 
           <div className="grid grid-cols-2 gap-2 h-9 shrink-0">
             <button
-              onClick={() => toggleModal("detail", true)}
+              onClick={onOpenDetails}
               className="h-full rounded-xl border border-[#38291A] bg-white/[0.04] text-[10px] font-black uppercase text-white/70 hover:bg-white/[0.08] transition-all"
             >
               Details
@@ -468,13 +467,7 @@ export default function OrderCard({ order: propOrder, userId, conversation: prop
         </div>
       </div>
 
-      {/* Modals Mounting — Kept persistently in tree to maintain proper state transition tracking */}
-      <OrderFullDetailModal
-        open={modals.detail}
-        onClose={() => toggleModal("detail", false)}
-        order={order}
-      />
-      
+      {/* Modals Mounting */}
       {modals.chat && (
         <ChatModal
           open={modals.chat}

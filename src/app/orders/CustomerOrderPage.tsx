@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, Suspense } from "react";
+import { useEffect, useMemo, Suspense, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
 import {
@@ -16,6 +16,9 @@ import Navbar from "@/app/components/Navbar";
 import OrderCard from "@/app/components/OrderCard";
 import Reveal from "@/app/components/Reveal";
 import PageTransition from "@/app/components/PageTransition";
+import OrderFullDetailModal from "@/app/components/OrderFullDetailModal";
+
+import type { Order } from "@/types/order";
 
 import { useMyOrders } from "@/hooks/useUserOrders";
 import { useConversationList } from "@/hooks/useConversationList";
@@ -83,6 +86,10 @@ function CustomerOrdersContent() {
   const router = useRouter();
   const { user } = useUser();
   const searchParams = useSearchParams();
+
+  // Active modal track pointer hoisted clear of array context rendering engines
+  const [selectedOrderForModal, setSelectedOrderForModal] = useState<Order | null>(null);
+  const [cachedOrderForModal, setCachedOrderForModal] = useState<Order | null>(null);
 
   const {
     data: orders = [],
@@ -282,6 +289,11 @@ function CustomerOrdersContent() {
                         order={order}
                         userId={user?.id ?? ""}
                         conversation={conversationMap.get(order.id) || undefined}
+                        // Connects card action directly to main layout state
+                        onOpenDetails={() => {
+                          setSelectedOrderForModal(order);
+                          setCachedOrderForModal(order);
+                        }}
                       />
                     </Reveal>
                   </div>
@@ -290,6 +302,16 @@ function CustomerOrdersContent() {
             )}
           </section>
         </main>
+
+        {/* ── HOISTED INTERACTIVE PORTAL VIEWPORT OVERLAY ── */}
+        {cachedOrderForModal && (
+          <OrderFullDetailModal
+            open={Boolean(selectedOrderForModal)}
+            order={cachedOrderForModal}
+            onClose={() => setSelectedOrderForModal(null)}
+            conversation={conversationMap.get(cachedOrderForModal.id) || undefined}
+          />
+        )}
 
         <Suspense fallback={null}>
           <PaymentSuccessModal />
