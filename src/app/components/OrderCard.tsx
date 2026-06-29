@@ -9,12 +9,12 @@ import ChatModal from "@/app/components/chat/ChatModal";
 import UserChargesModal from "@/app/components/UserChargesModal";
 import PayModal from "@/app/components/PayModal";
 import CancelOrderModal from "@/app/components/CancelOrderModal";
+import OrderFullDetailModal from "@/app/components/OrderFullDetailModal";
 
 // Hooks
 import { useOrderCharges } from "@/hooks/useOrderCharges";
 import { usePaymentsQuery } from "@/hooks/useFetchPayments";
 import { useCancelOrder } from "@/hooks/useCancelOrder";
-import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 
 // Libs
 import { getOrderStatusUI } from "@/lib/orderUserStatusUI";
@@ -72,24 +72,19 @@ type Props = {
   order: Order;
   userId: string;
   conversation?: { id: string; customer_unread_count?: number };
-  onOpenDetails: () => void;
 };
 
-export default function OrderCard({ order: propOrder, userId, conversation: propConversation, onOpenDetails }: Props) {
+export default function OrderCard({ order: propOrder, userId, conversation: propConversation }: Props) {
   const [order, setOrder] = useState<Order>(propOrder);
   const [liveUnreadCount, setLiveUnreadCount] = useState<number>(
     propConversation?.customer_unread_count ?? 0
   );
 
+  const visibleUnreadCount = propConversation?.customer_unread_count ?? liveUnreadCount;
+
   useEffect(() => {
     setOrder(propOrder);
   }, [propOrder]);
-
-  useEffect(() => {
-    if (propConversation?.customer_unread_count !== undefined) {
-      setLiveUnreadCount(propConversation.customer_unread_count);
-    }
-  }, [propConversation]);
 
   /* ── REALTIME SUBSCRIPTION: ORDERS ── */
   useEffect(() => {
@@ -146,19 +141,11 @@ export default function OrderCard({ order: propOrder, userId, conversation: prop
   }, [propConversation?.id]);
 
   /* ── MODAL STATES ── */
-  const [modals, setModals] = useState({
-    chat: false,
-    charges: false,
-    pay: false,
-    cancel: false,
-  });
-
-  const toggleModal = (key: keyof typeof modals, val: boolean) => {
-    setModals((prev) => ({ ...prev, [key]: val }));
-  };
-
-  const anyModalOpen = Object.values(modals).some(Boolean);
-  useBodyScrollLock(anyModalOpen);
+  const [openDetail, setOpenDetail] = useState(false);
+  const [openChat, setOpenChat] = useState(false);
+  const [openCharges, setOpenCharges] = useState(false);
+  const [openPay, setOpenPay] = useState(false);
+  const [openCancel, setOpenCancel] = useState(false);
 
   /* ── DATA HOOKS ── */
   const { charges = [] } = useOrderCharges(order.id);
@@ -214,8 +201,8 @@ export default function OrderCard({ order: propOrder, userId, conversation: prop
         ? Number(order.final_total_price ?? baseTotal)
         : baseTotal + chargesTotal;
 
-    const extractedPaid = payments && typeof payments === "object" && "totalPaid" in payments 
-      ? Number((payments as any).totalPaid ?? 0) 
+    const extractedPaid = payments && typeof payments === "object" && "totalPaid" in payments
+      ? Number((payments as { totalPaid?: number | string }).totalPaid ?? 0)
       : Number(payments ?? 0);
 
     const breakdown = calculatePaymentBreakdown(finalTotal, extractedPaid, "partial");
@@ -250,7 +237,19 @@ export default function OrderCard({ order: propOrder, userId, conversation: prop
   const handleConfirmCancel = async (reason: string) => {
     if (!order.id) return;
     await cancelOrder({ orderId: order.id, userId, reason });
-    toggleModal("cancel", false);
+    setOpenCancel(false);
+  };
+
+  const handleOpenChat = async () => {
+    setLiveUnreadCount(0);
+    setOpenChat(true);
+
+    if (propConversation?.id) {
+      await supabase
+        .from("conversations")
+        .update({ customer_unread_count: 0 })
+        .eq("id", propConversation.id);
+    }
   };
 
   if (!order.id) return null;
@@ -277,9 +276,9 @@ export default function OrderCard({ order: propOrder, userId, conversation: prop
             
             <div className="flex flex-col items-end gap-2 shrink-0">
               <div className="flex items-center gap-1.5 shrink-0 self-start mt-0.5">
-                {liveUnreadCount > 0 && (
+                {visibleUnreadCount > 0 && (
                   <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-500/10 border border-rose-500/20 text-rose-400 text-[9px] font-bold tracking-wide uppercase animate-pulse">
-                    {liveUnreadCount} MSG
+                    {visibleUnreadCount} MSG
                   </span>
                 )}
                 <span
@@ -291,7 +290,7 @@ export default function OrderCard({ order: propOrder, userId, conversation: prop
 
               {canCancel && (
                 <button
-                  onClick={() => toggleModal("cancel", true)}
+                  onClick={() => setOpenCancel(true)}
                   disabled={isCancelling}
                   className="text-[9px] font-black uppercase text-rose-400/80 hover:text-rose-400 tracking-wider transition-colors bg-rose-500/[0.04] border border-rose-500/10 hover:border-rose-500/30 px-2 py-0.5 rounded-md"
                 >
@@ -409,7 +408,7 @@ export default function OrderCard({ order: propOrder, userId, conversation: prop
               </span>
             </div>
             <button
-              onClick={() => toggleModal("charges", true)}
+              onClick={() => setOpenCharges(true)}
               className="text-[10px] font-black uppercase text-[#D4A97A] hover:text-[#E5BC8E] transition-colors"
             >
               Statement →
@@ -418,19 +417,19 @@ export default function OrderCard({ order: propOrder, userId, conversation: prop
 
           <div className="grid grid-cols-2 gap-2 h-9 shrink-0">
             <button
-              onClick={onOpenDetails}
+              onClick={() => setOpenDetail(true)}
               className="h-full rounded-xl border border-[#38291A] bg-white/[0.04] text-[10px] font-black uppercase text-white/70 hover:bg-white/[0.08] transition-all"
             >
               Details
             </button>
             <button
-              onClick={() => toggleModal("chat", true)}
+              onClick={handleOpenChat}
               className="relative h-full rounded-xl bg-[#C49A6C] hover:bg-[#D4A97A] text-[10px] font-black uppercase text-[#0E0A06] transition-all"
             >
               Chat
-              {liveUnreadCount > 0 && (
+              {visibleUnreadCount > 0 && (
                 <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[8px] font-black text-white animate-pulse">
-                  {liveUnreadCount}
+                  {visibleUnreadCount}
                 </span>
               )}
             </button>
@@ -446,7 +445,7 @@ export default function OrderCard({ order: propOrder, userId, conversation: prop
               </button>
             ) : canPay ? (
               <button
-                onClick={() => toggleModal("pay", true)}
+                onClick={() => setOpenPay(true)}
                 className="h-full w-full rounded-xl bg-gradient-to-r from-[#C49A6C] to-[#E8C98A] text-[10px] font-black uppercase text-[#0E0A06] shadow-lg hover:shadow-[#D4A97A]/20 transition-all active:scale-[0.98]"
               >
                 {payButtonLabel}
@@ -468,36 +467,41 @@ export default function OrderCard({ order: propOrder, userId, conversation: prop
       </div>
 
       {/* Modals Mounting */}
-      {modals.chat && (
+      <OrderFullDetailModal
+        open={openDetail}
+        onClose={() => setOpenDetail(false)}
+        order={order}
+      />
+      {openChat && (
         <ChatModal
-          open={modals.chat}
-          onClose={() => toggleModal("chat", false)}
+          open={openChat}
+          onClose={() => setOpenChat(false)}
           order={order}
           currentUserId={userId}
           senderType="customer"
         />
       )}
-      {modals.charges && (
+      {openCharges && (
         <UserChargesModal
-          open={modals.charges}
-          onClose={() => toggleModal("charges", false)}
+          open={openCharges}
+          onClose={() => setOpenCharges(false)}
           charges={charges}
           order={order}
           userId={userId}
         />
       )}
-      {modals.pay && (
+      {openPay && (
         <PayModal
-          open={modals.pay}
-          onClose={() => toggleModal("pay", false)}
+          open={openPay}
+          onClose={() => setOpenPay(false)}
           order={order}
           totalAmount={financialData.finalTotal}
         />
       )}
-      {modals.cancel && (
+      {openCancel && (
         <CancelOrderModal
-          open={modals.cancel}
-          onClose={() => toggleModal("cancel", false)}
+          open={openCancel}
+          onClose={() => setOpenCancel(false)}
           order={order}
           mode={cancelMode}
           onConfirm={handleConfirmCancel}

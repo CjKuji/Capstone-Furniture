@@ -1,5 +1,7 @@
 "use client";
 
+import { Maximize2 } from "lucide-react";
+
 /* ========================================================= */
 
 type OrderItemSnapshot = {
@@ -12,11 +14,12 @@ type OrderItemSnapshot = {
 
 type Props = {
   items?: OrderItemSnapshot[] | null;
+  onImageClick?: (images: { url: string; id?: string }[], startIndex: number) => void;
 };
 
 /* ========================================================= */
 
-export default function OrderAssetsSection({ items }: Props) {
+export default function OrderAssetsSection({ items, onImageClick }: Props) {
   const safeItems = Array.isArray(items) ? items : [];
 
   return (
@@ -63,9 +66,13 @@ export default function OrderAssetsSection({ items }: Props) {
               {/* IMAGE GRID */}
               <div className="grid grid-cols-3 gap-2">
                 {images.map((img, idx) => (
-                  <div
+                  <button
                     key={idx}
-                    className="relative group aspect-square rounded-xl overflow-hidden"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onImageClick?.(images.map(i => ({ url: i.url, id: undefined })), idx);
+                    }}
+                    className="relative group aspect-square rounded-xl overflow-hidden text-left"
                     style={{
                       background: "rgba(255,255,255,0.03)",
                       border: img.isPrimary
@@ -98,7 +105,16 @@ export default function OrderAssetsSection({ items }: Props) {
                       className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
                       style={{ background: "rgba(212,169,122,0.06)" }}
                     />
-                  </div>
+                    
+                    {/* CLICK INDICATOR */}
+                    {onImageClick && (
+                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                        <div className="bg-black/60 backdrop-blur-sm px-2 py-1 rounded-lg border border-white/10">
+                          <Maximize2 className="w-4 h-4 text-white" />
+                        </div>
+                      </div>
+                    )}
+                  </button>
                 ))}
               </div>
             </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import { useQuery, useQueryClient, useMutation, UseQueryOptions } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { inquiryService, CreateInquiryPayload, CustomInquiryStatus } from "@/services/inquiry/inquiryService";
@@ -192,7 +192,14 @@ export const useUserInquiries = (
     };
   }, [queryClient]);
 
-  return queryResult;
+  const mutate = useCallback(() => {
+    return queryClient.invalidateQueries({ queryKey: inquiryKeys.lists() });
+  }, [queryClient]);
+
+  return {
+    ...queryResult,
+    mutate,
+  };
 };
 
 /**

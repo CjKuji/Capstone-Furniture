@@ -36,6 +36,17 @@ type ModelProps = {
   url: string;
   textureUrl?: string | null;
   dimensions?: Dimensions;
+  onReady?: () => void;
+};
+
+type XRNavigator = Navigator & {
+  xr?: {
+    isSessionSupported?: (mode: string) => Promise<boolean>;
+  };
+};
+
+type WebGLRendererWithCleanup = THREE.WebGLRenderer & {
+  _cleanupContextLostListener?: () => void;
 };
 
 /* =========================================================
@@ -61,8 +72,18 @@ function ViewerFallback({
     MODEL LAYER
 ========================================================= */
 
-function Model({ url, textureUrl, dimensions }: ModelProps) {
+function Model({ url, textureUrl, dimensions, onReady }: ModelProps) {
   const { scene } = useGLTF(url);
+  const hasReportedReady = useRef(false);
+  const lastUrlRef = useRef(url);
+
+  // Reset onReady flag when URL changes
+  useEffect(() => {
+    if (lastUrlRef.current !== url) {
+      lastUrlRef.current = url;
+      hasReportedReady.current = false;
+    }
+  }, [url]);
 
   const clonedScene = useMemo(() => {
     const clone = scene.clone(true);
@@ -99,6 +120,15 @@ function Model({ url, textureUrl, dimensions }: ModelProps) {
   }, [clonedScene, dimensions]);
 
   const originalMaps = useRef<Map<string, THREE.Texture | null>>(new Map());
+
+  // Report ready once on mount
+  useEffect(() => {
+    if (!onReady) return;
+    if (hasReportedReady.current) return;
+
+    hasReportedReady.current = true;
+    onReady();
+  }, [onReady]);
 
   useEffect(() => {
     originalMaps.current.clear();
@@ -174,8 +204,9 @@ function Model({ url, textureUrl, dimensions }: ModelProps) {
         if (mesh.material) {
           const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
           materials.forEach((mat) => {
-            if ((mat as any).map) (mat as any).map.dispose();
-            mat.dispose();
+            const material = mat as THREE.MeshStandardMaterial;
+            material.map?.dispose();
+            material.dispose();
           });
         }
       });
@@ -198,6 +229,7 @@ type SafeCanvasProps = {
   textureUrl?: string | null;
   dimensions?: Dimensions;
   eventSource: HTMLElement | null;
+  onReady?: () => void;
 };
 
 function SafeCanvas({
@@ -205,29 +237,60 @@ function SafeCanvas({
   textureUrl,
   dimensions,
   eventSource,
+  onReady,
 }: SafeCanvasProps) {
   const [mounted, setMounted] = useState(false);
   const [contextKey, setContextKey] = useState(0);
-  const [hasValidDimensions, setHasValidDimensions] = useState(false);
-  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+  const [modelReady, setModelReady] = useState(false);
+  const rendererRef = useRef<WebGLRendererWithCleanup | null>(null);
+  const previousModelUrlRef = useRef(modelUrl);
+  const hasMountedRef = useRef(false);
 
+  // Preload model immediately
+  useEffect(() => {
+    if (!modelUrl.trim()) return;
+    useGLTF.preload(modelUrl);
+  }, [modelUrl]);
+
+  // Reset modelReady when model URL changes
+  useEffect(() => {
+    if (previousModelUrlRef.current !== modelUrl) {
+      previousModelUrlRef.current = modelUrl;
+      setModelReady(false);
+    }
+  }, [modelUrl]);
+
+  // Mount canvas once container has dimensions
   useEffect(() => {
     if (!eventSource) return;
-    const checkDimensions = () => {
-      setHasValidDimensions(eventSource.clientWidth > 0 && eventSource.clientHeight > 0);
+
+    const checkAndMount = () => {
+      const hasSize = eventSource.clientWidth > 0 && eventSource.clientHeight > 0;
+
+      if (hasSize) {
+        if (!hasMountedRef.current) {
+          hasMountedRef.current = true;
+          setMounted(true);
+        }
+        return;
+      }
+
+      if (!hasMountedRef.current) {
+        setMounted(false);
+      }
     };
-    checkDimensions();
-    const resizeObserver = new ResizeObserver(() => checkDimensions());
+
+    // Check immediately
+    checkAndMount();
+
+    // Watch for resize
+    const resizeObserver = new ResizeObserver(checkAndMount);
     resizeObserver.observe(eventSource);
+
     return () => resizeObserver.disconnect();
   }, [eventSource]);
 
-  useEffect(() => {
-    if (!hasValidDimensions) return;
-    const timeout = setTimeout(() => setMounted(true), 120);
-    return () => clearTimeout(timeout);
-  }, [hasValidDimensions]);
-
+  // Handle WebGL context loss
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.hidden) return;
@@ -239,60 +302,88 @@ function SafeCanvas({
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
   }, []);
 
+  // Cleanup renderer
   useEffect(() => {
     return () => {
       if (rendererRef.current) {
         const gl = rendererRef.current;
-        if ((gl as any)._cleanupContextLostListener) (gl as any)._cleanupContextLostListener();
+        gl._cleanupContextLostListener?.();
         gl.dispose();
         rendererRef.current = null;
       }
     };
   }, [contextKey]);
 
+  // Notify parent when model is fully ready
+  useEffect(() => {
+    if (modelReady && onReady) {
+      onReady();
+    }
+  }, [modelReady, onReady]);
+
   if (!modelUrl.trim()) return <ViewerFallback message="No Model File" />;
-  if (!hasValidDimensions || !mounted) return <ViewerFallback message="Preparing Viewport" />;
 
   return (
-    <Canvas
-      key={`isolated-context-${contextKey}`}
-      eventSource={eventSource ?? undefined}
-      camera={{ position: [1.5, 1.2, 3], fov: 45 }}
-      style={{ width: "100%", height: "100%" }}
-      gl={{
-        antialias: true,
-        alpha: true,
-        powerPreference: "high-performance",
-        preserveDrawingBuffer: false,
-      }}
-      onCreated={({ gl }) => {
-        rendererRef.current = gl;
-        gl.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    <div className="relative w-full h-full overflow-hidden rounded-2xl">
+      {/* Smooth fade placeholder - stays in DOM for clean animation */}
+      <div 
+        className={`absolute inset-0 z-10 flex items-center justify-center bg-[#050302] transition-opacity duration-500 ease-out pointer-events-none ${
+          modelReady ? 'opacity-0' : 'opacity-100'
+        }`}
+      >
+        <ViewerFallback message={mounted ? "Loading 3D Model" : "Initializing"} />
+      </div>
 
-        const canvasElement = gl.domElement;
-        const handleContextLost = (event: Event) => {
-          event.preventDefault();
-          if (rendererRef.current === gl) setContextKey((prev) => prev + 1);
-        };
+      {/* Render Canvas immediately once container is ready - no delays */}
+      {mounted && (
+        <Canvas
+          key={`isolated-context-${contextKey}`}
+          eventSource={eventSource ?? undefined}
+          camera={{ position: [1.5, 1.2, 3], fov: 45 }}
+          style={{ width: "100%", height: "100%" }}
+          gl={{
+            antialias: true,
+            alpha: true,
+            powerPreference: "high-performance",
+            preserveDrawingBuffer: false,
+          }}
+          onCreated={({ gl }) => {
+            const renderer = gl as WebGLRendererWithCleanup;
+            rendererRef.current = renderer;
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
-        canvasElement.addEventListener("webglcontextlost", handleContextLost, false);
-        (gl as any)._cleanupContextLostListener = () => {
-          canvasElement.removeEventListener("webglcontextlost", handleContextLost);
-        };
-      }}
-    >
-      <ambientLight intensity={0.5} />
-      <directionalLight position={[5, 8, 5]} intensity={1} />
-      <Environment preset="city" />
-      <mesh rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[20, 20]} />
-        <meshStandardMaterial color="#E5E5E5" transparent opacity={0.1} />
-      </mesh>
-      <Suspense fallback={<Html center><ViewerFallback /></Html>}>
-        <Model url={modelUrl} textureUrl={textureUrl} dimensions={dimensions} />
-      </Suspense>
-      <OrbitControls makeDefault target={[0, 0.4, 0]} enableDamping dampingFactor={0.08} />
-    </Canvas>
+            const canvasElement = renderer.domElement;
+            const handleContextLost = (event: Event) => {
+              event.preventDefault();
+              if (rendererRef.current === renderer) setContextKey((prev) => prev + 1);
+            };
+
+            canvasElement.addEventListener("webglcontextlost", handleContextLost, false);
+            renderer._cleanupContextLostListener = () => {
+              canvasElement.removeEventListener("webglcontextlost", handleContextLost);
+            };
+          }}
+        >
+          <ambientLight intensity={0.5} />
+          <directionalLight position={[5, 8, 5]} intensity={1} />
+          <Environment preset="city" />
+          <mesh rotation={[-Math.PI / 2, 0, 0]}>
+            <planeGeometry args={[20, 20]} />
+            <meshStandardMaterial color="#E5E5E5" transparent opacity={0.1} />
+          </mesh>
+          <Suspense fallback={null}>
+            <Model
+              key={modelUrl}
+              url={modelUrl}
+              textureUrl={textureUrl}
+              dimensions={dimensions}
+              onReady={() => setModelReady(true)}
+            />
+          </Suspense>
+          <OrbitControls makeDefault target={[0, 0.4, 0]} enableDamping dampingFactor={0.08} />
+        </Canvas>
+      )}
+    </div>
   );
 }
 
@@ -304,10 +395,12 @@ export default function Furniture3DViewer({
   modelUrl,
   selectedVariantTextureUrl,
   dimensions,
+  onReady,
 }: {
   modelUrl: string;
   selectedVariantTextureUrl?: string | null;
   dimensions?: Dimensions;
+  onReady?: () => void;
 }) {
   const [arOpen, setArOpen] = useState(false);
   const [arSupported, setArSupported] = useState<boolean | null>(null);
@@ -317,11 +410,11 @@ export default function Furniture3DViewer({
     if (node !== null) setContainerElement(node);
   }, []);
 
-  // Performance & Stability Fix: Detect AR capability early
   useEffect(() => {
     if (typeof window !== "undefined") {
       const checkAR = async () => {
-        const supported = !!(navigator.xr && await (navigator.xr as any).isSessionSupported?.('immersive-ar'));
+        const xrNavigator = navigator as XRNavigator;
+        const supported = !!(xrNavigator.xr && await xrNavigator.xr.isSessionSupported?.("immersive-ar"));
         setArSupported(supported);
       };
       checkAR();
@@ -330,7 +423,7 @@ export default function Furniture3DViewer({
 
   if (!modelUrl.trim()) {
     return (
-      <div className="flex items-center justify-center w-full min-h-[240px] rounded-2xl bg-black/5 border border-black/10 text-black/40 text-[13px] font-medium">
+      <div className="flex items-center justify-center w-full min-h-60 rounded-2xl bg-black/5 border border-black/10 text-black/40 text-[13px] font-medium">
         No model available
       </div>
     );
@@ -342,7 +435,7 @@ export default function Furniture3DViewer({
 
       <div
         ref={containerCallbackRef}
-        className="relative w-full overflow-hidden rounded-2xl min-h-[240px] sm:min-h-[320px] md:min-h-[380px] lg:min-h-[420px] bg-[#0F0A06] border border-white/10"
+        className="relative w-full overflow-hidden rounded-2xl min-h-60 sm:min-h-80 md:min-h-95 lg:min-h-105 bg-[#0F0A06] border border-white/10"
       >
         {/* BUTTON CONTRAST FIX: Added dark backdrop and high-contrast text */}
         <button
@@ -362,6 +455,7 @@ export default function Furniture3DViewer({
             modelUrl={modelUrl}
             textureUrl={selectedVariantTextureUrl}
             dimensions={dimensions}
+            onReady={onReady}
             eventSource={containerElement}
           />
         </div>

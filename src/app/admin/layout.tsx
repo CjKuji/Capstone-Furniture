@@ -132,10 +132,12 @@ export default function AdminLayout({
 
   return (
     <QueryClientProvider client={queryClient}>
-      <div className="flex min-h-screen bg-[#0F0A06] text-white">
-        <AdminSidebar />
+      <div className="h-screen overflow-hidden bg-[#0F0A06] text-white">
+        <div className="fixed inset-y-0 left-0 z-40 hidden md:block">
+          <AdminSidebar />
+        </div>
 
-        <main className="flex-1 min-w-0">
+        <main className="h-screen overflow-y-auto ml-20 lg:ml-64">
           {children}
         </main>
       </div>

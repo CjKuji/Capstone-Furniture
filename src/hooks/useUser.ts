@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 
 import type { Profile } from "@/types/user";
 import type { UserRole } from "@/types/enums";
+import type { User, Session } from "@supabase/supabase-js";
 
 import { getCurrentProfile } from "@/services/userService";
 
@@ -13,18 +14,29 @@ import { getCurrentProfile } from "@/services/userService";
 ========================================================= */
 
 let cachedProfile: Profile | null = null;
-let cachedAuthUser: any | null = null;
+let cachedAuthUser: User | null = null;
 let activeProfilePromise: Promise<Profile | null> | null = null;
 let globalInitialized = false;
-let activeSessionPromise: Promise<any> | null = null;
+let activeSessionPromise: Promise<{ data: { session: Session | null } }> | null = null;
+const authOperationInProgress = false;
+const authOperationQueue: Array<() => Promise<void>> = [];
 
 type Subscriber = {
-  setAuthUser: (u: any) => void;
+  setAuthUser: (u: User | null) => void;
   setProfile: (p: Profile | null) => void;
   setLoading: (l: boolean) => void;
   setInitialized: (i: boolean) => void;
 };
 const subscribers = new Set<Subscriber>();
+
+async function processAuthQueue() {
+  while (authOperationQueue.length > 0) {
+    const operation = authOperationQueue.shift();
+    if (operation) {
+      await operation();
+    }
+  }
+}
 
 function notifyAll() {
   for (const sub of subscribers) {
@@ -50,7 +62,7 @@ function notifyAll() {
      await primeUserCache(user);   ← pass the full auth user object
      router.push("/");
 ========================================================= */
-export async function primeUserCache(authUser: any): Promise<void> {
+export async function primeUserCache(authUser: User): Promise<void> {
   if (!authUser) return;
 
   try {
@@ -84,7 +96,7 @@ export async function primeUserCache(authUser: any): Promise<void> {
 
 export function useUser() {
   const [profile, setProfile]         = useState<Profile | null>(cachedProfile);
-  const [authUser, setAuthUser]       = useState<any | null>(cachedAuthUser);
+  const [authUser, setAuthUser]       = useState<User | null>(cachedAuthUser);
   const [loading, setLoading]         = useState(!globalInitialized);
   const [initialized, setInitialized] = useState(globalInitialized);
 
@@ -178,10 +190,20 @@ export function useUser() {
         for (const sub of subscribers) sub.setLoading(true);
       }
 
-      if (!activeSessionPromise) {
-        activeSessionPromise = supabase.auth.getSession();
-      }
-      const { data: { session } } = await activeSessionPromise;
+      // Queue the session fetch to prevent concurrent lock errors
+      const sessionPromise = new Promise<{ data: { session: Session | null } }>((resolve, reject) => {
+        authOperationQueue.push(async () => {
+          try {
+            const result = await supabase.auth.getSession();
+            resolve(result);
+          } catch (error) {
+            reject(error);
+          }
+        });
+        processAuthQueue();
+      });
+
+      const { data: { session } } = await sessionPromise;
 
       const user = session?.user ?? null;
 
@@ -198,7 +220,10 @@ export function useUser() {
       await fetchProfile(user.id);
       markInitialized();
     } catch (error) {
-      if (isLockError(error)) return;
+      if (isLockError(error)) {
+        console.warn("[useUser] Lock error detected, using cached data");
+        return;
+      }
       console.error("[useUser] loadUser error:", error);
       for (const sub of subscribers) sub.setProfile(null);
       markInitialized();
@@ -226,20 +251,28 @@ export function useUser() {
         ) return;
 
         queueMicrotask(async () => {
-          const user = session?.user ?? null;
+          try {
+            const user = session?.user ?? null;
 
-          cachedAuthUser = user;
-          for (const sub of subscribers) setAuthUser(user);
+            cachedAuthUser = user;
+            for (const sub of subscribers) sub.setAuthUser(user);
 
-          if (!user) {
-            cachedProfile = null;
-            for (const sub of subscribers) sub.setProfile(null);
+            if (!user) {
+              cachedProfile = null;
+              for (const sub of subscribers) sub.setProfile(null);
+              markInitialized();
+              return;
+            }
+
+            await fetchProfile(user.id);
             markInitialized();
-            return;
+          } catch (error) {
+            if (isLockError(error)) {
+              console.warn("[useUser] Lock error in auth listener, ignoring");
+              return;
+            }
+            console.error("[useUser] Auth state change error:", error);
           }
-
-          await fetchProfile(user.id);
-          markInitialized();
         });
       }
     );

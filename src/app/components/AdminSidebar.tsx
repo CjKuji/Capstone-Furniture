@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import {
   Home,
@@ -12,6 +13,8 @@ import {
   Globe,
   LucideIcon,
   ChevronRight,
+  Menu,
+  X,
 } from "lucide-react";
 
 import { supabase } from "@/lib/supabase";
@@ -63,6 +66,12 @@ export default function AdminSidebar() {
   const router = useRouter();
   const pathname = usePathname();
   const { authUser, role } = useUser();
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  const navigateTo = (path: string) => {
+    setMobileOpen(false);
+    router.push(path);
+  };
 
   const isActive = (item: NavItem) => {
     if (item.exact) return pathname === item.path;
@@ -70,6 +79,7 @@ export default function AdminSidebar() {
   };
 
   const handleLogout = async () => {
+    setMobileOpen(false);
     await supabase.auth.signOut();
     router.push("/auth/login");
   };
@@ -78,23 +88,140 @@ export default function AdminSidebar() {
     ? authUser.email.slice(0, 2).toUpperCase()
     : "AD";
 
+  const renderContent = () => (
+    <>
+      <div className="border-b border-white/3 px-4 py-4 relative md:px-3 md:py-4 lg:px-6 lg:py-6">
+        <div className="absolute inset-x-0 bottom-0 h-px bg-linear-to-r from-transparent via-[#D4A97A]/10 to-transparent" />
+
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <div className="h-4 w-1 shrink-0 rounded-full bg-[#D4A97A] shadow-[0_0_8px_rgba(212,169,122,0.3)]" />
+            <div className="min-w-0">
+              <h1 className="text-sm font-extrabold tracking-[0.2em] text-white md:hidden lg:block">
+                WOODFORGE
+              </h1>
+              <p className="mt-1.5 pl-3.5 text-[10px] font-bold uppercase tracking-wider text-white/20 md:hidden lg:block">
+                Admin Control Shell
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setMobileOpen(false)}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/6 bg-white/3 text-white/70 transition hover:text-white md:hidden"
+            aria-label="Close sidebar"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      </div>
+
+      <nav className="flex-1 overflow-y-auto px-3 py-4 md:py-5 lg:py-6">
+        {NAVIGATION.map((group) => (
+          <div key={group.title} className="space-y-1">
+            <p className="px-3 text-[9px] font-black uppercase tracking-[0.18em] text-white/20 md:hidden lg:block">
+              {group.title}
+            </p>
+
+            <div className="space-y-0.5">
+              {group.items.map((item) => {
+                const Icon = item.icon;
+                const active = isActive(item);
+
+                return (
+                  <button
+                    key={item.path}
+                    onClick={() => navigateTo(item.path)}
+                    className={`group relative flex w-full items-center rounded-xl px-3 py-2 text-xs font-semibold transition-all duration-150 outline-none md:justify-center md:px-2 md:py-3 lg:justify-between lg:px-3 lg:py-2 ${
+                      active
+                        ? "bg-white/4 text-white shadow-sm"
+                        : "text-white/40 hover:bg-white/1.5 hover:text-white"
+                    }`}
+                  >
+                    <span
+                      className={`absolute left-0 top-1/2 h-4 w-[2.5px] -translate-y-1/2 rounded-r-full transition-all duration-200 ${
+                        active
+                          ? "bg-[#D4A97A] shadow-[0_0_8px_rgba(212,169,122,0.5)]"
+                          : "bg-transparent opacity-0"
+                      }`}
+                    />
+
+                    <div className="flex min-w-0 items-center gap-3 md:gap-0 lg:gap-3">
+                      <Icon
+                        size={15}
+                        className={`shrink-0 transition-all duration-150 ${
+                          active
+                            ? "text-[#D4A97A]"
+                            : "text-white/20 group-hover:text-white/50"
+                        }`}
+                      />
+                      <span className="truncate tracking-wide md:hidden lg:block">
+                        {item.label}
+                      </span>
+                    </div>
+
+                    {!active && (
+                      <ChevronRight
+                        size={11}
+                        className="ml-2 shrink-0 text-white/0 opacity-0 transition-all duration-150 group-hover:translate-x-0 group-hover:opacity-100 group-hover:text-white/30 md:hidden lg:block"
+                      />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </nav>
+
+      <div className="border-t border-white/3 bg-[#040302]/40 p-4 backdrop-blur-md md:p-2.5 lg:p-4">
+        <div className="flex items-center gap-3 rounded-xl border border-white/2 bg-white/1 px-3 py-2.5 md:flex-col md:items-center md:gap-2 md:px-2 md:py-2 lg:flex-row lg:justify-start lg:px-3 lg:py-2.5">
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-[#D4A97A]/20 bg-linear-to-br from-[#D4A97A]/20 to-[#D4A97A]/5 text-xs font-black text-[#D4A97A]">
+            {initials}
+          </div>
+
+          <div className="min-w-0 flex-1 md:hidden lg:block">
+            <p className="truncate text-xs font-semibold tracking-wide text-white/80">
+              {authUser?.email ?? "Administrator"}
+            </p>
+            <div className="mt-0.5 flex items-center gap-1.5">
+              <span className="h-1 w-1 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]" />
+              <p className="truncate text-[9px] font-black uppercase tracking-wider text-[#D4A97A]/80">
+                {role ?? "System Admin"}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="mt-3 flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-bold text-red-400/60 transition-all duration-150 outline-none hover:bg-red-500/3 hover:text-red-400 md:justify-center md:px-1 md:py-2 lg:justify-start lg:px-3"
+        >
+          <LogOut size={14} className="text-red-400/30 transition group-hover:text-red-400" />
+          <span className="tracking-wide md:hidden lg:block">Exit Secure Session</span>
+        </button>
+      </div>
+    </>
+  );
+
   return (
     <>
-      {/* BRAND INJECTED GLOBAL SCROLLBAR OVERRIDES */}
       <style jsx global>{`
         ::-webkit-scrollbar {
           width: 8px;
           height: 8px;
         }
         ::-webkit-scrollbar-track {
-          background: #060403; /* Matches Dark Nav Frame */
+          background: #060403;
         }
         ::-webkit-scrollbar-thumb {
           background: rgba(255, 255, 255, 0.08);
           border-radius: 9999px;
         }
         ::-webkit-scrollbar-thumb:hover {
-          background: #D4A97A; /* Highlights into Muted Accent Gold */
+          background: #D4A97A;
         }
         html {
           scrollbar-width: thin;
@@ -102,107 +229,33 @@ export default function AdminSidebar() {
         }
       `}</style>
 
-      {/* SIDEBAR CONTAINER: Set to darker #060403 context over page's #0F0A06 */}
-      <aside className="h-screen w-64 bg-[#060403] border-r border-white/[0.03] flex flex-col sticky top-0 z-40 select-none antialiased">
+      <button
+        type="button"
+        onClick={() => setMobileOpen((open) => !open)}
+        className="fixed right-4 top-4 z-50 flex items-center gap-2 rounded-full border border-white/10 bg-[#060403]/90 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-white/80 shadow-lg backdrop-blur md:hidden"
+        aria-label={mobileOpen ? "Close admin menu" : "Open admin menu"}
+      >
+        {mobileOpen ? <X size={16} /> : <Menu size={16} />}
+        <span>{mobileOpen ? "Close" : "Menu"}</span>
+      </button>
 
-        {/* BRAND HEADER */}
-        <div className="px-6 py-6 border-b border-white/[0.03] relative">
-          <div className="absolute inset-x-0 bottom-0 h-[1px] bg-gradient-to-r from-transparent via-[#D4A97A]/10 to-transparent" />
-          
-          <div className="flex items-center gap-2.5">
-            <div className="h-4 w-1 bg-[#D4A97A] rounded-full shadow-[0_0_8px_rgba(212,169,122,0.3)]" />
-            <h1 className="text-white font-extrabold tracking-[0.2em] text-sm font-sans">
-              WOODFORGE
-            </h1>
-          </div>
-          <p className="text-white/20 text-[10px] uppercase font-bold tracking-wider mt-1.5 pl-3.5">
-            Admin Control Shell
-          </p>
-        </div>
+      <button
+        type="button"
+        aria-label="Close admin menu"
+        className={`fixed inset-0 z-40 bg-black/60 backdrop-blur-sm transition-opacity duration-200 md:hidden ${
+          mobileOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
+        }`}
+        onClick={() => setMobileOpen(false)}
+      />
 
-        {/* NAVIGATION FEED */}
-        <nav className="flex-1 overflow-y-auto px-3 py-6 space-y-6">
-          {NAVIGATION.map((group) => (
-            <div key={group.title} className="space-y-1">
-              <p className="px-3 text-[9px] font-black uppercase tracking-[0.18em] text-white/20">
-                {group.title}
-              </p>
+      <aside className={`fixed inset-y-0 left-0 z-50 flex h-screen w-72 flex-col border-r border-white/3 bg-[#060403] shadow-2xl transition-transform duration-300 select-none antialiased md:hidden ${
+        mobileOpen ? "translate-x-0" : "-translate-x-full"
+      }`}>
+        {renderContent()}
+      </aside>
 
-              <div className="space-y-0.5">
-                {group.items.map((item) => {
-                  const Icon = item.icon;
-                  const active = isActive(item);
-
-                  return (
-                    <button
-                      key={item.path}
-                      onClick={() => router.push(item.path)}
-                      className={`group relative w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 outline-none
-                        ${
-                          active
-                            ? "bg-white/[0.04] text-white shadow-sm"
-                            : "text-white/40 hover:text-white hover:bg-white/[0.015]"
-                        }`}
-                    >
-                      {/* ACTIVE ACCENT INDICATOR STRIP */}
-                      <span
-                        className={`absolute left-0 top-1/2 -translate-y-1/2 w-[2.5px] h-4 rounded-r-full transition-all duration-200
-                          ${active ? "bg-[#D4A97A] shadow-[0_0_8px_rgba(212,169,122,0.5)]" : "bg-transparent opacity-0"}`}
-                      />
-
-                      {/* CONTENT FRAME */}
-                      <div className="flex items-center gap-3 min-w-0">
-                        <Icon
-                          size={15}
-                          className={`transition-all duration-150 shrink-0
-                            ${active ? "text-[#D4A97A]" : "text-white/20 group-hover:text-white/50"}`}
-                        />
-                        <span className="truncate tracking-wide">{item.label}</span>
-                      </div>
-
-                      {/* TRAILING ACCENT */}
-                      {!active && (
-                        <ChevronRight 
-                          size={11} 
-                          className="text-white/0 -translate-x-1 opacity-0 group-hover:text-white/30 group-hover:translate-x-0 group-hover:opacity-100 transition-all duration-150 shrink-0" 
-                        />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-        </nav>
-
-        {/* FOOTER */}
-        <div className="border-t border-white/[0.03] p-4 space-y-3 bg-[#040302]/40 backdrop-blur-md">
-          <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/[0.01] border border-white/[0.02]">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#D4A97A]/20 to-[#D4A97A]/5 border border-[#D4A97A]/20 text-[#D4A97A] flex items-center justify-center font-black text-xs shrink-0">
-              {initials}
-            </div>
-
-            <div className="min-w-0 flex-1">
-              <p className="text-white/80 text-xs font-semibold truncate tracking-wide">
-                {authUser?.email ?? "Administrator"}
-              </p>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="h-1 w-1 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]" />
-                <p className="text-[#D4A97A]/80 text-[9px] font-black uppercase tracking-wider truncate">
-                  {role ?? "System Admin"}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-red-400/60 hover:text-red-400 hover:bg-red-500/[0.03] transition-all duration-150 group outline-none"
-          >
-            <LogOut size={14} className="text-red-400/30 group-hover:text-red-400 transitions-transform" />
-            <span className="tracking-wide">Exit Secure Session</span>
-          </button>
-        </div>
+      <aside className="hidden h-screen w-20 shrink-0 flex-col border-r border-white/3 bg-[#060403] select-none antialiased md:flex lg:w-64">
+        {renderContent()}
       </aside>
     </>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, Suspense, useState } from "react";
+import { useEffect, useMemo, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
 import {
@@ -15,11 +15,6 @@ import {
 import Navbar from "@/app/components/Navbar";
 import OrderCard from "@/app/components/OrderCard";
 import Reveal from "@/app/components/Reveal";
-import PageTransition from "@/app/components/PageTransition";
-import OrderFullDetailModal from "@/app/components/OrderFullDetailModal";
-
-import type { Order } from "@/types/order";
-
 import { useMyOrders } from "@/hooks/useUserOrders";
 import { useConversationList } from "@/hooks/useConversationList";
 import { useUser } from "@/hooks/useUser";
@@ -40,7 +35,9 @@ function PaymentSuccessModal() {
   const closeModal = () => {
     const url = new URL(window.location.href);
     url.searchParams.delete("payment");
+    url.searchParams.delete("paymentId");
     url.searchParams.delete("orderId");
+    url.searchParams.delete("inquiryId");
     window.history.replaceState({}, "", url.toString());
   };
 
@@ -86,10 +83,6 @@ function CustomerOrdersContent() {
   const router = useRouter();
   const { user } = useUser();
   const searchParams = useSearchParams();
-
-  // Active modal track pointer hoisted clear of array context rendering engines
-  const [selectedOrderForModal, setSelectedOrderForModal] = useState<Order | null>(null);
-  const [cachedOrderForModal, setCachedOrderForModal] = useState<Order | null>(null);
 
   const {
     data: orders = [],
@@ -225,8 +218,7 @@ function CustomerOrdersContent() {
   }
 
   return (
-    <PageTransition>
-      <div className="bg-[#0F0A06] min-h-screen font-sans text-white relative selection:bg-[#D4A97A]/30">
+    <div className="bg-[#0F0A06] min-h-screen font-sans text-white relative selection:bg-[#D4A97A]/30">
         <Navbar />
 
         {/* AMBIENT BACKGROUND GLOW */}
@@ -270,7 +262,7 @@ function CustomerOrdersContent() {
                 <div className="flex flex-col items-center justify-center py-24 text-center rounded-2xl border border-dashed border-white/5 bg-[#0B0704] px-4">
                   <Box className="w-8 h-8 text-white/20 mb-3" />
                   <p className="text-white/50 text-sm font-semibold tracking-tight">
-                    You haven&apos;t placed any orders yet.
+                    You haven't placed any orders yet.
                   </p>
                   <button
                     onClick={() => router.push("/catalog")}
@@ -289,11 +281,6 @@ function CustomerOrdersContent() {
                         order={order}
                         userId={user?.id ?? ""}
                         conversation={conversationMap.get(order.id) || undefined}
-                        // Connects card action directly to main layout state
-                        onOpenDetails={() => {
-                          setSelectedOrderForModal(order);
-                          setCachedOrderForModal(order);
-                        }}
                       />
                     </Reveal>
                   </div>
@@ -303,21 +290,10 @@ function CustomerOrdersContent() {
           </section>
         </main>
 
-        {/* ── HOISTED INTERACTIVE PORTAL VIEWPORT OVERLAY ── */}
-        {cachedOrderForModal && (
-          <OrderFullDetailModal
-            open={Boolean(selectedOrderForModal)}
-            order={cachedOrderForModal}
-            onClose={() => setSelectedOrderForModal(null)}
-            conversation={conversationMap.get(cachedOrderForModal.id) || undefined}
-          />
-        )}
-
         <Suspense fallback={null}>
           <PaymentSuccessModal />
         </Suspense>
       </div>
-    </PageTransition>
   );
 }
 

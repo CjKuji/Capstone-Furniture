@@ -81,161 +81,102 @@ interface SimplePaymentRow {
   orders: PaymentOrderRelation | null; 
 }
 
+interface DashboardOrderRow {
+  id: string;
+  order_status: string | null;
+  payment_status: string | null;
+}
+
+interface DashboardInquiryRow {
+  id: string;
+  status: string | null;
+  charge_status: string | null;
+}
+
+interface DbQuerySelectResult {
+  count: number | null;
+  data: unknown[] | null;
+  error?: unknown;
+}
+
+interface DbQueryBuilder {
+  select(fields?: string, options?: { count?: "exact" | "planned" | "estimated"; head?: boolean }): DbQueryBuilder;
+  order(column: string, options?: { ascending?: boolean }): DbQueryBuilder;
+  limit(count: number): DbQueryBuilder;
+  then<TResult1 = DbQuerySelectResult, TResult2 = never>(
+    onfulfilled?: ((value: DbQuerySelectResult) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ): Promise<TResult1 | TResult2>;
+}
+
 interface DbQueryOverride {
-  from(table: string): {
-    select(fields?: string, options?: { count?: "exact" | "planned" | "estimated"; head?: boolean }): any;
-  };
+  from(table: string): DbQueryBuilder;
 }
 
 const typedClient = supabase as unknown as DbQueryOverride;
+
+function normalizeDashboardValue(value: string | null | undefined) {
+  return (value ?? "").toLowerCase().trim();
+}
+
+async function fetchDashboardOrders(): Promise<DashboardOrderRow[]> {
+  try {
+    const { data, error } = await supabase
+      .from("orders")
+      .select("id, order_status, payment_status");
+
+    if (error) throw error;
+    return (data ?? []) as DashboardOrderRow[];
+  } catch (error) {
+    console.error("DASHBOARD_ORDERS_FETCH_ERROR", error);
+    return [];
+  }
+}
+
+async function fetchDashboardInquiries(): Promise<DashboardInquiryRow[]> {
+  try {
+    const { data, error } = await supabase
+      .from("inquiries")
+      .select("id, status, charge_status");
+
+    if (error) throw error;
+    return (data ?? []) as unknown as DashboardInquiryRow[];
+  } catch (error) {
+    console.error("DASHBOARD_INQUIRIES_FETCH_ERROR", error);
+    return [];
+  }
+}
 
 /* =========================================================
    DASHBOARD STATS SERVICE
    ========================================================= */
 
 export async function getAdminDashboardStats(): Promise<AdminDashboardData> {
+  const [dashboardOrders, dashboardInquiries] = await Promise.all([
+    fetchDashboardOrders(),
+    fetchDashboardInquiries(),
+  ]);
+
   const [
-    pendingQuotesRes,
     unreadMessagesRes,
-    paidOrdersNotStartedRes,
-    paidInquiriesNotStartedRes,
     totalFurnitureRes,
-    activeOrdersRes,
-    activeInquiriesRes,
-
-    // Logistics Split Queries: Partial Payments (Balances Remaining)
-    partiallyPaidPickupOrdersRes,
-    partiallyPaidPickupInquiriesRes,
-    partiallyPaidDeliveryOrdersRes,
-    partiallyPaidDeliveryInquiriesRes,
-
-    // Logistics Split Queries: Fully Paid Items (Ready to Dispatch / Out En Route)
-    fullyPaidPickupOrdersRes,
-    fullyPaidPickupInquiriesRes,
-    fullyPaidDeliveryOrdersRes,
-    fullyPaidDeliveryInquiriesRes,
-
-    // Completed Volume Aggregations
-    completedOrdersRes,
-    completedInquiriesRes,
-
-    // System Profiles Count
     currentUsersRes,
-
-    // Chronological Feed Components
     recentOrdersRes,
     recentInquiriesRes,
     recentPaymentsRes,
   ] = await Promise.all([
-    
-    // 1. Pending Quotes: Initial custom project submittals with no pricing metrics applied yet
-    typedClient
-      .from("inquiries")
-      .select("*", { count: "exact", head: true })
-      .in("status", ["requested", "under_review"])
-      .eq("charge_status", "none")
-      .is("final_total_price", null),
-
-    // 2. Communications: Active unread text interactions
     supabase
       .from("conversations")
       .select("admin_unread_count"),
 
-    // 3. Staged for Production (Catalog Orders): Customer checked out / cleared payments but work has not begun
-    typedClient
-      .from("orders")
-      .select("*", { count: "exact", head: true })
-      .in("charge_status", ["partially_paid", "fully_paid"])
-      .in("order_status", ["requested", "accepted"]),
-
-    // 4. Staged for Production (Custom Inquiries): Quote approved/accepted and partial/full down payment cleared
-    typedClient
-      .from("inquiries")
-      .select("*", { count: "exact", head: true })
-      .in("charge_status", ["partially_paid", "fully_paid"])
-      .in("status", ["requested", "under_review", "accepted"]),
-
-    // 5. System Inventory Headcount
     supabase
       .from("furniture")
       .select("*", { count: "exact", head: true }),
 
-    // 6. Active Workshop Production: Catalog Items
-    typedClient
-      .from("orders")
-      .select("*", { count: "exact", head: true })
-      .eq("order_status", "in_production"),
-
-    // 7. Active Workshop Production: Custom Inquiries
-    typedClient
-      .from("inquiries")
-      .select("*", { count: "exact", head: true })
-      .eq("status", "in_production"),
-
-    // 8. Partial Payments: Ready for Pickup (Must settle remaining balances before dispatch release)
-    typedClient
-      .from("orders")
-      .select("*", { count: "exact", head: true })
-      .eq("order_status", "ready_for_pickup")
-      .eq("charge_status", "partially_paid"),
-    typedClient
-      .from("inquiries")
-      .select("*", { count: "exact", head: true })
-      .eq("status", "ready_for_pickup")
-      .eq("charge_status", "partially_paid"),
-
-    // 9. Partial Payments: Ready for Shipment (Must settle remaining balances before dispatch release)
-    typedClient
-      .from("orders")
-      .select("*", { count: "exact", head: true })
-      .eq("order_status", "ready_for_shipment")
-      .eq("charge_status", "partially_paid"),
-    typedClient
-      .from("inquiries")
-      .select("*", { count: "exact", head: true })
-      .eq("status", "ready_for_shipment")
-      .eq("charge_status", "partially_paid"),
-
-    // 10. Fully Paid Side: Ready for Pickup (Cleared for instant customer release)
-    typedClient
-      .from("orders")
-      .select("*", { count: "exact", head: true })
-      .eq("order_status", "ready_for_pickup")
-      .eq("charge_status", "fully_paid"),
-    typedClient
-      .from("inquiries")
-      .select("*", { count: "exact", head: true })
-      .eq("status", "ready_for_pickup")
-      .eq("charge_status", "fully_paid"),
-
-    // 11. Fully Paid Side: Delivery Pipeline (Tracks items through setup and shipping transit until completed)
-    typedClient
-      .from("orders")
-      .select("*", { count: "exact", head: true })
-      .in("order_status", ["ready_for_shipment", "in_transit"])
-      .eq("charge_status", "fully_paid"),
-    typedClient
-      .from("inquiries")
-      .select("*", { count: "exact", head: true })
-      .in("status", ["ready_for_shipment", "in_transit"])
-      .eq("charge_status", "fully_paid"),
-
-    // 12. Completed Volume Aggregations (Items are wiped clean from active dashboard columns once finalized)
-    typedClient
-      .from("orders")
-      .select("*", { count: "exact", head: true })
-      .eq("order_status", "completed"),
-    typedClient
-      .from("inquiries")
-      .select("*", { count: "exact", head: true })
-      .eq("status", "completed"),
-
-    // 13. System Registered User Accounts
     supabase
       .from("profiles")
       .select("*", { count: "exact", head: true }),
 
-    // 14. Activity Tracking Feed Data
     typedClient
       .from("orders")
       .select("id, order_reference_code, final_total_price, order_status, created_at")
@@ -244,7 +185,7 @@ export async function getAdminDashboardStats(): Promise<AdminDashboardData> {
 
     typedClient
       .from("inquiries")
-      .select("id, status, final_total_price, created_at, inquiry_items ( title )")
+      .select("id, status, created_at, inquiry_items ( title )")
       .order("created_at", { ascending: false })
       .limit(15),
 
@@ -256,10 +197,19 @@ export async function getAdminDashboardStats(): Promise<AdminDashboardData> {
   ]);
 
   // --- Process Operational Badges ---
-  const pendingQuotes = pendingQuotesRes.count ?? 0;
+  const pendingQuotes = dashboardInquiries.filter((item) => {
+    const status = normalizeDashboardValue(item.status);
+    const chargeStatus = normalizeDashboardValue(item.charge_status);
+
+    return (status === "requested" || status === "under_review" || status === "pending") && (chargeStatus === "none" || chargeStatus === "" || chargeStatus === "pending");
+  }).length;
+
   const totalFurnitureCatalogCount = totalFurnitureRes.count ?? 0;
-  const completedOrdersCount = completedOrdersRes.count ?? 0;
-  const completedInquiriesCount = completedInquiriesRes.count ?? 0;
+  const completedOrdersCount = dashboardOrders.filter((order) => normalizeDashboardValue(order.order_status) === "completed").length;
+  const completedInquiriesCount = dashboardInquiries.filter((item) => {
+    const status = normalizeDashboardValue(item.status);
+    return status === "completed" || status === "closed" || status === "converted";
+  }).length;
   const currentUsersCount = currentUsersRes.count ?? 0;
 
   const unreadMessages = (unreadMessagesRes.data ?? []).reduce(
@@ -267,18 +217,62 @@ export async function getAdminDashboardStats(): Promise<AdminDashboardData> {
     0
   );
 
-  const pendingStoreOrdersCount = paidOrdersNotStartedRes.count ?? 0;
-  const pendingCustomRequestsCount = paidInquiriesNotStartedRes.count ?? 0;
+  const pendingStoreOrdersCount = dashboardOrders.filter((order) => {
+    const paymentStatus = normalizeDashboardValue(order.payment_status);
+    const orderStatus = normalizeDashboardValue(order.order_status);
+    return (paymentStatus === "partially_paid" || paymentStatus === "fully_paid") && (orderStatus === "requested" || orderStatus === "accepted");
+  }).length;
+
+  const pendingCustomRequestsCount = dashboardInquiries.filter((item) => {
+    const chargeStatus = normalizeDashboardValue(item.charge_status);
+    const status = normalizeDashboardValue(item.status);
+    return chargeStatus === "accepted" && (status === "requested" || status === "under_review" || status === "accepted");
+  }).length;
+
   const paidAwaitingProduction = pendingStoreOrdersCount + pendingCustomRequestsCount;
 
-  const activeProduction = (activeOrdersRes.count ?? 0) + (activeInquiriesRes.count ?? 0);
+  const activeProduction = dashboardOrders.filter((order) => normalizeDashboardValue(order.order_status) === "in_production").length + dashboardInquiries.filter((item) => normalizeDashboardValue(item.status) === "in_production").length;
 
   // --- Parse Pipeline Data Columns Safely ---
-  const partiallyPaidPickupCount = (partiallyPaidPickupOrdersRes.count ?? 0) + (partiallyPaidPickupInquiriesRes.count ?? 0);
-  const partiallyPaidDeliveryCount = (partiallyPaidDeliveryOrdersRes.count ?? 0) + (partiallyPaidDeliveryInquiriesRes.count ?? 0);
+  const partiallyPaidPickupCount = dashboardOrders.filter((order) => {
+    const paymentStatus = normalizeDashboardValue(order.payment_status);
+    const orderStatus = normalizeDashboardValue(order.order_status);
+    return paymentStatus === "partially_paid" && orderStatus === "ready_for_pickup";
+  }).length + dashboardInquiries.filter((item) => {
+    const chargeStatus = normalizeDashboardValue(item.charge_status);
+    const status = normalizeDashboardValue(item.status);
+    return chargeStatus === "accepted" && status === "ready_for_pickup";
+  }).length;
 
-  const fullyPaidPickupCount = (fullyPaidPickupOrdersRes.count ?? 0) + (fullyPaidPickupInquiriesRes.count ?? 0);
-  const fullyPaidDeliveryCount = (fullyPaidDeliveryOrdersRes.count ?? 0) + (fullyPaidDeliveryInquiriesRes.count ?? 0);
+  const partiallyPaidDeliveryCount = dashboardOrders.filter((order) => {
+    const paymentStatus = normalizeDashboardValue(order.payment_status);
+    const orderStatus = normalizeDashboardValue(order.order_status);
+    return paymentStatus === "partially_paid" && (orderStatus === "ready_for_shipment" || orderStatus === "in_transit");
+  }).length + dashboardInquiries.filter((item) => {
+    const chargeStatus = normalizeDashboardValue(item.charge_status);
+    const status = normalizeDashboardValue(item.status);
+    return chargeStatus === "accepted" && (status === "ready_for_shipment" || status === "in_transit");
+  }).length;
+
+  const fullyPaidPickupCount = dashboardOrders.filter((order) => {
+    const paymentStatus = normalizeDashboardValue(order.payment_status);
+    const orderStatus = normalizeDashboardValue(order.order_status);
+    return paymentStatus === "fully_paid" && orderStatus === "ready_for_pickup";
+  }).length + dashboardInquiries.filter((item) => {
+    const chargeStatus = normalizeDashboardValue(item.charge_status);
+    const status = normalizeDashboardValue(item.status);
+    return chargeStatus === "accepted" && status === "ready_for_pickup";
+  }).length;
+
+  const fullyPaidDeliveryCount = dashboardOrders.filter((order) => {
+    const paymentStatus = normalizeDashboardValue(order.payment_status);
+    const orderStatus = normalizeDashboardValue(order.order_status);
+    return paymentStatus === "fully_paid" && (orderStatus === "ready_for_shipment" || orderStatus === "in_transit");
+  }).length + dashboardInquiries.filter((item) => {
+    const chargeStatus = normalizeDashboardValue(item.charge_status);
+    const status = normalizeDashboardValue(item.status);
+    return chargeStatus === "accepted" && (status === "ready_for_shipment" || status === "in_transit");
+  }).length;
 
   // --- Normalizing Chronological Activity Feeds ---
   const timelineLogs: DashboardActivityLog[] = [];
@@ -322,7 +316,7 @@ export async function getAdminDashboardStats(): Promise<AdminDashboardData> {
         type: "custom_inquiry",
         title: "Custom Request Logged",
         description: `Ref: REQ-${i.id.substring(0, 8).toUpperCase()} — (${primaryItem})`,
-        amount: i.final_total_price ? Number(i.final_total_price) : undefined,
+        amount: undefined,
         status: i.status ?? "requested",
         createdAt: cleanDate,
       });

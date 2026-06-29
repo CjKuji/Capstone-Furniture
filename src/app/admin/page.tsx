@@ -126,7 +126,7 @@ export default function AdminDashboard() {
     const sortedYears = Array.from(yearsSet).sort((a, b) => b.localeCompare(a));
     const sortedMonths = Array.from(monthsMap.entries())
       .sort((a, b) => b[0] - a[0])
-      .map(([_, monthName]) => monthName);
+      .map(([, monthName]) => monthName);
 
     return {
       availableYears: sortedYears,
@@ -162,12 +162,12 @@ export default function AdminDashboard() {
   };
 
   return (
-    <main className="min-h-screen bg-[#0F0A06] text-white p-4 md:p-8 space-y-10 antialiased font-sans print:bg-white print:text-black">
+    <main className="min-h-screen bg-[#0F0A06] text-white p-3 sm:p-4 lg:p-8 space-y-6 sm:space-y-8 lg:space-y-10 antialiased font-sans print:bg-white print:text-black">
       
       {/* =========================================================
           SECTION 0: HEADER
           ========================================================= */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-white/[0.1] print:border-black/20 pb-6">
+      <div className="flex flex-col gap-4 border-b border-white/[0.1] print:border-black/20 pb-4 sm:pb-6 md:flex-row md:items-center md:justify-between">
         <div className="space-y-1">
           <div className="flex items-center gap-2.5">
             <div className="h-4 w-1 bg-[#D4A97A] rounded-full shadow-[0_0_8px_rgba(212,169,122,0.3)] print:bg-amber-700 print:shadow-none" />
@@ -180,7 +180,7 @@ export default function AdminDashboard() {
           </p>
         </div>
 
-        <div className="flex items-center space-x-3 text-xs bg-white/[0.02] border border-white/[0.08] print:border-black/10 shadow-2xl px-4 py-2 rounded-xl self-start md:self-auto print:shadow-none">
+        <div className="flex items-center space-x-3 self-start rounded-xl border border-white/[0.08] bg-white/[0.02] px-4 py-2 text-xs shadow-2xl print:shadow-none md:self-auto print:border-black/10">
           <span className="relative flex h-2 w-2 print:hidden">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
             <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
@@ -203,13 +203,13 @@ export default function AdminDashboard() {
         </div>
         
         {loading && !dashboardCache ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 print:hidden">
+          <div className="grid grid-cols-1 gap-3 print:hidden sm:grid-cols-2 xl:grid-cols-5 sm:gap-4">
             {Array.from({ length: 5 }).map((_, i) => (
               <div key={i} className="h-32 rounded-2xl bg-white/[0.02] border border-white/[0.05] animate-pulse" />
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5 sm:gap-4">
             
             {/* NEW REQUESTS CARD */}
             <DashboardCard
@@ -283,7 +283,7 @@ export default function AdminDashboard() {
           <h2 className="text-xs font-bold uppercase tracking-widest text-white/50 print:text-black/50">Fulfillment Stages & Logistics</h2>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-5">
           
           {/* PARTIAL PAYMENTS WORK QUEUE */}
           <div className="bg-white/[0.01] border border-white/[0.1] print:border-black/20 rounded-2xl p-6 flex flex-col justify-between hover:border-white/20 transition duration-300 relative group shadow-xl print:shadow-none">
@@ -355,7 +355,7 @@ export default function AdminDashboard() {
       {/* =========================================================
           SECTION 3: REAL-TIME ACTIVITY & NAVIGATION LINKS
           ========================================================= */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:gap-6 items-start">
         
         {/* RECENT ACTIVITY STREAM (NEWEST AT THE VERY TOP) */}
         <div className="lg:col-span-2 bg-white/[0.01] border border-white/[0.1] print:border-black/20 rounded-2xl p-6 space-y-5 shadow-2xl print:shadow-none">
@@ -380,7 +380,7 @@ export default function AdminDashboard() {
             </div>
 
             {/* DATE CONTROLS */}
-            <div className="flex flex-col gap-2.5 bg-white/[0.01] border border-white/[0.06] print:border-black/10 rounded-xl p-3.5 print:hidden">
+            <div className="flex flex-col gap-2.5 rounded-xl border border-white/[0.06] bg-white/[0.01] p-3 print:hidden print:border-black/10 sm:p-3.5">
               {/* Year Selector row */}
               <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
                 <span className="text-[11px] font-bold text-white/40 uppercase tracking-wider flex items-center gap-1 shrink-0 w-16">
@@ -456,7 +456,7 @@ export default function AdminDashboard() {
               filteredActivity.map((log) => (
                 <div 
                   key={log.id} 
-                  className="flex flex-col sm:flex-row sm:items-center justify-between bg-white/[0.01] border border-white/[0.06] print:border-black/10 rounded-xl p-3.5 gap-3 hover:bg-white/[0.02] hover:border-white/[0.12] transition duration-200 group break-inside-avoid"
+                  className="group flex flex-col gap-3 break-inside-avoid rounded-xl border border-white/[0.06] bg-white/[0.01] p-3.5 transition duration-200 hover:border-white/[0.12] hover:bg-white/[0.02] sm:flex-row sm:items-center sm:justify-between print:border-black/10"
                 >
                   <div className="space-y-1.5 min-w-0 flex-1 sm:pr-4">
                     <div className="flex items-center space-x-2.5 flex-wrap gap-y-1">
@@ -472,7 +472,7 @@ export default function AdminDashboard() {
                     <p className="text-xs text-white/50 print:text-black/60 break-words whitespace-normal font-normal leading-relaxed">{log.description}</p>
                   </div>
 
-                  <div className="text-left sm:text-right shrink-0 border-t sm:border-t-0 border-white/[0.04] print:border-black/10 pt-2 sm:pt-0 w-full sm:w-auto flex sm:flex-col justify-between sm:justify-center items-center sm:items-end gap-1">
+                  <div className="flex w-full shrink-0 flex-col items-start gap-1 border-t border-white/[0.04] pt-2 text-left sm:w-auto sm:items-end sm:border-t-0 sm:pt-0 sm:text-right sm:justify-center print:border-black/10">
                     {log.amount !== undefined && log.amount > 0 ? (
                       <p className="font-bold text-[#D4A97A] print:text-amber-800 text-xs sm:text-sm font-mono">₱{log.amount.toLocaleString()}</p>
                     ) : (

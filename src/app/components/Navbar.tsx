@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import Image from "next/image"; // Imported for optimized logo rendering
 import {
   Search,
   ShoppingBag,
@@ -19,14 +20,15 @@ import { supabase } from "@/lib/supabase";
 import { useUser } from "@/hooks/useUser";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import { useCart } from "@/hooks/useCart";
+import { authService } from "@/services/authService";
 
 // Note: If these custom hooks use SWR or TanStack/React Query under the hood,
 // make sure you export their "mutate" or "refetch" handlers to sync them manually.
-import { useMyOrders } from "@/hooks/useUserOrders"; 
+import { useMyOrders, type OrderWithItems } from "@/hooks/useUserOrders"; 
 import { useUserInquiries } from "@/hooks/useUserInquiry";
 
 const NAV_ITEMS = [
-  { label: "Home",    route: "/" },
+  { label: "Home",     route: "/" },
   { label: "Designs",  route: "/catalog" },
   { label: "About",    route: "/about" },
 ];
@@ -50,8 +52,8 @@ export default function Navbar() {
   const onInquiry = pathname === "/inquiry";
 
   // Retain data mutations structures if your custom hooks support re-validation arguments
-  const { data: orders, mutate: mutateOrders } = useMyOrders() as any;
-  const { data: inquiries, mutate: mutateInquiries } = useUserInquiries() as any;
+  const { data: orders, mutate: mutateOrders } = useMyOrders();
+  const { data: inquiries, mutate: mutateInquiries } = useUserInquiries();
 
   // Read lengths safely based on authentication status
   const orderCount = authUser ? (orders?.length ?? 0) : 0;
@@ -133,8 +135,15 @@ export default function Navbar() {
 
   const handleLogout = async () => {
     setDropdownOpen(false);
-    await supabase.auth.signOut();
-    router.push("/auth/login");
+    try {
+      await authService.signOut();
+      // Clear any cached data
+      window.location.href = "/auth/login";
+    } catch (error) {
+      console.error("Logout error:", error);
+      // Force redirect even if logout fails
+      window.location.href = "/auth/login";
+    }
   };
 
   const initials = authUser?.email
@@ -194,22 +203,31 @@ export default function Navbar() {
     <>
       {/* ── MAIN NAV ── */}
       <header
-        className={`sticky top-0 w-full transition-shadow duration-300 ${
+        className={`sticky top-0 w-full transition-all duration-300 ${
           scrolled ? "shadow-[0_2px_24px_rgba(0,0,0,0.35)]" : ""
         } bg-[#1C1209]/96 backdrop-blur-md`}
         style={{ zIndex: 50 }}
       >
-        <div className="flex justify-between items-center gap-2 sm:gap-4 mx-auto px-3 sm:px-6 max-w-7xl h-14 sm:h-16">
+        {/* Increased navbar height container to h-16 sm:h-20 */}
+        <div className="flex justify-between items-center gap-2 sm:gap-4 mx-auto px-3 sm:px-6 max-w-7xl h-16 sm:h-20 transition-all duration-300">
 
-          {/* LOGO */}
+          {/* LOGO LINK */}
           <button
             onClick={() => router.push("/")}
-            aria-label="Go to home"
-            className="flex items-center gap-2 text-white shrink-0"
+            aria-label="Woodforge Home"
+            className="flex items-center shrink-0 group py-1"
           >
-            <span className="font-bold text-[#D4A97A] text-base sm:text-xl tracking-widest">
-              WOOD<span className="text-white">FORGE</span>
-            </span>
+            {/* Expanded box to fill the vertical space cleanly without squishing */}
+            <div className="relative w-48 h-11 sm:w-56 sm:h-13 transition-transform group-hover:scale-[1.01] duration-200">
+              <Image 
+                src="https://havfynxlaoaieomuomzy.supabase.co/storage/v1/object/public/System-Assets/Logo.png"
+                alt="Woodforge Logo"
+                fill
+                sizes="(max-width: 640px) 192px, 224px"
+                className="object-contain object-left brightness-110"
+                priority
+              />
+            </div>
           </button>
 
           {/* CENTER NAV (desktop) */}
@@ -221,149 +239,150 @@ export default function Navbar() {
 
           {/* RIGHT ACTIONS */}
           <div className="flex items-center gap-0.5 sm:gap-1">
+            <div className="hidden md:flex items-center gap-0.5 sm:gap-1">
+              {/* SEARCH TOGGLE */}
+              <button
+                onClick={() => setSearchOpen((p) => !p)}
+                aria-label="Toggle search"
+                className="hover:bg-white/10 p-2 rounded-full text-white/60 hover:text-white transition"
+              >
+                {searchOpen
+                  ? <X className="w-4 h-4 sm:w-5 sm:h-5" />
+                  : <Search className="w-4 h-4 sm:w-5 sm:h-5" />}
+              </button>
 
-            {/* SEARCH TOGGLE */}
-            <button
-              onClick={() => setSearchOpen((p) => !p)}
-              aria-label="Toggle search"
-              className="hover:bg-white/10 p-2 rounded-full text-white/60 hover:text-white transition"
-            >
-              {searchOpen
-                ? <X className="w-4 h-4 sm:w-5 sm:h-5" />
-                : <Search className="w-4 h-4 sm:w-5 sm:h-5" />}
-            </button>
-
-            {!initialized ? (
-              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white/10 animate-pulse ml-0.5 sm:ml-1" />
-            ) : authUser ? (
-              <>
-                {/* ── CART ICON ── */}
-                <button
-                  onClick={() => router.push("/cart")}
-                  aria-label="My cart"
-                  title="Saved designs"
-                  className={`relative p-2 rounded-full transition
-                    ${onCart
-                      ? "text-[#D4A97A] bg-[#D4A97A]/10"
-                      : "text-white/60 hover:text-white hover:bg-white/10"}`}
-                >
-                  <ShoppingCart className="w-4 h-4 sm:w-5 sm:h-5" />
-                  {cartCount > 0 && (
-                    <span className="top-1 right-1 absolute flex justify-center items-center bg-[#D4A97A] rounded-full w-3.5 h-3.5 sm:w-4 sm:h-4 font-bold text-[#1C1209] text-[9px] sm:text-[10px]">
-                      {cartCount > 99 ? "99+" : cartCount}
-                    </span>
-                  )}
-                </button>
-
-                {/* ── INQUIRY ICON ── */}
-                <button
-                  onClick={() => router.push("/inquiry")}
-                  aria-label="My inquiries"
-                  title="Custom blueprints"
-                  className={`relative p-2 rounded-full transition
-                    ${onInquiry
-                      ? "text-[#D4A97A] bg-[#D4A97A]/10"
-                      : "text-white/60 hover:text-white hover:bg-white/10"}`}
-                >
-                  <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5" />
-                  {inquiryCount > 0 && (
-                    <span className="top-1 right-1 absolute flex justify-center items-center bg-[#D4A97A] rounded-full w-3.5 h-3.5 sm:w-4 sm:h-4 font-bold text-[#1C1209] text-[9px] sm:text-[10px]">
-                      {inquiryCount > 99 ? "99+" : inquiryCount}
-                    </span>
-                  )}
-                </button>
-
-                {/* ── ORDERS ICON ── */}
-                <button
-                  onClick={() => router.push("/orders")}
-                  aria-label="My orders"
-                  title="My orders"
-                  className={`relative p-2 rounded-full transition
-                    ${onOrders
-                      ? "text-[#D4A97A] bg-[#D4A97A]/10"
-                      : "text-white/60 hover:text-white hover:bg-white/10"}`}
-                >
-                  <ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5" />
-                  {orderCount > 0 && (
-                    <span className="top-1 right-1 absolute flex justify-center items-center bg-[#D4A97A] rounded-full w-3.5 h-3.5 sm:w-4 sm:h-4 font-bold text-[#1C1209] text-[9px] sm:text-[10px]">
-                      {orderCount > 99 ? "99+" : orderCount}
-                    </span>
-                  )}
-                </button>
-
-                {/* USER MENU */}
-                <div className="relative ml-0.5 sm:ml-1" ref={dropdownRef}>
+              {!initialized ? (
+                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white/10 animate-pulse ml-0.5 sm:ml-1" />
+              ) : authUser ? (
+                <>
+                  {/* ── CART ICON ── */}
                   <button
-                    onClick={() => setDropdownOpen((p) => !p)}
-                    aria-expanded={dropdownOpen}
-                    aria-label="User menu"
-                    className="flex justify-center items-center bg-[#D4A97A] hover:opacity-90 rounded-full w-8 h-8 sm:w-9 sm:h-9 font-bold text-[#1C1209] text-xs sm:text-sm transition"
+                    onClick={() => router.push("/cart")}
+                    aria-label="My cart"
+                    title="Saved designs"
+                    className={`relative p-2 rounded-full transition
+                      ${onCart
+                        ? "text-[#D4A97A] bg-[#D4A97A]/10"
+                        : "text-white/60 hover:text-white hover:bg-white/10"}`}
                   >
-                    {initials}
+                    <ShoppingCart className="w-4 h-4 sm:w-5 sm:h-5" />
+                    {cartCount > 0 && (
+                      <span className="top-1 right-1 absolute flex justify-center items-center bg-[#D4A97A] rounded-full w-3.5 h-3.5 sm:w-4 sm:h-4 font-bold text-[#1C1209] text-[9px] sm:text-[10px]">
+                        {cartCount > 99 ? "99+" : cartCount}
+                      </span>
+                    )}
                   </button>
 
-                  {dropdownOpen && (
-                    <div className="right-0 absolute bg-[#241810] shadow-2xl mt-3 border border-white/10 rounded-xl ring-1 ring-black/20 w-56 sm:w-60 overflow-hidden">
-                      <div className="flex items-center gap-3 px-4 py-3 border-white/10 border-b">
-                        <div className="flex justify-center items-center bg-[#D4A97A] rounded-full w-8 h-8 sm:w-9 sm:h-9 font-bold text-[#1C1209] text-xs sm:text-sm shrink-0">
-                          {initials}
+                  {/* ── INQUIRY ICON ── */}
+                  <button
+                    onClick={() => router.push("/inquiry")}
+                    aria-label="My inquiries"
+                    title="Custom blueprints"
+                    className={`relative p-2 rounded-full transition
+                      ${onInquiry
+                        ? "text-[#D4A97A] bg-[#D4A97A]/10"
+                        : "text-white/60 hover:text-white hover:bg-white/10"}`}
+                  >
+                    <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5" />
+                    {inquiryCount > 0 && (
+                      <span className="top-1 right-1 absolute flex justify-center items-center bg-[#D4A97A] rounded-full w-3.5 h-3.5 sm:w-4 sm:h-4 font-bold text-[#1C1209] text-[9px] sm:text-[10px]">
+                        {inquiryCount > 99 ? "99+" : inquiryCount}
+                      </span>
+                    )}
+                  </button>
+
+                  {/* ── ORDERS ICON ── */}
+                  <button
+                    onClick={() => router.push("/orders")}
+                    aria-label="My orders"
+                    title="My orders"
+                    className={`relative p-2 rounded-full transition
+                      ${onOrders
+                        ? "text-[#D4A97A] bg-[#D4A97A]/10"
+                        : "text-white/60 hover:text-white hover:bg-white/10"}`}
+                  >
+                    <ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5" />
+                    {orderCount > 0 && (
+                      <span className="top-1 right-1 absolute flex justify-center items-center bg-[#D4A97A] rounded-full w-3.5 h-3.5 sm:w-4 sm:h-4 font-bold text-[#1C1209] text-[9px] sm:text-[10px]">
+                        {orderCount > 99 ? "99+" : orderCount}
+                      </span>
+                    )}
+                  </button>
+
+                  {/* USER MENU */}
+                  <div className="relative ml-0.5 sm:ml-1" ref={dropdownRef}>
+                    <button
+                      onClick={() => setDropdownOpen((p) => !p)}
+                      aria-expanded={dropdownOpen}
+                      aria-label="User menu"
+                      className="flex justify-center items-center bg-[#D4A97A] hover:opacity-90 rounded-full w-8 h-8 sm:w-9 sm:h-9 font-bold text-[#1C1209] text-xs sm:text-sm transition"
+                    >
+                      {initials}
+                    </button>
+
+                    {dropdownOpen && (
+                      <div className="right-0 absolute bg-[#241810] shadow-2xl mt-3 border border-white/10 rounded-xl ring-1 ring-black/20 w-56 sm:w-60 overflow-hidden">
+                        <div className="flex items-center gap-3 px-4 py-3 border-white/10 border-b">
+                          <div className="flex justify-center items-center bg-[#D4A97A] rounded-full w-8 h-8 sm:w-9 sm:h-9 font-bold text-[#1C1209] text-xs sm:text-sm shrink-0">
+                            {initials}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-medium text-white text-xs sm:text-sm truncate">
+                              {authUser.email}
+                            </p>
+                            {role && (
+                              <p className="text-[#D4A97A] text-[10px] sm:text-xs capitalize">{role}</p>
+                            )}
+                          </div>
                         </div>
-                        <div className="min-w-0">
-                          <p className="font-medium text-white text-xs sm:text-sm truncate">
-                            {authUser.email}
-                          </p>
-                          {role && (
-                            <p className="text-[#D4A97A] text-[10px] sm:text-xs capitalize">{role}</p>
-                          )}
+
+                        {dropdownItems.map(({ label, icon, route, badge }) => (
+                          <button
+                            key={label}
+                            onClick={() => { setDropdownOpen(false); router.push(route); }}
+                            className="flex items-center gap-3 hover:bg-white/5 px-4 py-3 w-full text-white/70 hover:text-white text-sm text-left transition"
+                          >
+                            <span className="text-[#D4A97A]">{icon}</span>
+                            {label}
+                            {badge !== undefined && (
+                              <span className="ml-1 flex items-center justify-center bg-[#D4A97A]/20 text-[#D4A97A] text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px]">
+                                {badge}
+                              </span>
+                            )}
+                            <ChevronRight className="ml-auto w-3.5 h-3.5 text-white/30" />
+                          </button>
+                        ))}
+
+                        <div className="border-white/10 border-t">
+                          <button
+                            onClick={handleLogout}
+                            className="flex items-center gap-3 hover:bg-red-950/30 px-4 py-3 w-full text-red-400 hover:text-red-300 text-sm text-left transition"
+                          >
+                            <LogOut className="w-4 h-4" />
+                            Sign out
+                          </button>
                         </div>
                       </div>
-
-                      {dropdownItems.map(({ label, icon, route, badge }) => (
-                        <button
-                          key={label}
-                          onClick={() => { setDropdownOpen(false); router.push(route); }}
-                          className="flex items-center gap-3 hover:bg-white/5 px-4 py-3 w-full text-white/70 hover:text-white text-sm text-left transition"
-                        >
-                          <span className="text-[#D4A97A]">{icon}</span>
-                          {label}
-                          {badge !== undefined && (
-                            <span className="ml-1 flex items-center justify-center bg-[#D4A97A]/20 text-[#D4A97A] text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px]">
-                              {badge}
-                            </span>
-                          )}
-                          <ChevronRight className="ml-auto w-3.5 h-3.5 text-white/30" />
-                        </button>
-                      ))}
-
-                      <div className="border-white/10 border-t">
-                        <button
-                          onClick={handleLogout}
-                          className="flex items-center gap-3 hover:bg-red-950/30 px-4 py-3 w-full text-red-400 hover:text-red-300 text-sm text-left transition"
-                        >
-                          <LogOut className="w-4 h-4" />
-                          Sign out
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="hidden sm:flex items-center gap-2 ml-2">
+                  <button
+                    onClick={() => router.push("/auth/login")}
+                    className="px-3 sm:px-4 py-1.5 rounded-full font-medium text-white/70 hover:text-white text-xs sm:text-sm transition"
+                  >
+                    Login
+                  </button>
+                  <button
+                    onClick={() => router.push("/auth/register")}
+                    className="bg-[#D4A97A] hover:bg-[#C4976A] px-3 sm:px-4 py-1.5 rounded-full font-semibold text-[#1C1209] text-xs sm:text-sm transition"
+                  >
+                    Get Started
+                  </button>
                 </div>
-              </>
-            ) : (
-              <div className="hidden sm:flex items-center gap-2 ml-2">
-                <button
-                  onClick={() => router.push("/auth/login")}
-                  className="px-3 sm:px-4 py-1.5 rounded-full font-medium text-white/70 hover:text-white text-xs sm:text-sm transition"
-                >
-                  Login
-                </button>
-                <button
-                  onClick={() => router.push("/auth/register")}
-                  className="bg-[#D4A97A] hover:bg-[#C4976A] px-3 sm:px-4 py-1.5 rounded-full font-semibold text-[#1C1209] text-xs sm:text-sm transition"
-                >
-                  Get Started
-                </button>
-              </div>
-            )}
+              )}
+            </div>
 
             {/* MOBILE HAMBURGER */}
             <button
@@ -405,12 +424,25 @@ export default function Navbar() {
       {/* MOBILE SLIDE-DOWN MENU */}
       {menuOpen && (
         <div
-          className="md:hidden fixed inset-0 z-40 bg-[#0F0A06]/95 backdrop-blur-md flex flex-col pt-14 sm:pt-16"
+          className="md:hidden fixed inset-0 z-40 bg-[#0F0A06]/95 backdrop-blur-md flex flex-col pt-16 sm:pt-20"
           style={{ top: 0 }}
         >
-          <div className="h-14 sm:h-16 shrink-0" onClick={() => setMenuOpen(false)} />
+          <div className="h-16 sm:h-20 shrink-0" onClick={() => setMenuOpen(false)} />
 
           <nav className="flex-1 overflow-y-auto px-4 py-2">
+            <div className="mb-5 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+              <button
+                onClick={() => {
+                  setSearchOpen(true);
+                  setMenuOpen(false);
+                }}
+                className="flex items-center justify-between w-full rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-left text-sm text-white/80 transition hover:bg-white/5"
+              >
+                <span>Search designs</span>
+                <Search className="w-4 h-4 text-[#D4A97A]" />
+              </button>
+            </div>
+
             <ul className="flex flex-col divide-y divide-white/5">
               {renderNavItems(true)}
             </ul>

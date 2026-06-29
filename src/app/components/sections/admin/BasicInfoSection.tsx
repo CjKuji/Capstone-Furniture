@@ -84,7 +84,7 @@ export default function BasicInfoSection({ state, setField, categories }: Props)
           <input
             value={name}
             onChange={(e) => setField("name", e.target.value)}
-            placeholder="e.g. Premium Sofa"
+            placeholder="e.g. Modern Lounge Chair, Oak Dining Table"
             className={inputClass}
           />
         </div>
@@ -96,13 +96,13 @@ export default function BasicInfoSection({ state, setField, categories }: Props)
             value={description}
             onChange={(e) => setField("description", e.target.value)}
             rows={3}
-            placeholder="Short description of the furniture..."
+            placeholder="Describe the furniture's style, materials, and key features..."
             className={`${inputClass} resize-none`}
           />
         </div>
 
         {/* CATEGORY + PRICE */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className={labelClass}>Category</label>
             <select
@@ -111,7 +111,7 @@ export default function BasicInfoSection({ state, setField, categories }: Props)
               className={`${inputClass} appearance-none cursor-pointer`}
               style={{ colorScheme: "dark" }}
             >
-              <option value="" className="bg-[#1A1008]">Select category</option>
+              <option value="" className="bg-[#1A1008]">Choose a category</option>
               {categories.map((c) => (
                 <option key={c.id} value={c.id} className="bg-[#1A1008]">
                   {c.name}
@@ -121,14 +121,14 @@ export default function BasicInfoSection({ state, setField, categories }: Props)
           </div>
 
           <div>
-            <label className={labelClass}>Base Price</label>
+            <label className={labelClass}>Base Price (₱)</label>
             <input
               type="number"
               value={basePrice ?? ""}
               onChange={(e) =>
                 setField("basePrice", e.target.value === "" ? null : Number(e.target.value))
               }
-              placeholder="0.00"
+              placeholder="e.g. 15000"
               className={inputClass}
             />
           </div>

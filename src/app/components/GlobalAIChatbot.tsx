@@ -24,7 +24,10 @@ export default function GlobalAIChatbot() {
   const { furnitureContext } = useAIChatContext();
   const { messages, isThinking, sendMessage, clearChat } = useAIChat();
 
-  useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => setMounted(true));
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
 
   useEffect(() => {
     if (open) setTimeout(() => inputRef.current?.focus(), 100);
@@ -54,12 +57,12 @@ export default function GlobalAIChatbot() {
   if (!mounted) return null;
 
   return createPortal(
-    <>
+    <div data-chatbot-root>
       {/* Floating button */}
       <button
         onClick={() => setOpen((v) => !v)}
         aria-label="Open AI assistant"
-        className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-[#D4A97A] shadow-lg hover:bg-[#C4956A] transition-all hover:scale-105 active:scale-95"
+        className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-[#D4A97A] shadow-lg hover:bg-[#C4956A] transition-all hover:scale-105 active:scale-95 print:hidden"
         style={{ boxShadow: "0 8px 32px rgba(212,169,122,0.35)" }}
       >
         {open ? (
@@ -87,11 +90,14 @@ export default function GlobalAIChatbot() {
       {/* Chat panel */}
       {open && (
         <div
-          className="fixed bottom-24 right-6 z-50 flex flex-col w-[360px] h-[520px] rounded-3xl overflow-hidden bg-[#0B0704] border border-[#2A1F14]"
+          className={"fixed z-50 left-1/2 -translate-x-1/2 bottom-6 print:hidden " +
+            "sm:bottom-24 sm:left-auto sm:translate-x-0 sm:right-6 " +
+            "flex flex-col w-[95vw] max-w-[420px] sm:w-[360px] h-[60vh] sm:h-[520px] " +
+            "rounded-3xl overflow-hidden bg-[#0B0704] border border-[#2A1F14]"}
           style={{ boxShadow: "0 24px 64px rgba(0,0,0,0.7)" }}
         >
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 bg-[#0E0B06]/80 border-b border-[#2A1F14] flex-shrink-0">
+          <div className="relative flex items-center justify-between px-4 py-3 bg-[#0E0B06]/80 border-b border-[#2A1F14] flex-shrink-0">
             <div className="flex items-center gap-2.5">
               <div className="h-7 w-7 rounded-full bg-[#D4A97A]/15 flex items-center justify-center">
                 <span className="text-[#D4A97A] text-xs">✦</span>
@@ -107,14 +113,23 @@ export default function GlobalAIChatbot() {
                 </p>
               </div>
             </div>
-            {messages.length > 0 && (
+            <div className="flex items-center gap-2">
+              {messages.length > 0 && (
+                <button
+                  onClick={clearChat}
+                  className="px-2 py-1 text-[10px] text-white/30 hover:text-white/60 transition-colors"
+                >
+                  Clear
+                </button>
+              )}
               <button
-                onClick={clearChat}
-                className="px-2 py-1 text-[10px] text-white/30 hover:text-white/60 transition-colors"
+                onClick={() => setOpen(false)}
+                aria-label="Close chat"
+                className="w-9 h-9 rounded-lg flex items-center justify-center text-white/40 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/[0.06] transition-all duration-200 text-xs"
               >
-                Clear
+                ✕
               </button>
-            )}
+            </div>
           </div>
 
           {/* Messages */}
@@ -237,7 +252,7 @@ export default function GlobalAIChatbot() {
           </div>
         </div>
       )}
-    </>,
+    </div>,
     document.body
   );
 }

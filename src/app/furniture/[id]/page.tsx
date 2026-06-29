@@ -3,6 +3,7 @@
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, ChevronRight, Cpu, Maximize2, ShoppingCart, X } from "lucide-react";
+import ImageLightbox from "@/app/components/ImageLightbox";
 
 import { useFurniturePublicById } from "@/hooks/useFurnitureById";
 import { useAIChatContext } from "@/app/context/AIChatContext";
@@ -30,6 +31,8 @@ export default function FurnitureDetailPage() {
   const [openOrderModal, setOpenOrderModal] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false); // ✅ Floating window control state
   const [previewVariantId, setPreviewVariantId] = useState<string | null>(null);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
 
   const safeFurniture = furniture ?? null;
 
@@ -77,6 +80,10 @@ export default function FurnitureDetailPage() {
       isPrimary: img.is_primary,
     }));
   }, [safeFurniture]);
+
+  const lightboxImages = useMemo(() => {
+    return images.map((img) => ({ url: img.url, id: img.id }));
+  }, [images]);
 
   const variants = useMemo(() => {
     if (!safeFurniture?.variants) return [];
@@ -184,12 +191,23 @@ export default function FurnitureDetailPage() {
                   />
                 </div>
               ) : primaryImage ? (
-                <div className="absolute inset-0 flex justify-center items-center p-6 sm:p-8">
+                <div
+                  className="absolute inset-0 flex justify-center items-center p-6 sm:p-8 cursor-zoom-in"
+                  onClick={() => {
+                    const primaryIndex = images.findIndex((img) => img.url === primaryImage);
+                    setLightboxIndex(primaryIndex >= 0 ? primaryIndex : 0);
+                    setLightboxOpen(true);
+                  }}
+                >
                   <img
                     src={primaryImage}
                     alt={safeFurniture.name}
-                    className="max-w-full max-h-full object-contain"
+                    className="max-w-full max-h-full object-contain transition-transform duration-300 hover:scale-[1.02]"
                   />
+                  <div className="absolute bottom-4 right-4 bg-black/60 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-white/10 text-white/70 text-[11px] flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Maximize2 className="w-3 h-3" />
+                    Click to expand
+                  </div>
                 </div>
               ) : (
                 <div className="absolute inset-0 flex flex-col justify-center items-center gap-3 text-white/20">
@@ -223,7 +241,13 @@ export default function FurnitureDetailPage() {
 
             {images.length > 0 && (
               <div className="bg-white/[0.02] p-4 border border-white/5 rounded-2xl">
-                <AssetsSection state={{ images }} />
+                <AssetsSection 
+                  state={{ images }} 
+                  onImageClick={(imgs, idx) => {
+                    setLightboxIndex(idx);
+                    setLightboxOpen(true);
+                  }}
+                />
               </div>
             )}
 
@@ -239,12 +263,16 @@ export default function FurnitureDetailPage() {
                     depthCm: safeFurniture.dimensions?.depth_cm,
                     heightCm: safeFurniture.dimensions?.height_cm,
                   }}
-                  categories={[
-                    {
-                      id: safeFurniture.category?.id ?? "",
-                      name: safeFurniture.category?.name ?? "Uncategorized",
-                    } as any,
-                  ]}
+                  categories={
+                    safeFurniture.category?.id
+                      ? [
+                          {
+                            id: safeFurniture.category.id,
+                            name: safeFurniture.category.name ?? "Uncategorized",
+                          },
+                        ]
+                      : []
+                  }
                 />
               </div>
             </Reveal>
@@ -278,6 +306,14 @@ export default function FurnitureDetailPage() {
           open={openOrderModal}
           onClose={() => setOpenOrderModal(false)}
           furniture={safeFurniture}
+        />
+
+        <ImageLightbox
+          images={lightboxImages}
+          initialIndex={lightboxIndex}
+          isOpen={lightboxOpen}
+          onClose={() => setLightboxOpen(false)}
+          title={safeFurniture.name}
         />
 
         {/* ═══════════════ FLOATING LOGIN MODAL ═══════════════ */}

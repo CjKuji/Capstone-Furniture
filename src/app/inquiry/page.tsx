@@ -28,18 +28,26 @@ function PaymentSuccessModal() {
 
   const paymentStatus = searchParams.get("payment");
   const paymentOrderId = searchParams.get("orderId");
-  const hasPaymentModal = Boolean(paymentStatus === "success" && paymentOrderId);
+  const paymentInquiryId = searchParams.get("inquiryId");
+  const hasPaymentModal = Boolean(
+    paymentStatus === "success" && (paymentOrderId || paymentInquiryId)
+  );
 
   useBodyScrollLock(hasPaymentModal);
 
   const closeModal = () => {
     const url = new URL(window.location.href);
     url.searchParams.delete("payment");
+    url.searchParams.delete("paymentId");
     url.searchParams.delete("orderId");
+    url.searchParams.delete("inquiryId");
     window.history.replaceState({}, "", url.toString());
   };
 
   if (!hasPaymentModal) return null;
+
+  const entityId = paymentOrderId || paymentInquiryId || "";
+  const isInquiry = !!paymentInquiryId;
 
   return (
     <div className="fixed inset-0 z-[100] flex justify-center items-center bg-black/90 backdrop-blur-xl p-4">
@@ -56,11 +64,15 @@ function PaymentSuccessModal() {
           Payment Confirmed
         </h2>
         <p className="text-white/40 text-xs mb-8 leading-relaxed">
-          Transaction successful for Order{" "}
+          {isInquiry ? (
+            <>Transaction successful for Inquiry{" "}</>
+          ) : (
+            <>Transaction successful for Order{" "}</>
+          )}
           <span className="text-[#D4A97A] font-mono">
-            {paymentOrderId?.slice(-6).toUpperCase()}
+            {entityId?.slice(-6).toUpperCase()}
           </span>
-          . Your workshop inquiry manifest has transitioned to an official build queue.
+          .{isInquiry ? " Your workshop inquiry manifest has transitioned to an official build queue." : " Your manifest has been updated."}
         </p>
 
         <button
@@ -89,8 +101,9 @@ function InquiryManagementContent() {
   useEffect(() => {
     const paymentStatus = searchParams.get("payment");
     const paymentOrderId = searchParams.get("orderId");
+    const paymentInquiryId = searchParams.get("inquiryId");
 
-    if (paymentStatus === "success" && paymentOrderId) {
+    if (paymentStatus === "success" && (paymentOrderId || paymentInquiryId)) {
       // 150ms debounce window protects against remote pipeline execution lag
       const syncTimeout = setTimeout(() => {
         refetch();

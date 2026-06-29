@@ -402,9 +402,7 @@ export default function AdminOrderCard({ order: propOrder, conversation, adminId
       </div>
 
       {/* ── MODALS CONTAINER ── */}
-      {openDetail && (
-        <OrderFullDetailModal open={openDetail} onClose={() => setOpenDetail(false)} order={order} />
-      )}
+      <OrderFullDetailModal open={openDetail} onClose={() => setOpenDetail(false)} order={order} />
 
       {openChat && (
         <ChatModal open={openChat} onClose={() => setOpenChat(false)} order={order} currentUserId={adminId} senderType="admin" />

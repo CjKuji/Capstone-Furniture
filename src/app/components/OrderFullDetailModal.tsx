@@ -1,14 +1,171 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, memo, useState, useCallback, Suspense } from "react";
 import { createPortal } from "react-dom";
 import type { Order, OrderItem } from "@/types/order";
 import type { Conversation } from "@/hooks/useConversationList";
+import { Maximize2 } from "lucide-react";
 
 import BasicInfoSection from "@/app/components/sections/orders/BasicInfoSection";
 import AssetsSection from "@/app/components/sections/orders/AssetsSection";
 import VariantsSection from "@/app/components/sections/orders/VariantsSection";
 import Furniture3DViewer from "@/app/components/Furniture3DViewer";
+import ImageLightbox from "@/app/components/ImageLightbox";
+
+/* =========================================================
+    ITEM COMPONENT
+========================================================= */
+const OrderItemViewer = memo(
+  function OrderItemViewer({
+    item,
+    index,
+    onImageClick,
+  }: {
+    item: OrderItem;
+    index: number;
+    onImageClick: (images: { url: string; id?: string }[], itemName: string) => void;
+  }) {
+    const snapshot = item.furniture_snapshot;
+    const variant = item.variant_snapshot;
+    const modelUrl = item.model_snapshot_url;
+
+    // Memoize dimensions to prevent infinite re-renders with Suspense
+    const dimensions = useMemo(
+      () => ({
+        width_cm: snapshot?.width_cm,
+        depth_cm: snapshot?.depth_cm,
+        height_cm: snapshot?.height_cm,
+      }),
+      [snapshot?.width_cm, snapshot?.depth_cm, snapshot?.height_cm]
+    );
+
+    const itemImages = useMemo(() => {
+      if (!snapshot?.images || !Array.isArray(snapshot.images)) return [];
+      const images: { url: string; id?: string }[] = [];
+      for (const img of snapshot.images) {
+        if (typeof img === 'string') {
+          if (img) images.push({ url: img, id: undefined });
+        } else if (typeof img === 'object' && img !== null) {
+          const imgObj = img as Record<string, unknown>;
+          const url = typeof imgObj.image_url === 'string' ? imgObj.image_url : typeof imgObj.url === 'string' ? imgObj.url : '';
+          if (url) {
+            images.push({
+              url,
+              id: typeof imgObj.id === 'string' ? imgObj.id : undefined,
+            });
+          }
+        }
+      }
+      return images;
+    }, [snapshot]);
+
+    if (!snapshot) {
+      return (
+        <div
+          key={item.id}
+          className="rounded-xl p-8 text-xs text-center border border-dashed border-white/[0.06] bg-white/[0.01] text-white/25"
+        >
+          Missing historical snapshot layout available for Item {index + 1}
+        </div>
+      );
+    }
+
+    return (
+      <div
+        key={item.id}
+        className="rounded-2xl overflow-hidden bg-[#0D0907]/60 border border-white/[0.04] shadow-inner"
+      >
+        <div
+          className="flex items-center justify-between px-5 sm:px-6 py-3.5 bg-white/[0.02]"
+          style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
+        >
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-1 h-4 rounded-full shrink-0" style={{ background: "#D4A97A" }} />
+            <h3 className="text-xs sm:text-sm font-semibold text-white truncate tracking-wide">
+              {snapshot.name ?? "Unnamed Design"}
+              <span className="text-white/20 font-normal mx-2 text-xs">×</span>
+              <span className="text-sm font-bold text-[#D4A97A]">{item.quantity}</span>
+            </h3>
+          </div>
+          <span className="text-[9px] font-bold uppercase tracking-[0.2em] px-3 py-1 rounded-full shrink-0 ml-2 border bg-[#D4A97A]/5 text-[#D4A97A] border-[#D4A97A]/20">
+            Item {index + 1}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 p-5 sm:p-6 items-start">
+          <div className="lg:col-span-5 w-full min-w-0">
+            {modelUrl ? (
+              <div className="relative w-full rounded-xl overflow-hidden bg-[#050302] aspect-square sm:aspect-video lg:aspect-square border border-white/[0.04] shadow-2xl">
+                <Suspense fallback={
+                  <div className="flex items-center justify-center w-full h-full min-h-[200px] bg-[#050302]">
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="w-5 h-5 border-2 border-[#D4A97A] border-t-transparent rounded-full animate-spin" />
+                      <span className="text-white/40 text-[10px] font-medium uppercase tracking-widest">Loading 3D Model</span>
+                    </div>
+                  </div>
+                }>
+                  <Furniture3DViewer
+                    key={modelUrl}
+                    modelUrl={modelUrl}
+                    selectedVariantTextureUrl={variant?.texture_url}
+                    dimensions={dimensions}
+                  />
+                </Suspense>
+              </div>
+            ) : itemImages.length > 0 ? (
+              <div
+                className="relative w-full rounded-xl overflow-hidden bg-[#050302] aspect-square sm:aspect-video lg:aspect-square border border-white/[0.04] shadow-2xl cursor-zoom-in group"
+                onClick={() => onImageClick(itemImages, snapshot.name ?? `Item ${index + 1}`)}
+              >
+                <img
+                  src={itemImages[0].url}
+                  alt={snapshot.name ?? "Item image"}
+                  className="w-full h-full object-contain p-4 transition-transform duration-300 group-hover:scale-[1.02]"
+                />
+                <div className="absolute bottom-3 right-3 bg-black/60 backdrop-blur-sm px-2.5 py-1 rounded-lg border border-white/10 text-white/70 text-[10px] flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Maximize2 className="w-3 h-3" />
+                  {itemImages.length > 1 ? `${itemImages.length} images` : 'View full size'}
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-xl flex items-center justify-center aspect-square sm:aspect-video lg:aspect-square w-full bg-[#050302] border border-white/[0.04]">
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/20">
+                  No 3D Space Available
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="lg:col-span-7 flex flex-col gap-6 w-full min-w-0">
+            <div className="w-full bg-white/[0.01] p-4 rounded-xl border border-white/[0.02]">
+              <BasicInfoSection items={[item]} />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 w-full">
+              <div className="w-full flex flex-col bg-white/[0.01] p-4 rounded-xl border border-white/[0.02]">
+                <AssetsSection 
+                  items={[item]} 
+                  onImageClick={(imgs, idx) => onImageClick(imgs, snapshot.name ?? `Item ${index + 1}`)}
+                />
+              </div>
+              <div className="w-full flex flex-col bg-white/[0.01] p-4 rounded-xl border border-white/[0.02]">
+                <VariantsSection items={[item]} />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  },
+  // Custom comparison: only skip re-render if item.id and index are the same
+  // This prevents unnecessary re-mounts when parent updates from realtime subscriptions
+  (prevProps, nextProps) => {
+    return (
+      prevProps.item.id === nextProps.item.id &&
+      prevProps.index === nextProps.index
+    );
+  }
+);
 
 /* =========================================================
     TYPES
@@ -21,40 +178,43 @@ type Props = {
   conversation?: Conversation;
 };
 
+type SnapshotLike = {
+  id?: string;
+  name?: string;
+  description?: string;
+  category?: string;
+  base_price?: number | null;
+  model_url?: string | null;
+  model_snapshot_url?: string | null;
+  width_cm?: number | null;
+  depth_cm?: number | null;
+  height_cm?: number | null;
+  dimensions?: {
+    width_cm?: number | null;
+    depth_cm?: number | null;
+    height_cm?: number | null;
+  } | null;
+  images?: unknown;
+};
+
 /* =========================================================
     COMPONENT
 ========================================================= */
-export default function OrderFullDetailModal({
+const OrderFullDetailModalInner = ({
   order,
   open,
   onClose,
   onViewFull,
-}: Props) {
-  const [isReadyFor3D, setIsReadyFor3D] = useState(false);
-  
-  // Store the previous 'open' prop to track state transitions during render
-  const [prevOpen, setPrevOpen] = useState(open);
+}: Props) => {
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxImages, setLightboxImages] = useState<{ url: string; id?: string }[]>([]);
+  const [lightboxTitle, setLightboxTitle] = useState("");
 
-  /* ── RENDER-PHASE STATE SYNCHRONIZATION ── */
-  // Official React pattern for adjusting state based on props without Effects
-  if (open !== prevOpen) {
-    setPrevOpen(open);
-    if (!open) {
-      setIsReadyFor3D(false); // Safe: React intercepts this and optimizes the frame transition
-    }
-  }
-
-  /* ── 3D ASYNC TIMEOUT EFFECT ── */
-  useEffect(() => {
-    if (!open) return;
-
-    // Yield thread prioritization to CSS layout engine animations safely
-    const timer = setTimeout(() => {
-      setIsReadyFor3D(true);
-    }, 500);
-
-    return () => clearTimeout(timer);
-  }, [open]);
+  const handleImageClick = useCallback((images: { url: string; id?: string }[], itemName: string) => {
+    setLightboxImages(images);
+    setLightboxTitle(itemName);
+    setLightboxOpen(true);
+  }, []);
 
   /* ── MEMOIZED DATA NORMALIZATION ── */
   const items: OrderItem[] = useMemo(() => {
@@ -63,10 +223,11 @@ export default function OrderFullDetailModal({
 
     return orderItems.map((item) => {
       const snapshot = item.furniture_snapshot;
-      const rawDimensions = (snapshot as any)?.dimensions;
+      const snapshotData = snapshot as SnapshotLike | undefined;
+      const rawDimensions = snapshotData?.dimensions;
 
       // Ensure historical row URLs and snapshot nested strings are perfectly cleaned 
-      const rawUrl = item.model_snapshot_url || (snapshot as any)?.model_url || (snapshot as any)?.model_snapshot_url;
+      const rawUrl = item.model_snapshot_url || snapshotData?.model_url || snapshotData?.model_snapshot_url;
       const sanitizedModelUrl = typeof rawUrl === "string" ? rawUrl.trim() : undefined;
 
       return {
@@ -74,16 +235,16 @@ export default function OrderFullDetailModal({
         model_snapshot_url: sanitizedModelUrl,
         furniture_snapshot: snapshot
           ? {
-              id: snapshot.id,
-              name: snapshot.name ?? undefined,
-              description: snapshot.description ?? undefined,
-              category: snapshot.category ?? undefined,
-              base_price: snapshot.base_price ?? undefined,
+              id: snapshotData?.id ?? item.furniture_id,
+              name: snapshotData?.name ?? undefined,
+              description: snapshotData?.description ?? undefined,
+              category: snapshotData?.category ?? undefined,
+              base_price: snapshotData?.base_price ?? undefined,
               model_url: sanitizedModelUrl,
-              width_cm: rawDimensions?.width_cm ?? (snapshot as any)?.width_cm ?? undefined,
-              depth_cm: rawDimensions?.depth_cm ?? (snapshot as any)?.depth_cm ?? undefined,
-              height_cm: rawDimensions?.height_cm ?? (snapshot as any)?.height_cm ?? undefined,
-              images: snapshot.images ?? undefined,
+              width_cm: rawDimensions?.width_cm ?? snapshotData?.width_cm ?? undefined,
+              depth_cm: rawDimensions?.depth_cm ?? snapshotData?.depth_cm ?? undefined,
+              height_cm: rawDimensions?.height_cm ?? snapshotData?.height_cm ?? undefined,
+              images: snapshotData?.images ?? undefined,
             }
           : undefined,
         variant_snapshot: item.variant_snapshot
@@ -95,7 +256,7 @@ export default function OrderFullDetailModal({
               price_adjustment: item.variant_snapshot.price_adjustment ?? undefined,
             }
           : undefined,
-      };
+      } as OrderItem;
     });
   }, [order?.order_items]);
 
@@ -109,48 +270,22 @@ export default function OrderFullDetailModal({
     [items]
   );
 
-  // Early return executed contextually inside the pipeline to maintain persistent reference health in the DOM tree
-  if (!open) return null;
-
-  if (!order || !order.id) {
-    return createPortal(
-      <div
-        className="fixed inset-0 flex items-center justify-center p-4 backdrop-blur-md bg-black/80"
-        style={{ zIndex: 99999 }}
-      >
-        <div className="w-full max-w-md bg-[#0A0705] border border-white/[0.06] rounded-2xl p-8 text-center shadow-2xl animate-pulse">
-          <p className="text-[10px] font-black uppercase tracking-[0.25em] text-[#D4A97A]">
-            Initializing Order Manifest...
-          </p>
-        </div>
-      </div>,
-      document.body
-    );
-  }
+  if (!order?.id) return null;
 
   return createPortal(
     <div
-      className="fixed inset-0 flex items-center justify-center p-0 sm:p-6 backdrop-blur-md overflow-hidden"
+      className="fixed inset-0 flex items-center justify-center p-0 sm:p-6 overflow-hidden"
       style={{
         zIndex: 99999,
-        backgroundColor: "rgba(6, 4, 3, 0.85)",
+        backgroundColor: "transparent",
+        opacity: open ? 1 : 0,
+        pointerEvents: open ? "auto" : "none",
+        transition: "opacity 0.2s ease-in-out",
       }}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
+      onClick={onClose}
     >
-      {/* Only the panel gets the entry animation */}
       <div
-        className={`
-          relative w-full flex flex-col
-          rounded-none sm:rounded-2xl
-          h-screen sm:h-[calc(100vh-48px)]
-          max-w-full sm:max-w-[95%] md:max-w-[92%] lg:max-w-[90%] xl:max-w-[85%] 2xl:max-w-[1600px]
-          shadow-[0_24px_60px_rgba(0,0,0,0.8)] overflow-hidden
-          border-0 sm:border border-white/[0.06] bg-[#0A0705]
-          transition-all duration-500
-          translate-y-0 scale-100 opacity-100
-        `}
+        className={`relative w-full flex flex-col rounded-none sm:rounded-2xl h-screen sm:h-[calc(100vh-48px)] max-w-full sm:max-w-[95%] md:max-w-[92%] lg:max-w-[90%] xl:max-w-[85%] 2xl:max-w-[1600px] shadow-[0_24px_60px_rgba(0,0,0,0.8)] overflow-hidden border-0 sm:border border-white/[0.06] bg-[#0A0705]`}
         style={{ transitionTimingFunction: "cubic-bezier(0.16, 1, 0.3, 1)" }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -201,93 +336,14 @@ export default function OrderFullDetailModal({
 
         {/* SCROLLABLE BODY */}
         <div className="overflow-y-auto flex-1 p-5 sm:p-8 space-y-8 focus:outline-none custom-scrollbar bg-gradient-to-b from-[#0A0705] to-[#070504]">
-          {items.map((item, index) => {
-            const snapshot = item.furniture_snapshot;
-            const variant = item.variant_snapshot;
-            const modelUrl = item.model_snapshot_url;
-
-            if (!snapshot) {
-              return (
-                <div
-                  key={item.id}
-                  className="rounded-xl p-8 text-xs text-center border border-dashed border-white/[0.06] bg-white/[0.01] text-white/25"
-                >
-                  Missing historical snapshot layout available for Item {index + 1}
-                </div>
-              );
-            }
-
-            return (
-              <div
-                key={item.id}
-                className="rounded-2xl overflow-hidden bg-[#0D0907]/60 border border-white/[0.04] shadow-inner"
-              >
-                <div
-                  className="flex items-center justify-between px-5 sm:px-6 py-3.5 bg-white/[0.02]"
-                  style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-1 h-4 rounded-full shrink-0" style={{ background: "#D4A97A" }} />
-                    <h3 className="text-xs sm:text-sm font-semibold text-white truncate tracking-wide">
-                      {snapshot.name ?? "Unnamed Design"}
-                      <span className="text-white/20 font-normal mx-2 text-xs">×</span>
-                      <span className="text-sm font-bold text-[#D4A97A]">{item.quantity}</span>
-                    </h3>
-                  </div>
-                  <span className="text-[9px] font-bold uppercase tracking-[0.2em] px-3 py-1 rounded-full shrink-0 ml-2 border bg-[#D4A97A]/5 text-[#D4A97A] border-[#D4A97A]/20">
-                    Item {index + 1}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 p-5 sm:p-6 items-start">
-                  <div className="lg:col-span-5 w-full min-w-0">
-                    {modelUrl ? (
-                      <div className="relative w-full rounded-xl overflow-hidden bg-[#050302] aspect-square sm:aspect-video lg:aspect-square border border-white/[0.04] shadow-2xl">
-                        {isReadyFor3D ? (
-                          <Furniture3DViewer
-                            modelUrl={modelUrl}
-                            selectedVariantTextureUrl={variant?.texture_url}
-                            dimensions={{
-                              width_cm: snapshot.width_cm,
-                              depth_cm: snapshot.depth_cm,
-                              height_cm: snapshot.height_cm,
-                            }}
-                          />
-                        ) : (
-                          <div className="absolute inset-0 flex items-center justify-center bg-[#050302]">
-                            <div className="text-[10px] text-[#D4A97A] font-bold uppercase tracking-[0.25em] animate-pulse">
-                              Optimizing Viewport...
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="rounded-xl flex items-center justify-center aspect-square sm:aspect-video lg:aspect-square w-full bg-[#050302] border border-white/[0.04]">
-                        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/20">
-                          No 3D Space Available
-                        </p>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="lg:col-span-7 flex flex-col gap-6 w-full min-w-0">
-                    <div className="w-full bg-white/[0.01] p-4 rounded-xl border border-white/[0.02]">
-                      <BasicInfoSection items={[item]} />
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5 w-full">
-                      <div className="w-full flex flex-col bg-white/[0.01] p-4 rounded-xl border border-white/[0.02]">
-                        <AssetsSection items={[item]} />
-                      </div>
-                      <div className="w-full flex flex-col bg-white/[0.01] p-4 rounded-xl border border-white/[0.02]">
-                        <VariantsSection items={[item]} />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+          {items.map((item, index) => (
+            <OrderItemViewer
+              key={item.id}
+              item={item}
+              index={index}
+              onImageClick={handleImageClick}
+            />
+          ))}
 
           {/* FULFILLMENT SUMMARY */}
           <div className="rounded-2xl p-5 sm:p-6 space-y-5 bg-[#0E0A07]/40 border border-white/[0.04]">
@@ -342,7 +398,50 @@ export default function OrderFullDetailModal({
           </button>
         </div>
       </div>
+
+      <ImageLightbox
+        images={lightboxImages}
+        isOpen={lightboxOpen}
+        onClose={() => setLightboxOpen(false)}
+        title={lightboxTitle}
+      />
     </div>,
     document.body
   );
-}
+};
+
+// Memoize the modal to prevent unnecessary re-renders from parent realtime updates
+// Only re-render when order data actually used by the modal changes
+export default memo(OrderFullDetailModalInner, (prevProps, nextProps) => {
+  const prevOrder = prevProps.order;
+  const nextOrder = nextProps.order;
+  
+  // If order ID changes, must re-render
+  if (prevOrder.id !== nextOrder.id) return false;
+  
+  // If open state changes, must re-render
+  if (prevProps.open !== nextProps.open) return false;
+  
+  // If onClose callback changes, must re-render
+  if (prevProps.onClose !== nextProps.onClose) return false;
+  
+  // If onViewFull callback changes, must re-render
+  if (prevProps.onViewFull !== nextProps.onViewFull) return false;
+  
+  // Check only the fields that the modal actually renders
+  // Use optional chaining and nullish coalescing for safe comparison
+  if ((prevOrder.order_reference_code ?? null) !== (nextOrder.order_reference_code ?? null)) return false;
+  if ((prevOrder.created_at ?? null) !== (nextOrder.created_at ?? null)) return false;
+  if ((prevOrder.customer_name ?? null) !== (nextOrder.customer_name ?? null)) return false;
+  if ((prevOrder.delivery_method ?? null) !== (nextOrder.delivery_method ?? null)) return false;
+  if ((prevOrder.phone_number ?? null) !== (nextOrder.phone_number ?? null)) return false;
+  if ((prevOrder.pickup_location ?? null) !== (nextOrder.pickup_location ?? null)) return false;
+  if ((prevOrder.delivery_address ?? null) !== (nextOrder.delivery_address ?? null)) return false;
+  if (prevOrder.order_items !== nextOrder.order_items) return false;
+  if ((prevOrder.quote_total_price ?? null) !== (nextOrder.quote_total_price ?? null)) return false;
+  if ((prevOrder.charge_status ?? null) !== (nextOrder.charge_status ?? null)) return false;
+  if ((prevOrder.final_total_price ?? null) !== (nextOrder.final_total_price ?? null)) return false;
+  
+  // If we get here, the modal doesn't need to re-render
+  return true;
+});
