@@ -62,6 +62,7 @@ export type InquiryData = {
   pickup_location: string | null;
   status: CustomInquiryStatus;
   charge_status: string;
+  inquiry_reference_code: string | null;
   inquiry_items: InquiryItem[];
   inquiry_charges: InquiryCharge[];
   conversations: InquiryConversation[]; 

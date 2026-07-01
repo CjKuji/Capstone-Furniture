@@ -3,24 +3,23 @@
 import { 
     TrendingUp, 
     ShoppingBag, 
-    Clock, 
+    MessageSquare, 
     Package, 
     Download, 
     Printer, 
-    MessageSquare, 
     AlertTriangle,
     type LucideIcon 
 } from "lucide-react";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getAnalytics } from "@/services/analyticsService";
-import type { AnalyticsData } from "@/services/analyticsService";
+import type { AnalyticsData, StatusCount } from "@/services/analyticsService";
 import {
-    exportAnalyticsCSV,
-    getCompletedInquiryCount,
     getCompletedOrderCount,
+    getCompletedInquiryCount,
     triggerReportPDFPrint,
 } from "@/utils/reportExport";
+import { exportAnalyticsCSV } from "@/utils/csvExport";
 
 /* =========================================================
    HELPERS
@@ -34,6 +33,24 @@ function formatPercent(value: number) {
     return `${Math.round(value)}%`;
 }
 
+function deltaPercent(current: number, previous: number): string | null {
+    if (previous <= 0) return null;
+    const delta = ((current - previous) / previous) * 100;
+    if (Math.abs(delta) < 0.5) return "flat";
+    return delta > 0 ? `+${Math.round(delta)}%` : `${Math.round(delta)}%`;
+}
+
+function TrendIndicator({ current, previous }: { current: number; previous: number }) {
+    const delta = deltaPercent(current, previous);
+    if (!delta || delta === "flat") return null;
+    const isUp = delta.startsWith("+");
+    return (
+        <span className={`text-[10px] font-bold ml-1.5 ${isUp ? "text-emerald-400" : "text-red-400"}`}>
+            {isUp ? "↑" : "↓"} {delta}
+        </span>
+    );
+}
+
 /* =========================================================
    SUB-COMPONENTS
    ========================================================= */
@@ -44,12 +61,14 @@ function KpiCard({
     sub,
     icon: Icon,
     accent = false,
+    trend,
 }: {
     label: string;
     value: string;
     sub?: string;
     icon: LucideIcon;
     accent?: boolean;
+    trend?: React.ReactNode;
 }) {
     return (
         <div className={`rounded-2xl border p-4 sm:p-6 flex flex-col gap-4 transition-all break-inside-avoid print:border-gray-300 print:shadow-none ${
@@ -64,7 +83,10 @@ function KpiCard({
                 </div>
             </div>
             <div>
-                <p className={`text-2xl font-bold tracking-tight ${accent ? "text-[#D4A97A] print:text-black" : "text-white print:text-black"}`}>{value}</p>
+                <p className={`text-2xl font-bold tracking-tight flex items-center ${accent ? "text-[#D4A97A] print:text-black" : "text-white print:text-black"}`}>
+                    {value}
+                    {trend}
+                </p>
                 {sub && <p className="text-sm text-white/55 print:text-gray-500 mt-1.5 font-medium leading-relaxed">{sub}</p>}
             </div>
         </div>
@@ -122,8 +144,108 @@ function BarChart({ data }: { data: Array<{ label: string; value: number } | { m
     );
 }
 
+function StatusDistribution({ data, title }: { data: StatusCount[]; title: string }) {
+    const total = data.reduce((s, d) => s + d.count, 0);
+    if (total === 0) return null;
+
+    return (
+        <div className="bg-[#12100d]/80 border border-white/10 rounded-3xl p-6 print:border-gray-300 print:bg-white">
+            <h3 className="text-sm font-bold text-white tracking-[0.24em] uppercase mb-4 print:text-black">{title}</h3>
+            <div className="space-y-3">
+                {data.map((item) => {
+                    const pct = (item.count / total) * 100;
+                    return (
+                        <div key={item.status} className="flex items-center gap-3">
+                            <span className="w-28 text-xs text-white/70 print:text-gray-700 capitalize truncate">{item.status.replace(/_/g, " ")}</span>
+                            <div className="flex-1 bg-white/5 print:bg-gray-200 rounded-full h-2.5 overflow-hidden">
+                                <div
+                                    className="bg-[#D4A97A]/80 print:bg-gray-400 h-2.5 rounded-full transition-all"
+                                    style={{ width: `${pct}%` }}
+                                />
+                            </div>
+                            <span className="text-xs font-mono text-white/50 print:text-gray-600 w-16 text-right">{item.count}</span>
+                            <span className="text-[10px] text-white/30 print:text-gray-500 w-10 text-right">{Math.round(pct)}%</span>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
+
 /* =========================================================
-   MAIN VIEW EXECUTIVE DASHBOARD
+   PRINT STYLES
+   ========================================================= */
+
+function PrintStyles() {
+    return (
+        <style jsx global>{`
+            @media print {
+                aside, nav, header, footer,
+                .sidebar, #sidebar, .admin-sidebar,
+                .navbar, .print-hidden, .print\\:hidden,
+                #crisp-chatbox, .crisp-client,
+                #intercom-container, .intercom-app,
+                iframe[id*="chat"], div[class*="chat"],
+                div[id*="chat"], #tw-chatbot,
+                .global-chatbot-wrapper { 
+                    display: none !important; 
+                    width: 0 !important; height: 0 !important; 
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    overflow: hidden !important;
+                }
+
+                @page { size: A4 portrait; margin: 12mm; }
+
+                body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+                body, html, main, #root, .__next,
+                div[class*="layout"], div[class*="wrapper"],
+                div[class*="container"] { 
+                    background: #ffffff !important; 
+                    color: #000000 !important; 
+                    width: 100% !important; max-width: 100% !important;
+                    margin: 0 !important; padding: 0 !important; 
+                    position: static !important;
+                    overflow: visible !important;
+                    display: block !important;
+                    box-shadow: none !important;
+                }
+
+                .print\\:text-black { color: #000000 !important; }
+                .print\\:text-gray-900 { color: #111827 !important; }
+                .print\\:text-gray-700 { color: #374151 !important; }
+                .print\\:text-gray-500 { color: #6B7280 !important; }
+                .print\\:bg-white { background-color: #ffffff !important; }
+                .print\\:bg-gray-50 { background-color: #F9FAFB !important; }
+                .print\\:border-gray-200 { border-color: #E5E7EB !important; }
+                .print\\:border-gray-300 { border-color: #D1D5DB !important; }
+                .print\\:border-gray-400 { border-color: #9CA3AF !important; }
+                .break-inside-avoid { page-break-inside: avoid !important; break-inside: avoid !important; }
+                .print-card { break-inside: avoid !important; page-break-inside: avoid !important; }
+                .print-section { break-inside: avoid !important; page-break-inside: avoid !important; }
+                .print-table thead { display: table-header-group !important; }
+                .print-table tr { break-inside: avoid !important; page-break-inside: avoid !important; }
+                .print-table th, .print-table td { page-break-inside: avoid !important; }
+                .print-shell { width: 100% !important; max-width: 100% !important; }
+                .print-compact { font-size: 11px !important; line-height: 1.4 !important; }
+            }
+
+            @media print {
+                .print-only { display: block !important; }
+                .print\\:rounded-none { border-radius: 0 !important; }
+                .print\\:px-0 { padding-left: 0 !important; padding-right: 0 !important; }
+                .print\\:shadow-none { box-shadow: none !important; }
+                .screen-only { display: none !important; }
+                .print-only-report { display: block !important; }
+            }
+        `}</style>
+    );
+}
+
+/* =========================================================
+   MAIN PAGE
    ========================================================= */
 
 export default function AdminReportsPage() {
@@ -133,19 +255,20 @@ export default function AdminReportsPage() {
         refetchInterval: 300000,
         refetchOnWindowFocus: false,
     });
-    const [selectedMonth, setSelectedMonth] = useState("");
+    // All hooks must be at the top level (before any early returns)
+    const [selectedYear, setSelectedYear] = useState("");
 
     if (isLoading) {
         return (
             <main className="min-h-screen bg-[#0F0A06] p-4 sm:p-6 lg:p-8 flex flex-col gap-6">
                 <div className="h-14 w-full sm:w-1/3 rounded-xl bg-white/5 animate-pulse" />
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
-                    {Array.from({ length: 5 }).map((_, i) => (
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-4">
+                    {Array.from({ length: 6 }).map((_, i) => (
                         <div key={i} className="h-32 rounded-xl bg-white/5 border border-white/10 animate-pulse" />
                     ))}
                 </div>
-                <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-                    <div className="xl:col-span-2 h-64 rounded-xl bg-white/5 animate-pulse" />
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                    <div className="h-64 rounded-xl bg-white/5 animate-pulse" />
                     <div className="h-64 rounded-xl bg-white/5 animate-pulse" />
                 </div>
             </main>
@@ -165,117 +288,44 @@ export default function AdminReportsPage() {
         );
     }
 
+    // ── Derived Metrics ──
     const completedOrders = getCompletedOrderCount(data.ordersByStatus);
     const completedInquiries = getCompletedInquiryCount(data.inquiriesByStatus);
     const processingOrders = data.totalOrders - completedOrders;
     const processingInquiries = data.totalInquiries - completedInquiries;
-    const backlogShare = data.totalOrders > 0 ? (data.pendingOrders / data.totalOrders) * 100 : 0;
     const inquiryConversionPercent = data.totalInquiries > 0 ? (data.paidInquiries / data.totalInquiries) * 100 : 0;
-    const selectedMonthLabel = selectedMonth || data.revenueByMonth[data.revenueByMonth.length - 1]?.month || "No month";
-    const selectedMonthRevenue = data.revenueByMonth.find((item) => item.month === selectedMonth)?.revenue ?? data.revenueByMonth[data.revenueByMonth.length - 1]?.revenue ?? 0;
+
+    // Average Order Value
+    const avgOrderValue = data.paidOrders > 0 ? data.totalRevenue / data.paidOrders : 0;
+
+    // Average Inquiry Value — use paidInquiries as proxy for meaningful inquiries (those with actual value)
+    const avgInquiryValue = data.paidInquiries > 0 ? data.inquiryTotalValue / data.paidInquiries : 0;
+
+    // Period comparison (last 2 months of revenueByMonth)
+    const sortedMonths = [...data.revenueByMonth].sort(
+        (a, b) => new Date(`01 ${a.month}`).getTime() - new Date(`01 ${b.month}`).getTime()
+    );
+    const latestMonthRev = sortedMonths[sortedMonths.length - 1]?.revenue ?? 0;
+    const prevMonthRev = sortedMonths[sortedMonths.length - 2]?.revenue ?? 0;
+
+    // Year filter for revenue overview
+    const defaultYear = data.availableYears[data.availableYears.length - 1] || "";
+    const effectiveYear = selectedYear || defaultYear;
+    const yearFilteredMonths = data.revenueByMonth.filter((item) => {
+        const parts = item.month.trim().split(" ");
+        const yearToken = parts[parts.length - 1];
+        const year = yearToken.length === 2 ? `20${yearToken}` : yearToken.length === 4 ? yearToken : "";
+        return year === effectiveYear;
+    });
+    const selectedYearTotalRevenue = yearFilteredMonths.reduce((sum, m) => sum + m.revenue, 0);
+    const latestMonthRevInYear = yearFilteredMonths[yearFilteredMonths.length - 1]?.revenue ?? 0;
 
     return (
         <main className="min-h-screen bg-[#0d0a08] text-white p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-8 font-sans antialiased print:bg-white print:text-black print:p-0 print:space-y-6 print:w-full print:max-w-none print:m-0 print:overflow-visible print-shell screen-only">
             
-            {/* INLINE CSS OVERRIDES FOR GLOBAL LAYOUT STRIPPING & CHATBOT EXTRACTION */}
-            <style jsx global>{`
-                @media print {
-                    aside, 
-                    nav, 
-                    header, 
-                    footer,
-                    .sidebar, 
-                    #sidebar, 
-                    .admin-sidebar,
-                    .navbar, 
-                    .print-hidden,
-                    .print\\:hidden,
-                    #crisp-chatbox,
-                    .crisp-client,
-                    #intercom-container,
-                    .intercom-app,
-                    iframe[id*="chat"],
-                    div[class*="chat"],
-                    div[id*="chat"],
-                    #tw-chatbot,
-                    .global-chatbot-wrapper { 
-                        display: none !important; 
-                        width: 0 !important; 
-                        height: 0 !important; 
-                        visibility: hidden !important;
-                        opacity: 0 !important;
-                        overflow: hidden !important;
-                    }
+            <PrintStyles />
 
-                    @page {
-                        size: A4 portrait;
-                        margin: 12mm;
-                    }
-
-                    body {
-                        -webkit-print-color-adjust: exact;
-                        print-color-adjust: exact;
-                    }
-
-                    body, 
-                    html, 
-                    main, 
-                    #root, 
-                    .__next, 
-                    div[class*="layout"], 
-                    div[class*="wrapper"],
-                    div[class*="container"] { 
-                        background: #ffffff !important; 
-                        color: #000000 !important; 
-                        width: 100% !important; 
-                        max-width: 100% !important;
-                        margin: 0 !important; 
-                        padding: 0 !important; 
-                        position: static !important;
-                        overflow: visible !important;
-                        display: block !important;
-                        box-shadow: none !important;
-                    }
-
-                    .print\\:text-black { color: #000000 !important; }
-                    .print\\:text-gray-900 { color: #111827 !important; }
-                    .print\\:text-gray-700 { color: #374151 !important; }
-                    .print\\:text-gray-500 { color: #6B7280 !important; }
-                    .print\\:bg-white { background-color: #ffffff !important; }
-                    .print\\:bg-gray-50 { background-color: #F9FAFB !important; }
-                    .print\\:border-gray-200 { border-color: #E5E7EB !important; }
-                    .print\\:border-gray-300 { border-color: #D1D5DB !important; }
-                    .print\\:border-gray-400 { border-color: #9CA3AF !important; }
-                    .break-inside-avoid { page-break-inside: avoid !important; break-inside: avoid !important; }
-                    .print-card { break-inside: avoid !important; page-break-inside: avoid !important; }
-                    .print-section { break-inside: avoid !important; page-break-inside: avoid !important; }
-                    .print-table thead { display: table-header-group !important; }
-                    .print-table tr { break-inside: avoid !important; page-break-inside: avoid !important; }
-                    .print-table th, .print-table td { page-break-inside: avoid !important; }
-                    .print-header { display: none; }
-                    .print-hidden { display: none !important; }
-                    .print-only { display: none; }
-                    .print-shell { width: 100% !important; max-width: 100% !important; }
-                    .print-compact { font-size: 11px !important; line-height: 1.4 !important; }
-                    .print-report-card { background: #ffffff !important; border: 1px solid #d1d5db !important; border-radius: 8px !important; box-shadow: none !important; }
-                    .print-report-table th, .print-report-table td { padding: 6px 0 !important; }
-                    .print-report-table tr { page-break-inside: avoid !important; break-inside: avoid !important; }
-                    .print-report-section { break-inside: avoid !important; page-break-inside: avoid !important; margin-bottom: 12px !important; }
-                    .print-report-summary { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 8px !important; }
-                }
-
-                @media print {
-                    .print-only { display: block !important; }
-                    .print\\:rounded-none { border-radius: 0 !important; }
-                    .print\\:px-0 { padding-left: 0 !important; padding-right: 0 !important; }
-                    .print\\:py-0 { padding-top: 0 !important; padding-bottom: 0 !important; }
-                    .print\\:shadow-none { box-shadow: none !important; }
-                    .screen-only { display: none !important; }
-                    .print-only-report { display: block !important; }
-                }
-            `}</style>
-
-            {/* CORPORATE REPORT HEADER */}
+            {/* ─── REPORT HEADER ─── */}
             <div className="rounded-[28px] border border-white/10 bg-[#12100d]/80 px-5 py-5 sm:px-6 sm:py-6 flex flex-col md:flex-row md:items-end md:justify-between gap-4 print:border-gray-300 print:pb-8 print:bg-white print:rounded-none print:px-0 print-section">
                 <div className="max-w-2xl">
                     <div className="flex flex-wrap items-center gap-2 mb-2">
@@ -284,7 +334,7 @@ export default function AdminReportsPage() {
                     </div>
                     <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white print:text-black">Admin Reports</h1>
                     <p className="text-sm text-white/60 mt-1.5 print:text-gray-600 leading-relaxed">
-                        A straightforward view of paid business performance, backlog health, and inquiry conversion.
+                        A consolidated view of paid business performance, transaction statuses, and inquiry conversion.
                     </p>
                     <p className="text-3xl sm:text-4xl font-bold text-[#D4A97A] mt-3 print:text-black">
                         {formatPHP(data.totalRevenue)}
@@ -292,6 +342,7 @@ export default function AdminReportsPage() {
                     <p className="text-[11px] uppercase tracking-[0.2em] text-white/40 mt-1 print:text-gray-500">Total Revenue</p>
                 </div>
                 
+                {/* Export buttons */}
                 <div className="flex flex-wrap items-center gap-3 print:hidden shrink-0">
                     <button
                         onClick={() => triggerReportPDFPrint(data)}
@@ -310,13 +361,15 @@ export default function AdminReportsPage() {
                 </div>
             </div>
 
+            {/* ─── DATA INTEGRITY WARNING ─── */}
             {data.mismatches.length > 0 && (
                 <div className="rounded-2xl border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100 print:border-gray-300 print:bg-gray-50 print:text-gray-700">
-                    Some metrics are being calculated from available records while one or more analytics tables are temporarily unavailable.
+                    Some metrics are being calculated from available records while one or more analytics tables are temporarily unavailable. 
+                    ({data.mismatches.length} discrepancies detected)
                 </div>
             )}
 
-            {/* EXECUTIVE SUMMARY */}
+            {/* ─── EXECUTIVE SUMMARY ─── */}
             <div>
                 <h2 className="text-sm font-bold text-white/70 tracking-[0.24em] uppercase mb-4 print:text-gray-700">Executive Summary</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 print:grid-cols-4 print-section">
@@ -326,6 +379,7 @@ export default function AdminReportsPage() {
                         sub="Paid business from orders and inquiries"
                         icon={TrendingUp}
                         accent
+                        trend={<TrendIndicator current={latestMonthRev} previous={prevMonthRev} />}
                     />
                     <KpiCard
                         label="Total Orders"
@@ -348,7 +402,25 @@ export default function AdminReportsPage() {
                 </div>
             </div>
 
-            {/* ORDERS SECTION */}
+            {/* ─── AVERAGE VALUES ROW ─── */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 print:grid-cols-2 print-section">
+                <KpiCard
+                    label="Avg Order Value"
+                    value={formatPHP(Math.round(avgOrderValue))}
+                    sub={`Across ${data.paidOrders} paid orders`}
+                    icon={ShoppingBag}
+                    accent
+                />
+                <KpiCard
+                    label="Avg Inquiry Value"
+                    value={formatPHP(Math.round(avgInquiryValue))}
+                    sub={`Across ${data.paidInquiries} paid inquiries`}
+                    icon={MessageSquare}
+                    accent
+                />
+            </div>
+
+            {/* ─── ORDERS SECTION ─── */}
             <div>
                 <h2 className="text-sm font-bold text-white/70 tracking-[0.24em] uppercase mb-4 print:text-gray-700">Orders Report</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 print:grid-cols-4 print-section">
@@ -359,10 +431,11 @@ export default function AdminReportsPage() {
                         icon={ShoppingBag}
                     />
                     <KpiCard
-                        label="Processing"
-                        value={String(processingOrders)}
-                        sub={`${Math.round(backlogShare)}% of orders still in progress`}
-                        icon={Clock}
+                        label="Orders Revenue"
+                        value={formatPHP(Math.round(data.orderRevenue))}
+                        sub={`${data.totalRevenue > 0 ? Math.round((data.orderRevenue / data.totalRevenue) * 100) : 0}% of total revenue`}
+                        icon={TrendingUp}
+                        accent
                     />
                     <KpiCard
                         label="Fully Paid"
@@ -373,44 +446,48 @@ export default function AdminReportsPage() {
                     <KpiCard
                         label="Partially Paid"
                         value={String(data.partiallyPaidOrders)}
-                        sub="Orders with outstanding balance"
-                        icon={Clock}
+                        sub={`₱${data.ordersOutstandingValue.toLocaleString("en-PH")} outstanding`}
+                        icon={TrendingUp}
                     />
                 </div>
 
-                {/* Best Selling Products */}
-                <div className="mt-4 bg-[#12100d]/80 border border-white/10 rounded-3xl p-6 print:border-gray-300 print:bg-white">
-                    <div className="border-b border-white/10 pb-3 mb-4 flex items-center gap-2 print:border-gray-200">
-                        <Package size={15} className="text-[#D4A97A] print:text-gray-700" />
-                        <h2 className="text-sm font-bold text-white tracking-[0.24em] uppercase print:text-black">Best Sellers</h2>
-                    </div>
-                    <p className="text-sm text-white/60 mb-4 print:text-gray-600 leading-relaxed">Top products from completed orders that were paid.</p>
-                    {data.topProducts.length === 0 ? (
-                        <EmptyState
-                            title="No best sellers yet"
-                            description="Products will appear here once paid completed orders are recorded."
-                            hint="This section is based on completed paid sales"
-                        />
-                    ) : (
-                        <div className="space-y-3.5">
-                            {data.topProducts.map((p, i) => (
-                                <div key={p.name} className="flex items-center gap-3 text-xs">
-                                    <span className="font-mono font-bold text-white/20 w-4 text-right text-xs print:text-gray-400">{i + 1}</span>
-                                    <div className="flex-1 min-w-0">
-                                        <p className="text-white font-semibold truncate tracking-wide print:text-gray-900">{p.name}</p>
-                                        <p className="text-[10px] font-medium text-white/40 uppercase tracking-wider print:text-gray-500">{p.orders} sold</p>
-                                    </div>
-                                    <span className="font-mono font-bold text-[#D4A97A] print:text-black shrink-0 text-right">
-                                        {formatPHP(p.revenue)}
-                                    </span>
-                                </div>
-                            ))}
+                {/* Best Selling Products + Orders by Status */}
+                <div className="mt-4 grid grid-cols-1 xl:grid-cols-2 gap-4">
+                    <div className="bg-[#12100d]/80 border border-white/10 rounded-3xl p-6 print:border-gray-300 print:bg-white">
+                        <div className="border-b border-white/10 pb-3 mb-4 flex items-center gap-2 print:border-gray-200">
+                            <Package size={15} className="text-[#D4A97A] print:text-gray-700" />
+                            <h2 className="text-sm font-bold text-white tracking-[0.24em] uppercase print:text-black">Best Sellers</h2>
                         </div>
-                    )}
+                        <p className="text-sm text-white/60 mb-4 print:text-gray-600 leading-relaxed">Top products from completed orders that were paid.</p>
+                        {data.topProducts.length === 0 ? (
+                            <EmptyState
+                                title="No best sellers yet"
+                                description="Products will appear here once paid completed orders are recorded."
+                                hint="This section is based on completed paid sales"
+                            />
+                        ) : (
+                            <div className="space-y-3.5">
+                                {data.topProducts.map((p, i) => (
+                                    <div key={p.name} className="flex items-center gap-3 text-xs">
+                                        <span className="font-mono font-bold text-white/20 w-4 text-right text-xs print:text-gray-400">{i + 1}</span>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-white font-semibold truncate tracking-wide print:text-gray-900">{p.name}</p>
+                                            <p className="text-[10px] font-medium text-white/40 uppercase tracking-wider print:text-gray-500">{p.orders} sold</p>
+                                        </div>
+                                        <span className="font-mono font-bold text-[#D4A97A] print:text-black shrink-0 text-right">
+                                            {formatPHP(p.revenue)}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    <StatusDistribution data={data.ordersByStatus} title="Orders by Status" />
                 </div>
             </div>
 
-            {/* INQUIRIES SECTION */}
+            {/* ─── INQUIRIES SECTION ─── */}
             <div>
                 <h2 className="text-sm font-bold text-white/70 tracking-[0.24em] uppercase mb-4 print:text-gray-700">Inquiries Report</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 print:grid-cols-4 print-section">
@@ -421,10 +498,11 @@ export default function AdminReportsPage() {
                         icon={MessageSquare}
                     />
                     <KpiCard
-                        label="Paid Inquiries"
-                        value={String(data.paidInquiries)}
-                        sub={`Count of inquiries with payments (not revenue)`}
+                        label="Inquiries Revenue"
+                        value={formatPHP(Math.round(data.inquiryRevenue))}
+                        sub={`${data.totalRevenue > 0 ? Math.round((data.inquiryRevenue / data.totalRevenue) * 100) : 0}% of total revenue`}
                         icon={TrendingUp}
+                        accent
                     />
                     <KpiCard
                         label="Quoted Value"
@@ -440,94 +518,65 @@ export default function AdminReportsPage() {
                         icon={TrendingUp}
                     />
                 </div>
-            </div>
 
-            {/* REVENUE OVERVIEW + PAID ACTIVITY */}
-            <div className="grid grid-cols-1 lg:grid-cols-[1.8fr_1fr] gap-6 print:grid-cols-1 print-section">
-                <div className="bg-[#12100d]/80 border border-white/10 rounded-3xl p-6 print:border-gray-300 print:bg-white">
-                    <div className="border-b border-white/10 pb-3 mb-4 print:border-gray-200">
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                            <div>
-                                <h2 className="text-sm font-bold text-white tracking-[0.24em] uppercase print:text-black">Revenue Overview</h2>
-                                <p className="text-sm text-white/60 mt-1.5 print:text-gray-600 leading-relaxed">Monthly paid business trend from orders and inquiries. Use this to see whether revenue is growing.</p>
-                            </div>
-                            <label className="flex items-center gap-2 text-[10px] uppercase tracking-[0.24em] text-white/50 print:text-gray-600">
-                                <span>Month</span>
-                                <select
-                                    value={selectedMonth}
-                                    onChange={(event) => setSelectedMonth(event.target.value)}
-                                    className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-white outline-none print:border-gray-300 print:bg-white print:text-black"
-                                >
-                                    {data.revenueByMonth.map((item) => (
-                                        <option key={item.month} value={item.month} className="text-black">
-                                            {item.month}
-                                        </option>
-                                    ))}
-                                </select>
-                            </label>
-                        </div>
-                    </div>
-                    {data.revenueByMonth.length === 0 || data.totalRevenue === 0 ? (
-                        <EmptyState
-                            title="No revenue yet"
-                            description="Revenue will appear here once paid orders or inquiries are recorded."
-                            hint="This view updates from payment records"
-                        />
-                    ) : (
-                        <>
-                            <BarChart data={data.revenueByMonth} />
-                            <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                <div className="rounded-2xl bg-[#0f0d0b] border border-white/10 p-4 print:border-gray-200 print:bg-gray-50">
-                                    <p className="text-[10px] uppercase tracking-[0.24em] text-white/45 print:text-gray-600">Selected month</p>
-                                    <p className="mt-2 text-xl font-bold text-white print:text-black">{selectedMonthLabel}</p>
-                                </div>
-                                <div className="rounded-2xl bg-[#0f0d0b] border border-white/10 p-4 print:border-gray-200 print:bg-gray-50">
-                                    <p className="text-[10px] uppercase tracking-[0.24em] text-white/45 print:text-gray-600">Month revenue</p>
-                                    <p className="mt-2 text-xl font-bold text-white print:text-black">{formatPHP(Math.round(selectedMonthRevenue))}</p>
-                                </div>
-                                <div className="rounded-2xl bg-[#0f0d0b] border border-white/10 p-4 print:border-gray-200 print:bg-gray-50">
-                                    <p className="text-[10px] uppercase tracking-[0.24em] text-white/45 print:text-gray-600">Total Revenue</p>
-                                    <p className="mt-2 text-xl font-bold text-[#D4A97A] print:text-black">{formatPHP(data.totalRevenue)}</p>
-                                </div>
-                            </div>
-                        </>
-                    )}
-                </div>
-                <div className="bg-[#12100d]/80 border border-white/10 rounded-3xl p-6 print:border-gray-300 print:bg-white">
-                    <div className="border-b border-white/10 pb-3 mb-4 print:border-gray-200">
-                        <h2 className="text-sm font-bold text-white tracking-[0.24em] uppercase print:text-black">Paid Activity</h2>
-                        <p className="text-sm text-white/60 mt-1.5 print:text-gray-600 leading-relaxed">A short view of confirmed paid business activity from orders and inquiries.</p>
-                    </div>
-                    {data.totalRevenue === 0 && data.paidOrders === 0 ? (
-                        <EmptyState
-                            title="No paid activity yet"
-                            description="Once paid business is recorded, this section will show the revenue and confirmed activity."
-                            hint="This section is based on payment records"
-                        />
-                    ) : (
-                        <div className="grid grid-cols-1 gap-3">
-                            <div className="rounded-2xl bg-[#0f0d0b] border border-white/10 p-4 print:border-gray-200 print:bg-gray-50">
-                                <p className="text-[10px] uppercase tracking-[0.24em] text-white/45 print:text-gray-600">Paid revenue</p>
-                                <p className="mt-2 text-xl font-bold text-white print:text-black">{formatPHP(data.totalRevenue)}</p>
-                            </div>
-                            <div className="rounded-2xl bg-[#0f0d0b] border border-white/10 p-4 print:border-gray-200 print:bg-gray-50">
-                                <p className="text-[10px] uppercase tracking-[0.24em] text-white/45 print:text-gray-600">Paid orders</p>
-                                <p className="mt-2 text-xl font-bold text-white print:text-black">{data.paidOrders}</p>
-                            </div>
-                            <div className="rounded-2xl bg-[#0f0d0b] border border-white/10 p-4 print:border-gray-200 print:bg-gray-50">
-                                <p className="text-[10px] uppercase tracking-[0.24em] text-white/45 print:text-gray-600">Paid inquiries</p>
-                                <p className="mt-2 text-xl font-bold text-white print:text-black">{data.paidInquiries}</p>
-                            </div>
-                            <div className="rounded-2xl bg-[#0f0d0b] border border-white/10 p-4 print:border-gray-200 print:bg-gray-50">
-                                <p className="text-[10px] uppercase tracking-[0.24em] text-white/45 print:text-gray-600">Inquiry conversion</p>
-                                <p className="mt-2 text-xl font-bold text-white print:text-black">{formatPercent(inquiryConversionPercent)}</p>
-                            </div>
-                        </div>
-                    )}
+                {/* Inquiries by Status */}
+                <div className="mt-4">
+                    <StatusDistribution data={data.inquiriesByStatus} title="Inquiries by Status" />
                 </div>
             </div>
 
-            {/* AUDIT SECTION */}
+            {/* ─── REVENUE OVERVIEW ─── */}
+            <div className="bg-[#12100d]/80 border border-white/10 rounded-3xl p-6 print:border-gray-300 print:bg-white print-section">
+                <div className="border-b border-white/10 pb-3 mb-4 print:border-gray-200">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                        <div>
+                            <h2 className="text-sm font-bold text-white tracking-[0.24em] uppercase print:text-black">Revenue Overview</h2>
+                            <p className="text-sm text-white/60 mt-1.5 print:text-gray-600 leading-relaxed">Monthly paid business trend from orders and inquiries.</p>
+                        </div>
+                        {data.revenueByMonth.length > 1 && (
+                            <div className="flex items-center gap-4">
+                                {data.availableYears.length > 0 && (
+                                    <label className="flex items-center gap-2 text-[10px] uppercase tracking-[0.24em] text-white/50 print:text-gray-600">
+                                        <span>Year</span>
+                                        <select
+                                            value={effectiveYear}
+                                            onChange={(event) => setSelectedYear(event.target.value)}
+                                            className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-white outline-none print:border-gray-300 print:bg-white print:text-black"
+                                        >
+                                            {data.availableYears.map((year) => (
+                                                <option key={year} value={year} className="text-black">
+                                                    {year}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </label>
+                                )}
+                                <span className="text-[10px] text-white/40 print:text-gray-500">
+                                    Total ({effectiveYear}): <span className="font-semibold text-white/70 print:text-gray-700">{formatPHP(Math.round(selectedYearTotalRevenue))}</span>
+                                </span>
+                            </div>
+                        )}
+                    </div>
+                </div>
+                {data.revenueByMonth.length === 0 || data.totalRevenue === 0 || yearFilteredMonths.length === 0 ? (
+                    <EmptyState
+                        title="No revenue yet"
+                        description="Revenue will appear here once paid orders or inquiries are recorded."
+                        hint="This view updates from payment records"
+                    />
+                ) : (
+                    <>
+                        <BarChart data={yearFilteredMonths} />
+                        <div className="mt-4 flex items-center justify-between text-xs text-white/40 print:text-gray-500">
+                            <span>Showing: <strong className="text-white/80 print:text-gray-700">{yearFilteredMonths.length} months in {effectiveYear}</strong></span>
+                            <span>Latest: <strong className="text-[#D4A97A] print:text-black">{formatPHP(Math.round(latestMonthRevInYear))}</strong></span>
+                            <span>Total: <strong className="text-white/80 print:text-gray-700">{formatPHP(Math.round(selectedYearTotalRevenue))}</strong></span>
+                        </div>
+                    </>
+                )}
+            </div>
+
+            {/* ─── AUDIT SECTION ─── */}
             {data.mismatches.length > 0 && (
                 <div className="bg-red-500/5 border border-red-500/20 rounded-3xl p-6 break-inside-avoid print:border-red-400 print:bg-transparent print-section">
                     <h2 className="text-sm font-bold text-red-400 flex items-center gap-2 mb-4 tracking-wider uppercase print:text-red-800">

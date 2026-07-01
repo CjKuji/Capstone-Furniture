@@ -51,6 +51,9 @@ export type AnalyticsData = {
     inquiryTotalValue: number;
     inquiryPaidValue: number;
     inquiryConversionRate: number;
+    /** Revenue broken out by channel — useful for comparing order vs inquiry financial contribution */
+    orderRevenue: number;
+    inquiryRevenue: number;
     revenueByMonth: RevenuePoint[];
     ordersByStatus: StatusCount[];
     inquiriesByStatus: StatusCount[];
@@ -58,6 +61,8 @@ export type AnalyticsData = {
     recentOrders: RecentOrder[];
     recentInquiries: RecentInquiry[];
     mismatches: DataMismatch[];
+    /** Deduplicated list of years present in revenueByMonth, for the year selector */
+    availableYears: string[];
 };
 
 interface OrderRow {
@@ -219,6 +224,10 @@ export async function getAnalytics(): Promise<AnalyticsData> {
         }
     });
 
+    // Channel revenue breakout — for comparing which channel contributes more financially
+    const orderRevenue = Object.values(paidByOrder).reduce((sum, v) => sum + v, 0);
+    const inquiryRevenue = Object.values(paidByInquiry).reduce((sum, v) => sum + v, 0);
+
     // =========================================================
     // 2. RECONCILIATION AUDIT LAYER
     // =========================================================
@@ -317,6 +326,7 @@ export async function getAnalytics(): Promise<AnalyticsData> {
     }, 0);
     const inquiryConversionRate = acceptedValueInquiries.length > 0 ? (paidInquiries / acceptedValueInquiries.length) * 100 : 0;
 
+    // Revenue by month — return ALL data (no slice), frontend will filter by year
     const monthMap: Record<string, number> = {};
     paidBusinessPayments.forEach((p) => {
         if (!p.created_at) return;
@@ -326,8 +336,27 @@ export async function getAnalytics(): Promise<AnalyticsData> {
     });
     
     const revenueByMonth: RevenuePoint[] = Object.entries(monthMap)
-        .slice(-6)
-        .map(([month, revenue]) => ({ month, revenue }));
+        .map(([month, revenue]) => ({ month, revenue }))
+        .sort((a, b) => {
+            // Sort chronologically by parsing month labels
+            const dateA = new Date(`01 ${a.month}`);
+            const dateB = new Date(`01 ${b.month}`);
+            return dateA.getTime() - dateB.getTime();
+        });
+
+    // Extract available years from revenue month labels (e.g. "Jan 26" → "2026")
+    const yearMap = new Set<string>();
+    revenueByMonth.forEach(({ month }) => {
+        // Month labels look like "Jan 26" or "Jan 2026" — extract the year part
+        const parts = month.trim().split(" ");
+        const yearToken = parts[parts.length - 1];
+        if (yearToken.length === 2) {
+            yearMap.add(`20${yearToken}`);
+        } else if (yearToken.length === 4 && !isNaN(Number(yearToken))) {
+            yearMap.add(yearToken);
+        }
+    });
+    const availableYears = Array.from(yearMap).sort();
 
     // Catalog Orders Volume Aggregates
     const orderStatusMap: Record<string, number> = {};
@@ -443,12 +472,15 @@ export async function getAnalytics(): Promise<AnalyticsData> {
         inquiryTotalValue,
         inquiryPaidValue,
         inquiryConversionRate,
+        orderRevenue,
+        inquiryRevenue,
         revenueByMonth,
         ordersByStatus,
         inquiriesByStatus,
         topProducts,
         recentOrders,
         recentInquiries,
-        mismatches
+        mismatches,
+        availableYears,
     };
 }

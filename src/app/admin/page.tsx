@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { getAdminDashboardStats, AdminDashboardData } from "@/services/dashboardService";
+import { AdminDashboardData } from "@/services/dashboardService";
 import { useUser } from "@/hooks/useUser";
+import { useAdminDashboard } from "@/hooks/useAdminDashboard";
 import { 
   FileText, 
   Hammer, 
@@ -22,13 +23,6 @@ import {
   ClipboardList
 } from "lucide-react";
 
-/* =========================================================
-   SIMPLE CACHE BOUNDARIES
-========================================================= */
-let dashboardCache: AdminDashboardData | null = null;
-let dashboardCacheTime = 0;
-const CACHE_TTL = 1000 * 60 * 2; // 2 minutes
-
 interface UserWithProfile {
   email?: string;
   profile?: {
@@ -46,75 +40,38 @@ export default function AdminDashboard() {
   const typedUser = user as UserWithProfile | null;
   const email = typedUser?.email ?? typedUser?.profile?.email ?? null;
 
-  // --- Core Dashboard State ---
-  const [data, setData] = useState<AdminDashboardData>(
-    dashboardCache ?? {
-      pendingQuotes: 0,
-      unreadMessages: 0,
-      paidAwaitingProduction: 0,
-      pendingStoreOrdersCount: 0,
-      pendingCustomRequestsCount: 0,
-      totalFurnitureCatalogCount: 0,
-      currentUsersCount: 0,
-      completedOrdersCount: 0,
-      completedInquiriesCount: 0,
-      activeProduction: 0,
-      partiallyPaidQueue: { readyForPickupCount: 0, readyForDeliveryCount: 0 },
-      fullyPaidQueue: { readyForPickupCount: 0, readyForDeliveryCount: 0 },
-      recentActivity: [],
-    }
-  );
+  // --- Core Dashboard State via React Query (Live Updates) ---
+  const { data, isLoading } = useAdminDashboard();
 
-  const [loading, setLoading] = useState(!dashboardCache);
+  // Provide a safe default when data is not yet available
+  const safeData: AdminDashboardData = data ?? {
+    pendingQuotes: 0,
+    unreadMessages: 0,
+    paidAwaitingProduction: 0,
+    pendingStoreOrdersCount: 0,
+    pendingCustomRequestsCount: 0,
+    totalFurnitureCatalogCount: 0,
+    currentUsersCount: 0,
+    activeOrdersCount: 0,
+    activeInquiriesCount: 0,
+    completedOrdersCount: 0,
+    completedInquiriesCount: 0,
+    activeProduction: 0,
+    partiallyPaidQueue: { readyForPickupCount: 0, readyForDeliveryCount: 0 },
+    fullyPaidQueue: { readyForPickupCount: 0, readyForDeliveryCount: 0 },
+    recentActivity: [],
+  };
   
   // --- Chronological Filter States ---
   const [selectedMonth, setSelectedMonth] = useState<string>("ALL");
   const [selectedYear, setSelectedYear] = useState<string>("ALL");
-
-  /* =========================================================
-      DATA FETCHING & SYNC
-  ========================================================= */
-  useEffect(() => {
-    let mounted = true;
-
-    const loadDashboardData = async () => {
-      const now = Date.now();
-      
-      if (dashboardCache && now - dashboardCacheTime < CACHE_TTL) {
-        setData(dashboardCache);
-        setLoading(false);
-        return;
-      }
-
-    if (!dashboardCache) setLoading(true);
-
-      try {
-        const stats = await getAdminDashboardStats();
-        if (!mounted) return;
-
-        setData(stats);
-        dashboardCache = stats;
-        dashboardCacheTime = Date.now();
-      } catch (err) {
-        console.error("DASHBOARD_UI_LOAD_ERROR", err);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    };
-
-    loadDashboardData();
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
 
   // --- Dynamic Option Mappings Derived From Activity Logs ---
   const { availableYears, availableMonths } = useMemo(() => {
     const yearsSet = new Set<string>();
     const monthsMap = new Map<number, string>();
 
-    data.recentActivity.forEach((log) => {
+    safeData.recentActivity.forEach((log) => {
       if (!log.createdAt) return;
       const date = new Date(log.createdAt);
       if (isNaN(date.getTime())) return;
@@ -132,11 +89,11 @@ export default function AdminDashboard() {
       availableYears: sortedYears,
       availableMonths: sortedMonths
     };
-  }, [data.recentActivity]);
+  }, [safeData.recentActivity]);
 
   // --- Reactive Sorting & Filter Evaluation (Ensures Newest Stays on Top) ---
   const filteredActivity = useMemo(() => {
-    return data.recentActivity
+    return safeData.recentActivity
       .filter((log) => {
         if (!log.createdAt) return true;
         const date = new Date(log.createdAt);
@@ -151,9 +108,8 @@ export default function AdminDashboard() {
         return matchesYear && matchesMonth;
       })
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [data.recentActivity, selectedMonth, selectedYear]);
+  }, [safeData.recentActivity, selectedMonth, selectedYear]);
 
-  const hasPendingItems = data.pendingQuotes > 0 || data.pendingStoreOrdersCount > 0;
   const isFiltering = selectedMonth !== "ALL" || selectedYear !== "ALL";
 
   const clearFilters = () => {
@@ -202,7 +158,7 @@ export default function AdminDashboard() {
           </div>
         </div>
         
-        {loading && !dashboardCache ? (
+        {isLoading && !data ? (
           <div className="grid grid-cols-1 gap-3 print:hidden sm:grid-cols-2 xl:grid-cols-5 sm:gap-4">
             {Array.from({ length: 5 }).map((_, i) => (
               <div key={i} className="h-32 rounded-2xl bg-white/[0.02] border border-white/[0.05] animate-pulse" />
@@ -211,24 +167,24 @@ export default function AdminDashboard() {
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5 sm:gap-4">
             
-            {/* NEW REQUESTS CARD */}
+            {/* ACTIVE ORDERS & INQUIRIES CARD (replaces New Requests) */}
             <DashboardCard
-              label="New Requests"
-              tone={hasPendingItems ? "warning" : "default"}
+              label="Active Orders & Inquiries"
+              tone={(safeData.activeOrdersCount + safeData.activeInquiriesCount) > 0 ? "warning" : "default"}
               icon={AlertCircle}
             >
               <div className="grid grid-cols-2 w-full h-full items-end">
                 <div className="relative group/metric pr-2">
                   <p className="text-3xl font-extrabold tracking-tight text-white print:text-black transition-colors group-hover/metric:text-[#D4A97A]">
-                    {data.pendingQuotes}
+                    {safeData.activeOrdersCount}
                   </p>
-                  <span className="text-[10px] text-white/40 print:text-black/50 font-medium mt-1 block whitespace-normal break-words">Custom Quotes</span>
+                  <span className="text-[10px] text-white/40 print:text-black/50 font-medium mt-1 block whitespace-normal break-words">Orders</span>
                 </div>
                 <div className="relative border-l border-white/[0.1] print:border-black/20 pl-4 group/metric h-full flex flex-col justify-end">
                   <p className="text-3xl font-extrabold tracking-tight text-white print:text-black transition-colors group-hover/metric:text-[#D4A97A]">
-                    {data.pendingStoreOrdersCount}
+                    {safeData.activeInquiriesCount}
                   </p>
-                  <span className="text-[10px] text-white/40 print:text-black/50 font-medium mt-1 block whitespace-normal break-words">Store Orders</span>
+                  <span className="text-[10px] text-white/40 print:text-black/50 font-medium mt-1 block whitespace-normal break-words">Inquiries</span>
                 </div>
               </div>
             </DashboardCard>
@@ -236,20 +192,32 @@ export default function AdminDashboard() {
             {/* STAGED FOR PRODUCTION CARD */}
             <DashboardCard 
               label="Staged for Production" 
-              tone={data.paidAwaitingProduction > 0 ? "warning" : "default"}
+              tone={safeData.paidAwaitingProduction > 0 ? "warning" : "default"}
               icon={Hammer}
             >
-              <p className="text-3xl font-extrabold tracking-tight text-white print:text-black">{data.paidAwaitingProduction}</p>
-              <p className="text-[10px] text-white/40 print:text-black/50 font-medium mt-1 whitespace-normal break-words">Approved / Deposits Received</p>
+              <div className="grid grid-cols-2 w-full h-full items-end">
+                <div className="relative group/metric pr-2">
+                  <p className="text-3xl font-extrabold tracking-tight text-white print:text-black transition-colors group-hover/metric:text-[#D4A97A]">
+                    {safeData.pendingStoreOrdersCount}
+                  </p>
+                  <span className="text-[10px] text-white/40 print:text-black/50 font-medium mt-1 block whitespace-normal break-words">Orders (Partial/Full Paid)</span>
+                </div>
+                <div className="relative border-l border-white/[0.1] print:border-black/20 pl-4 group/metric h-full flex flex-col justify-end">
+                  <p className="text-3xl font-extrabold tracking-tight text-white print:text-black transition-colors group-hover/metric:text-[#D4A97A]">
+                    {safeData.pendingCustomRequestsCount}
+                  </p>
+                  <span className="text-[10px] text-white/40 print:text-black/50 font-medium mt-1 block whitespace-normal break-words">Inquiries (Deposit Paid)</span>
+                </div>
+              </div>
             </DashboardCard>
 
             {/* ACTIVE PRODUCTION CARD */}
             <DashboardCard 
               label="Active Production" 
-              tone={data.activeProduction > 0 ? "warning" : "default"}
+              tone={safeData.activeProduction > 0 ? "warning" : "default"}
               icon={Activity}
             >
-              <p className="text-3xl font-extrabold tracking-tight text-white print:text-black">{data.activeProduction}</p>
+              <p className="text-3xl font-extrabold tracking-tight text-white print:text-black">{safeData.activeProduction}</p>
               <p className="text-[10px] text-white/40 print:text-black/50 font-medium mt-1 whitespace-normal break-words">Items currently being built</p>
             </DashboardCard>
 
@@ -258,7 +226,7 @@ export default function AdminDashboard() {
               tone="default"
               icon={Layers}
             >
-              <p className="text-3xl font-extrabold tracking-tight text-white print:text-black">{data.totalFurnitureCatalogCount}</p>
+              <p className="text-3xl font-extrabold tracking-tight text-white print:text-black">{safeData.totalFurnitureCatalogCount}</p>
               <p className="text-[10px] text-white/40 print:text-black/50 font-medium mt-1 whitespace-normal break-words">Active catalog listings</p>
             </DashboardCard>
 
@@ -267,7 +235,7 @@ export default function AdminDashboard() {
               tone="default"
               icon={Users}
             >
-              <p className="text-3xl font-extrabold tracking-tight text-white print:text-black">{data.currentUsersCount}</p>
+              <p className="text-3xl font-extrabold tracking-tight text-white print:text-black">{safeData.currentUsersCount}</p>
               <p className="text-[10px] text-white/40 print:text-black/50 font-medium mt-1 whitespace-normal break-words">Total user accounts</p>
             </DashboardCard>
           </div>
@@ -299,7 +267,7 @@ export default function AdminDashboard() {
                   <p className="text-xs text-white/50 print:text-black/60 flex items-center gap-2 font-semibold tracking-wide">
                     <Truck size={14} className="text-yellow-500 shrink-0" /> <span>Shipments Awaiting Payment</span>
                   </p>
-                  <p className="text-3xl font-black mt-3 text-white print:text-black">{loading ? "..." : data.partiallyPaidQueue.readyForDeliveryCount}</p>
+                  <p className="text-3xl font-black mt-3 text-white print:text-black">{isLoading ? "..." : safeData.partiallyPaidQueue.readyForDeliveryCount}</p>
                   <span className="text-[10px] text-white/40 print:text-black/50 block mt-2 font-medium">Full payment required to leave warehouse</span>
                 </div>
                 
@@ -307,7 +275,7 @@ export default function AdminDashboard() {
                   <p className="text-xs text-white/50 print:text-black/60 flex items-center gap-2 font-semibold tracking-wide">
                     <Package size={14} className="text-purple-400 print:text-purple-700 shrink-0" /> <span>Pickups Awaiting Payment</span>
                   </p>
-                  <p className="text-3xl font-black mt-3 text-white print:text-black">{loading ? "..." : data.partiallyPaidQueue.readyForPickupCount}</p>
+                  <p className="text-3xl font-black mt-3 text-white print:text-black">{isLoading ? "..." : safeData.partiallyPaidQueue.readyForPickupCount}</p>
                   <span className="text-[10px] text-white/40 print:text-black/50 block mt-2 font-medium">Collect final settlement at checkout counter</span>
                 </div>
               </div>
@@ -331,7 +299,7 @@ export default function AdminDashboard() {
                   <p className="text-xs text-white/50 print:text-black/60 flex items-center gap-2 font-semibold tracking-wide">
                     <Truck size={14} className="text-emerald-400 print:text-emerald-700 shrink-0" /> <span>Delivery & Transit Pipeline</span>
                   </p>
-                  <p className="text-3xl font-black mt-3 text-white print:text-black">{loading ? "..." : data.fullyPaidQueue.readyForDeliveryCount}</p>
+                  <p className="text-3xl font-black mt-3 text-white print:text-black">{isLoading ? "..." : safeData.fullyPaidQueue.readyForDeliveryCount}</p>
                   <span className="text-[10px] text-white/40 print:text-black/50 block mt-2 font-medium">Cleared for delivery transit or actively en route</span>
                 </div>
                 
@@ -339,7 +307,7 @@ export default function AdminDashboard() {
                   <p className="text-xs text-white/50 print:text-black/60 flex items-center gap-2 font-semibold tracking-wide">
                     <Package size={14} className="text-blue-400 print:text-blue-700 shrink-0" /> <span>Cleared For Pickup</span>
                   </p>
-                  <p className="text-3xl font-black mt-3 text-white print:text-black">{loading ? "..." : data.fullyPaidQueue.readyForPickupCount}</p>
+                  <p className="text-3xl font-black mt-3 text-white print:text-black">{isLoading ? "..." : safeData.fullyPaidQueue.readyForPickupCount}</p>
                   <span className="text-[10px] text-white/40 print:text-black/50 block mt-2 font-medium">Ready for immediate client release</span>
                 </div>
               </div>
@@ -445,7 +413,7 @@ export default function AdminDashboard() {
 
           {/* DYNAMIC ACTIVITY CONTAINER */}
           <div className="space-y-2 max-h-[400px] print:max-h-none overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-white/[0.06] scrollbar-track-transparent">
-            {loading && data.recentActivity.length === 0 ? (
+            {isLoading && safeData.recentActivity.length === 0 ? (
               <p className="text-xs text-white/40 animate-pulse py-4 font-medium italic">Updating activity items...</p>
             ) : filteredActivity.length === 0 ? (
               <div className="text-center py-16 border border-dashed border-white/[0.08] print:border-black/20 rounded-xl bg-white/[0.005]">
@@ -500,11 +468,11 @@ export default function AdminDashboard() {
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-white/[0.01] border border-white/[0.06] print:border-black/10 rounded-xl p-3.5 text-left group hover:bg-white/[0.02] transition">
                 <span className="text-[10px] text-white/40 print:text-black/50 block tracking-wider uppercase font-bold">Store Orders</span>
-                <p className="text-2xl font-extrabold tracking-tight text-white print:text-black mt-1 group-hover:text-emerald-400 transition-colors">{data.completedOrdersCount}</p>
+                <p className="text-2xl font-extrabold tracking-tight text-white print:text-black mt-1 group-hover:text-emerald-400 transition-colors">{safeData.completedOrdersCount}</p>
               </div>
               <div className="bg-white/[0.01] border border-white/[0.06] print:border-black/10 rounded-xl p-3.5 text-left group hover:bg-white/[0.02] transition">
                 <span className="text-[10px] text-white/40 print:text-black/50 block tracking-wider uppercase font-bold">Custom Orders</span>
-                <p className="text-2xl font-extrabold tracking-tight text-white print:text-black mt-1 group-hover:text-emerald-400 transition-colors">{data.completedInquiriesCount}</p>
+                <p className="text-2xl font-extrabold tracking-tight text-white print:text-black mt-1 group-hover:text-emerald-400 transition-colors">{safeData.completedInquiriesCount}</p>
               </div>
             </div>
           </div>
@@ -526,14 +494,14 @@ export default function AdminDashboard() {
                 label="Custom Requests" 
                 icon={FileText} 
                 onClick={() => router.push("/admin/inquiry")}
-                badge={data.pendingQuotes > 0 ? { text: `${data.pendingQuotes} New`, variant: "warning" } : undefined}
+                badge={safeData.activeInquiriesCount > 0 ? { text: `${safeData.activeInquiriesCount} Active`, variant: "warning" } : undefined}
               />
 
               <ShortcutButton 
                 label="Store Checkout Orders" 
                 icon={Package} 
                 onClick={() => router.push("/admin/orders")}
-                badge={data.pendingStoreOrdersCount > 0 ? { text: `${data.pendingStoreOrdersCount} New`, variant: "info" } : undefined}
+                badge={safeData.activeOrdersCount > 0 ? { text: `${safeData.activeOrdersCount} Active`, variant: "info" } : undefined}
               />
 
               <ShortcutButton 

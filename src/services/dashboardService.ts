@@ -23,6 +23,8 @@ export interface AdminDashboardData {
   pendingCustomRequestsCount: number;  
   totalFurnitureCatalogCount: number;
   currentUsersCount: number;           
+  activeOrdersCount: number;           
+  activeInquiriesCount: number;        
 
   // 2. Completed KPI Hub Metrics
   completedOrdersCount: number;
@@ -51,6 +53,7 @@ interface InquiryItemJoin {
 
 interface RawInquiryQueryRow {
   id: string;
+  inquiry_reference_code: string | null;
   status: string;
   final_total_price: number | null;
   created_at: string | null;
@@ -91,6 +94,7 @@ interface DashboardInquiryRow {
   id: string;
   status: string | null;
   charge_status: string | null;
+  payment_status: string | null;
 }
 
 interface DbQuerySelectResult {
@@ -137,7 +141,7 @@ async function fetchDashboardInquiries(): Promise<DashboardInquiryRow[]> {
   try {
     const { data, error } = await supabase
       .from("inquiries")
-      .select("id, status, charge_status");
+      .select("id, status, charge_status, payment_status");
 
     if (error) throw error;
     return (data ?? []) as unknown as DashboardInquiryRow[];
@@ -185,7 +189,7 @@ export async function getAdminDashboardStats(): Promise<AdminDashboardData> {
 
     typedClient
       .from("inquiries")
-      .select("id, status, created_at, inquiry_items ( title )")
+      .select("id, inquiry_reference_code, status, created_at, inquiry_items ( title )")
       .order("created_at", { ascending: false })
       .limit(15),
 
@@ -212,6 +216,16 @@ export async function getAdminDashboardStats(): Promise<AdminDashboardData> {
   }).length;
   const currentUsersCount = currentUsersRes.count ?? 0;
 
+  const activeOrdersCount = dashboardOrders.filter((order) => {
+    const status = normalizeDashboardValue(order.order_status);
+    return status !== "completed" && status !== "closed" && status !== "cancelled" && status !== "canceled";
+  }).length;
+
+  const activeInquiriesCount = dashboardInquiries.filter((item) => {
+    const status = normalizeDashboardValue(item.status);
+    return status !== "completed" && status !== "closed" && status !== "converted" && status !== "cancelled" && status !== "canceled";
+  }).length;
+
   const unreadMessages = (unreadMessagesRes.data ?? []).reduce(
     (acc, curr) => acc + (curr.admin_unread_count ?? 0),
     0
@@ -224,9 +238,9 @@ export async function getAdminDashboardStats(): Promise<AdminDashboardData> {
   }).length;
 
   const pendingCustomRequestsCount = dashboardInquiries.filter((item) => {
-    const chargeStatus = normalizeDashboardValue(item.charge_status);
+    const paymentStatus = normalizeDashboardValue(item.payment_status);
     const status = normalizeDashboardValue(item.status);
-    return chargeStatus === "accepted" && (status === "requested" || status === "under_review" || status === "accepted");
+    return (paymentStatus === "partially_paid" || paymentStatus === "fully_paid") && (status === "requested" || status === "under_review" || status === "accepted");
   }).length;
 
   const paidAwaitingProduction = pendingStoreOrdersCount + pendingCustomRequestsCount;
@@ -239,9 +253,9 @@ export async function getAdminDashboardStats(): Promise<AdminDashboardData> {
     const orderStatus = normalizeDashboardValue(order.order_status);
     return paymentStatus === "partially_paid" && orderStatus === "ready_for_pickup";
   }).length + dashboardInquiries.filter((item) => {
-    const chargeStatus = normalizeDashboardValue(item.charge_status);
+    const paymentStatus = normalizeDashboardValue(item.payment_status);
     const status = normalizeDashboardValue(item.status);
-    return chargeStatus === "accepted" && status === "ready_for_pickup";
+    return paymentStatus === "partially_paid" && status === "ready_for_pickup";
   }).length;
 
   const partiallyPaidDeliveryCount = dashboardOrders.filter((order) => {
@@ -249,9 +263,9 @@ export async function getAdminDashboardStats(): Promise<AdminDashboardData> {
     const orderStatus = normalizeDashboardValue(order.order_status);
     return paymentStatus === "partially_paid" && (orderStatus === "ready_for_shipment" || orderStatus === "in_transit");
   }).length + dashboardInquiries.filter((item) => {
-    const chargeStatus = normalizeDashboardValue(item.charge_status);
+    const paymentStatus = normalizeDashboardValue(item.payment_status);
     const status = normalizeDashboardValue(item.status);
-    return chargeStatus === "accepted" && (status === "ready_for_shipment" || status === "in_transit");
+    return paymentStatus === "partially_paid" && (status === "ready_for_shipment" || status === "in_transit");
   }).length;
 
   const fullyPaidPickupCount = dashboardOrders.filter((order) => {
@@ -259,9 +273,9 @@ export async function getAdminDashboardStats(): Promise<AdminDashboardData> {
     const orderStatus = normalizeDashboardValue(order.order_status);
     return paymentStatus === "fully_paid" && orderStatus === "ready_for_pickup";
   }).length + dashboardInquiries.filter((item) => {
-    const chargeStatus = normalizeDashboardValue(item.charge_status);
+    const paymentStatus = normalizeDashboardValue(item.payment_status);
     const status = normalizeDashboardValue(item.status);
-    return chargeStatus === "accepted" && status === "ready_for_pickup";
+    return paymentStatus === "fully_paid" && status === "ready_for_pickup";
   }).length;
 
   const fullyPaidDeliveryCount = dashboardOrders.filter((order) => {
@@ -269,9 +283,9 @@ export async function getAdminDashboardStats(): Promise<AdminDashboardData> {
     const orderStatus = normalizeDashboardValue(order.order_status);
     return paymentStatus === "fully_paid" && (orderStatus === "ready_for_shipment" || orderStatus === "in_transit");
   }).length + dashboardInquiries.filter((item) => {
-    const chargeStatus = normalizeDashboardValue(item.charge_status);
+    const paymentStatus = normalizeDashboardValue(item.payment_status);
     const status = normalizeDashboardValue(item.status);
-    return chargeStatus === "accepted" && (status === "ready_for_shipment" || status === "in_transit");
+    return paymentStatus === "fully_paid" && (status === "ready_for_shipment" || status === "in_transit");
   }).length;
 
   // --- Normalizing Chronological Activity Feeds ---
@@ -315,7 +329,7 @@ export async function getAdminDashboardStats(): Promise<AdminDashboardData> {
         id: i.id,
         type: "custom_inquiry",
         title: "Custom Request Logged",
-        description: `Ref: REQ-${i.id.substring(0, 8).toUpperCase()} — (${primaryItem})`,
+        description: `Ref: ${i.inquiry_reference_code || `REQ-${i.id.substring(0, 8).toUpperCase()}`} — (${primaryItem})`,
         amount: undefined,
         status: i.status ?? "requested",
         createdAt: cleanDate,
@@ -364,6 +378,8 @@ export async function getAdminDashboardStats(): Promise<AdminDashboardData> {
     pendingCustomRequestsCount,
     totalFurnitureCatalogCount,
     currentUsersCount,
+    activeOrdersCount,
+    activeInquiriesCount,
     completedOrdersCount,
     completedInquiriesCount,
     activeProduction,

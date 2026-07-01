@@ -220,7 +220,7 @@ export default function AdminInquiryCard({ inquiry, conversation, adminId }: Adm
             <div className="flex items-center gap-1.5 text-[10px] font-bold tracking-wider text-[#A68056] uppercase font-mono">
               <span>Ref</span>
               <span className="text-white bg-[#21180F] px-1.5 py-0.5 rounded text-xs font-sans font-semibold">
-                #{inquiry.id?.slice(0, 8).toUpperCase()}
+                #{inquiry.inquiry_reference_code || inquiry.id?.slice(0, 8).toUpperCase()}
               </span>
               <div className={`h-1.5 w-1.5 rounded-full shrink-0 bg-[#D4A97A] ${["requested", "under_review", "in_production"].includes(inquiry.status) ? "animate-pulse shadow-[0_0_6px_#D4A97A]" : ""}`} />
             </div>

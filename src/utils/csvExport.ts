@@ -59,6 +59,10 @@ export function exportAnalyticsCSV(data: AnalyticsData) {
     sections.push(rowsToCSV([
         ["Metric", "Value"],
         ["Total Revenue", `₱${data.totalRevenue.toLocaleString("en-PH")}`],
+        ["Orders Revenue", `₱${(data.orderRevenue ?? 0).toLocaleString("en-PH")}`],
+        ["  % of Total", `${data.totalRevenue > 0 ? Math.round((data.orderRevenue / data.totalRevenue) * 100) : 0}%`],
+        ["Inquiries Revenue", `₱${(data.inquiryRevenue ?? 0).toLocaleString("en-PH")}`],
+        ["  % of Total", `${data.totalRevenue > 0 ? Math.round((data.inquiryRevenue / data.totalRevenue) * 100) : 0}%`],
         ["Total Orders", String(data.totalOrders)],
         ["  Completed", String(completedOrders)],
         ["  Processing", String(processingOrders)],

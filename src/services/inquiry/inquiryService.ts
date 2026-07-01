@@ -38,13 +38,30 @@ export interface FetchInquiriesOptions {
   offset?: number;
 }
 
+function generateInquiryReference(): string {
+  const now = new Date();
+  const year  = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day   = String(now.getDate()).padStart(2, "0");
+  const datePart = `${year}${month}${day}`;
+
+  const CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let suffix = "";
+  for (let i = 0; i < 4; i++) {
+    suffix += CHARS[Math.floor(Math.random() * CHARS.length)];
+  }
+
+  return `INQ-${datePart}-${suffix}`;
+}
+
 interface InsertInquiryRow {
   user_id: string;
   delivery_method: 'pickup' | 'delivery';
   phone_number: string | null;
   delivery_address: string | null;
   pickup_location: string | null;
-  status: 'requested'; 
+  status: 'requested';
+  inquiry_reference_code: string;
 }
 
 interface InsertInquiryItemRow {
@@ -107,20 +124,24 @@ export const inquiryService = {
       console.warn("Could not auto-assign conversation supervisor:", e);
     }
 
-    // 2. Insert parent inquiry record
+    // 2. Generate a unique reference code for this inquiry
+    const inquiry_reference_code = generateInquiryReference();
+
+    // 3. Insert parent inquiry record
     const parentRow: InsertInquiryRow = {
       user_id: userId,
       delivery_method: parentDetails.delivery_method,
       phone_number: parentDetails.phone_number ?? null,
       delivery_address: parentDetails.delivery_method === 'delivery' ? (parentDetails.delivery_address ?? null) : null,
       pickup_location: parentDetails.delivery_method === 'pickup' ? (parentDetails.pickup_location ?? null) : null,
-      status: 'requested', 
+      status: 'requested',
+      inquiry_reference_code,
     };
 
     const { data: parentRecord, error: parentError } = await supabase
       .from('inquiries')
-      .insert(parentRow)
-      .select('id')
+      .insert(parentRow as any)
+      .select('id, inquiry_reference_code')
       .single();
 
     if (parentError) {

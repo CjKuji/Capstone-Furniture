@@ -79,6 +79,7 @@ export interface AdminInquiryComposite {
   final_total_price?: number | null;
   charge_status?: string | null;
   shipping_address?: string | null;
+  inquiry_reference_code?: string | null;
 }
 
 // Helper to normalize backend statuses to the UI matrix schema

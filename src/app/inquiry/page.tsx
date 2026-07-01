@@ -25,6 +25,8 @@ import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 ───────────────────────────────────────────────────────────── */
 function PaymentSuccessModal() {
   const searchParams = useSearchParams();
+  const [referenceCode, setReferenceCode] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   const paymentStatus = searchParams.get("payment");
   const paymentOrderId = searchParams.get("orderId");
@@ -42,12 +44,62 @@ function PaymentSuccessModal() {
     url.searchParams.delete("orderId");
     url.searchParams.delete("inquiryId");
     window.history.replaceState({}, "", url.toString());
+    setReferenceCode(null);
+    setIsLoading(true);
   };
+
+  // Fetch reference code when modal is shown
+  useEffect(() => {
+    if (!hasPaymentModal) return;
+
+    const fetchReferenceCode = async () => {
+      setIsLoading(true);
+      try {
+        const { supabase } = await import("@/lib/supabase");
+        
+        if (paymentInquiryId) {
+          // Fetch inquiry reference code
+          const { data, error } = await supabase
+            .from("inquiries")
+            .select("inquiry_reference_code")
+            .eq("id", paymentInquiryId)
+            .single();
+          
+          if (!error && data?.inquiry_reference_code) {
+            setReferenceCode(data.inquiry_reference_code);
+          } else {
+            setReferenceCode(null);
+          }
+        } else if (paymentOrderId) {
+          // Fetch order reference code
+          const { data, error } = await supabase
+            .from("orders")
+            .select("order_reference_code")
+            .eq("id", paymentOrderId)
+            .single();
+          
+          if (!error && data?.order_reference_code) {
+            setReferenceCode(data.order_reference_code);
+          } else {
+            setReferenceCode(null);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch reference code:", err);
+        setReferenceCode(null);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchReferenceCode();
+  }, [hasPaymentModal, paymentOrderId, paymentInquiryId]);
 
   if (!hasPaymentModal) return null;
 
   const entityId = paymentOrderId || paymentInquiryId || "";
   const isInquiry = !!paymentInquiryId;
+  const displayCode = referenceCode || (isInquiry ? `INQ-${entityId?.slice(-6).toUpperCase()}` : entityId?.slice(-6).toUpperCase());
 
   return (
     <div className="fixed inset-0 z-[100] flex justify-center items-center bg-black/90 backdrop-blur-xl p-4">
@@ -70,7 +122,7 @@ function PaymentSuccessModal() {
             <>Transaction successful for Order{" "}</>
           )}
           <span className="text-[#D4A97A] font-mono">
-            {entityId?.slice(-6).toUpperCase()}
+            {isLoading ? "..." : displayCode}
           </span>
           .{isInquiry ? " Your workshop inquiry manifest has transitioned to an official build queue." : " Your manifest has been updated."}
         </p>

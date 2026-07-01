@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, Suspense } from "react";
+import { useEffect, useMemo, Suspense, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
 import {
@@ -25,6 +25,8 @@ import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 ───────────────────────────────────────────────────────────── */
 function PaymentSuccessModal() {
   const searchParams = useSearchParams();
+  const [referenceCode, setReferenceCode] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   const paymentStatus = searchParams.get("payment");
   const paymentOrderId = searchParams.get("orderId");
@@ -39,9 +41,45 @@ function PaymentSuccessModal() {
     url.searchParams.delete("orderId");
     url.searchParams.delete("inquiryId");
     window.history.replaceState({}, "", url.toString());
+    setReferenceCode(null);
+    setIsLoading(true);
   };
 
+  // Fetch reference code when modal is shown
+  useEffect(() => {
+    if (!hasPaymentModal || !paymentOrderId) return;
+
+    const fetchReferenceCode = async () => {
+      setIsLoading(true);
+      try {
+        const { supabase } = await import("@/lib/supabase");
+        
+        // Fetch order reference code
+        const { data, error } = await supabase
+          .from("orders")
+          .select("order_reference_code")
+          .eq("id", paymentOrderId)
+          .single();
+        
+        if (!error && data?.order_reference_code) {
+          setReferenceCode(data.order_reference_code);
+        } else {
+          setReferenceCode(null);
+        }
+      } catch (err) {
+        console.error("Failed to fetch reference code:", err);
+        setReferenceCode(null);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchReferenceCode();
+  }, [hasPaymentModal, paymentOrderId]);
+
   if (!hasPaymentModal) return null;
+
+  const displayCode = referenceCode || paymentOrderId?.slice(-6).toUpperCase() || "";
 
   return (
     <div className="fixed inset-0 z-[100] flex justify-center items-center bg-black/90 backdrop-blur-xl p-4">
@@ -60,7 +98,7 @@ function PaymentSuccessModal() {
         <p className="text-white/40 text-xs mb-8 leading-relaxed">
           Transaction successful for Order{" "}
           <span className="text-[#D4A97A] font-mono">
-            {paymentOrderId?.slice(-6).toUpperCase()}
+            {isLoading ? "..." : displayCode}
           </span>
           . Your manifest has been updated.
         </p>
