@@ -9,6 +9,8 @@ export interface ExportResult {
 /**
  * Derives the cleaned filename from the original.
  *
+ Component	Furniture3DViewer usage	dimensions passed?	AR gets AR info?
+ furniture/[id]/page.tsx (public)	Lines 187-191	
  * Examples:
  *   "sofa.glb"        → "sofa-cleaned.glb"
  *   "chair.GLB"       → "chair-cleaned.GLB"

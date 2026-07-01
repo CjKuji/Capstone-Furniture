@@ -12,7 +12,6 @@ import {
   Menu,
   LogOut,
   LayoutDashboard,
-  UserCircle2,
   ChevronRight,
 } from "lucide-react";
 
@@ -151,7 +150,6 @@ export default function Navbar() {
     : "?";
 
   const dropdownItems: DropdownItem[] = [
-    { label: "Profile",          icon: <UserCircle2 className="w-4 h-4" />,    route: "/profile" },
     { label: "My Cart",          icon: <ShoppingCart className="w-4 h-4" />,   route: "/cart",    badge: cartCount > 0 ? cartCount : undefined },
     { label: "Custom Inquiries", icon: <MessageSquare className="w-4 h-4" />,  route: "/inquiry", badge: inquiryCount > 0 ? inquiryCount : undefined },
     { label: "My Orders",        icon: <ShoppingBag className="w-4 h-4" />,    route: "/orders",  badge: orderCount > 0 ? orderCount : undefined },

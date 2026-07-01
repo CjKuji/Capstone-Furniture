@@ -9,7 +9,6 @@ import {
   MessageSquare,
   BarChart2,
   LogOut,
-  Settings,
   Globe,
   LucideIcon,
   ChevronRight,
@@ -56,7 +55,6 @@ const NAVIGATION: NavGroup[] = [
   {
     title: "System",
     items: [
-      { label: "Settings", path: "/admin/settings", icon: Settings },
       { label: "Main Site", path: "/", icon: Globe },
     ],
   },
