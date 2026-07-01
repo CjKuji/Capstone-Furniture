@@ -18,7 +18,7 @@ import {
   Environment,
 } from "@react-three/drei";
 
-import { computeRealScale } from "@/lib/3D/nomarlizeFurnitureModel";
+import { computeRealScale, computeARInfo } from "@/lib/3D/nomarlizeFurnitureModel";
 import ARModal from "./ARModal";
 import { Scan, AlertTriangle, Loader2 } from "lucide-react";
 
@@ -406,6 +406,15 @@ export default function Furniture3DViewer({
   const [arSupported, setArSupported] = useState<boolean | null>(null);
   const [containerElement, setContainerElement] = useState<HTMLDivElement | null>(null);
 
+  // ── Pre-parse GLB outside Canvas to compute AR info ──
+  const { scene: preloadedScene } = useGLTF(modelUrl.trim() ? modelUrl : "");
+  const arInfo = useMemo(() => {
+    if (!preloadedScene || !modelUrl.trim()) {
+      return { arScale: "1 1 1", arYOffsetM: 0 };
+    }
+    return computeARInfo(preloadedScene, dimensions ?? {});
+  }, [preloadedScene, dimensions, modelUrl]);
+
   const containerCallbackRef = useCallback((node: HTMLDivElement | null) => {
     if (node !== null) setContainerElement(node);
   }, []);
@@ -431,7 +440,13 @@ export default function Furniture3DViewer({
 
   return (
     <>
-      <ARModal open={arOpen} onClose={() => setArOpen(false)} modelUrl={modelUrl} />
+      <ARModal
+        open={arOpen}
+        onClose={() => setArOpen(false)}
+        modelUrl={modelUrl}
+        arScale={arInfo.arScale}
+        arYOffsetM={arInfo.arYOffsetM}
+      />
 
       <div
         ref={containerCallbackRef}

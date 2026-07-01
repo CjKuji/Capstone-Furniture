@@ -43,26 +43,21 @@ type Status = "checking" | "supported" | "unsupported" | "insecure";
 // ---------------------------------------------------------------------------
 
 /**
- * Converts arYOffsetM into a CSS transform string that shifts the model-viewer
- * element down so its rendered floor snap aligns with the real mesh bottom.
+ * Builds the model-viewer `position` attribute to compensate for off-centre
+ * GLB origins.
  *
- * model-viewer positions the GLB origin at Y=0 in AR world space.
- * If the mesh bottom face is at box.min.y (in GLB space) and box.min.y > 0
- * (origin below the mesh, i.e. origin is closer to the floor than the mesh),
- * the model floats.  We counter this by nudging the element.
+ * In model-viewer, `position` shifts the model in world space.
+ * If the mesh bottom face is above the GLB origin (arYOffsetM > 0), the model
+ * floats above the floor — we push it down by -arYOffsetM.
+ * If the mesh bottom face is below the GLB origin (arYOffsetM < 0), the model
+ * sinks into the floor — we lift it up by |arYOffsetM|.
  *
- * Note: this is a 2D CSS offset on the <model-viewer> element itself. It only
- * affects the preview, not the WebXR session.  For WebXR the correct fix is
- * the `camera-target` attribute (see below).
+ * For normalized models (floor-aligned by modelSanitizer), arYOffsetM ≈ 0
+ * and no position compensation is needed.
  */
-function buildCameraTarget(arYOffsetM: number): string {
-  // camera-target tells model-viewer where to orbit around. Setting it to the
-  // vertical midpoint keeps the preview centred. model-viewer accepts "Xm Ym Zm".
-  // We don't have the height here, so we just compensate for the floor offset.
-  // A positive arYOffsetM means the mesh bottom is arYOffsetM above the origin,
-  // so the model floats by that amount — we move the target DOWN by half that.
-  const compensatedY = Math.max(0, arYOffsetM * 0.5);
-  return `0m ${compensatedY}m 0m`;
+function buildModelPosition(arYOffsetM: number): string {
+  // model-viewer expects "Xm Ym Zm" where each value is in metres
+  return `0m ${-arYOffsetM}m 0m`;
 }
 
 /**
@@ -151,9 +146,7 @@ export default function ARModal({
   // model-viewer is a custom element — cast to any to avoid TS complaints about unknown props.
   const ModelViewer: any = "model-viewer";
 
-  // camera-target compensates for GLBs whose origin is not at the mesh bottom face,
-  // preventing the model from appearing to float in the preview and (partially) in AR.
-  const cameraTarget = buildCameraTarget(arYOffsetM);
+  const modelPosition = buildModelPosition(arYOffsetM);
 
   return (
     <div className="ar-modal-root z-[100] fixed inset-0 flex flex-col bg-[#0A0705]/98 backdrop-blur-xl overscroll-contain">
@@ -280,7 +273,7 @@ export default function ARModal({
               ar-modes="webxr scene-viewer quick-look"
               ar-scale="fixed"
               scale={arScale}
-              camera-target={cameraTarget}
+              position={modelPosition}
               camera-controls
               touch-action="none"
               auto-rotate

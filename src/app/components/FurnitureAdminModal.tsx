@@ -297,6 +297,11 @@ export default function FurnitureModalContainer({
                       <Furniture3DViewer
                         modelUrl={modelPreviewUrl}
                         selectedVariantTextureUrl={activeVariantTexture}
+                        dimensions={{
+                          width_cm: Number(state.widthCm) > 0 ? Number(state.widthCm) : null,
+                          depth_cm: Number(state.depthCm) > 0 ? Number(state.depthCm) : null,
+                          height_cm: Number(state.heightCm) > 0 ? Number(state.heightCm) : null,
+                        }}
                       />
                     ) : (
                       <div className="absolute inset-0 flex items-center justify-center">
