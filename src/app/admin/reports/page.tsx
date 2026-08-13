@@ -5,7 +5,6 @@ import {
     ShoppingBag, 
     MessageSquare, 
     Package, 
-    Download, 
     Printer, 
     AlertTriangle,
     type LucideIcon 
@@ -19,7 +18,6 @@ import {
     getCompletedInquiryCount,
     triggerReportPDFPrint,
 } from "@/utils/reportExport";
-import { exportAnalyticsCSV } from "@/utils/csvExport";
 
 /* =========================================================
    HELPERS
@@ -295,12 +293,6 @@ export default function AdminReportsPage() {
     const processingInquiries = data.totalInquiries - completedInquiries;
     const inquiryConversionPercent = data.totalInquiries > 0 ? (data.paidInquiries / data.totalInquiries) * 100 : 0;
 
-    // Average Order Value
-    const avgOrderValue = data.paidOrders > 0 ? data.totalRevenue / data.paidOrders : 0;
-
-    // Average Inquiry Value — use paidInquiries as proxy for meaningful inquiries (those with actual value)
-    const avgInquiryValue = data.paidInquiries > 0 ? data.inquiryTotalValue / data.paidInquiries : 0;
-
     // Period comparison (last 2 months of revenueByMonth)
     const sortedMonths = [...data.revenueByMonth].sort(
         (a, b) => new Date(`01 ${a.month}`).getTime() - new Date(`01 ${b.month}`).getTime()
@@ -351,13 +343,6 @@ export default function AdminReportsPage() {
                         <Printer size={13} />
                         Export PDF
                     </button>
-                    <button
-                        onClick={() => exportAnalyticsCSV(data)}
-                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#D4A97A]/10 hover:bg-[#D4A97A]/20 border border-[#D4A97A]/30 text-[#D4A97A] text-xs font-semibold uppercase tracking-wider transition-all"
-                    >
-                        <Download size={13} />
-                        Export CSV
-                    </button>
                 </div>
             </div>
 
@@ -402,40 +387,17 @@ export default function AdminReportsPage() {
                 </div>
             </div>
 
-            {/* ─── AVERAGE VALUES ROW ─── */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 print:grid-cols-2 print-section">
-                <KpiCard
-                    label="Avg Order Value"
-                    value={formatPHP(Math.round(avgOrderValue))}
-                    sub={`Across ${data.paidOrders} paid orders`}
-                    icon={ShoppingBag}
-                    accent
-                />
-                <KpiCard
-                    label="Avg Inquiry Value"
-                    value={formatPHP(Math.round(avgInquiryValue))}
-                    sub={`Across ${data.paidInquiries} paid inquiries`}
-                    icon={MessageSquare}
-                    accent
-                />
-            </div>
+
 
             {/* ─── ORDERS SECTION ─── */}
             <div>
-                <h2 className="text-sm font-bold text-white/70 tracking-[0.24em] uppercase mb-4 print:text-gray-700">Orders Report</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 print:grid-cols-4 print-section">
+                <h2 className="text-sm font-bold text-white/70 tracking-[0.24em] uppercase mb-4 print:text-gray-700">Orders Pipeline</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 print:grid-cols-3 print-section">
                     <KpiCard
                         label="Completed"
                         value={String(completedOrders)}
                         sub={`${Math.round((data.totalOrders > 0 ? completedOrders / data.totalOrders : 0) * 100)}% of total orders`}
                         icon={ShoppingBag}
-                    />
-                    <KpiCard
-                        label="Orders Revenue"
-                        value={formatPHP(Math.round(data.orderRevenue))}
-                        sub={`${data.totalRevenue > 0 ? Math.round((data.orderRevenue / data.totalRevenue) * 100) : 0}% of total revenue`}
-                        icon={TrendingUp}
-                        accent
                     />
                     <KpiCard
                         label="Fully Paid"
@@ -444,9 +406,9 @@ export default function AdminReportsPage() {
                         icon={Package}
                     />
                     <KpiCard
-                        label="Partially Paid"
-                        value={String(data.partiallyPaidOrders)}
-                        sub={`₱${data.ordersOutstandingValue.toLocaleString("en-PH")} outstanding`}
+                        label="Outstanding Balance"
+                        value={formatPHP(Math.round(data.ordersOutstandingValue))}
+                        sub={`Total owed across ${data.partiallyPaidOrders} partially paid orders`}
                         icon={TrendingUp}
                     />
                 </div>
@@ -489,8 +451,8 @@ export default function AdminReportsPage() {
 
             {/* ─── INQUIRIES SECTION ─── */}
             <div>
-                <h2 className="text-sm font-bold text-white/70 tracking-[0.24em] uppercase mb-4 print:text-gray-700">Inquiries Report</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 print:grid-cols-4 print-section">
+                <h2 className="text-sm font-bold text-white/70 tracking-[0.24em] uppercase mb-4 print:text-gray-700">Custom Inquiries Pipeline</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 print:grid-cols-3 print-section">
                     <KpiCard
                         label="Completed"
                         value={String(completedInquiries)}
@@ -498,23 +460,16 @@ export default function AdminReportsPage() {
                         icon={MessageSquare}
                     />
                     <KpiCard
-                        label="Inquiries Revenue"
-                        value={formatPHP(Math.round(data.inquiryRevenue))}
-                        sub={`${data.totalRevenue > 0 ? Math.round((data.inquiryRevenue / data.totalRevenue) * 100) : 0}% of total revenue`}
+                        label="Conversion Rate"
+                        value={formatPercent(inquiryConversionPercent)}
+                        sub={`${data.paidInquiries} of ${data.totalInquiries} inquiries converted`}
                         icon={TrendingUp}
                         accent
                     />
                     <KpiCard
-                        label="Quoted Value"
-                        value={formatPHP(Math.round(data.inquiryTotalValue))}
-                        sub="Total price of inquiries with accepted charges"
-                        icon={TrendingUp}
-                        accent
-                    />
-                    <KpiCard
-                        label="Paid Value"
-                        value={formatPHP(Math.round(data.inquiryPaidValue))}
-                        sub="Payments received against quoted inquiries"
+                        label="Outstanding Value"
+                        value={formatPHP(Math.round(data.inquiriesOutstandingValue))}
+                        sub={`Total owed across ${data.partiallyPaidInquiries} partially paid inquiries`}
                         icon={TrendingUp}
                     />
                 </div>

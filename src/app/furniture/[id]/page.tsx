@@ -11,6 +11,7 @@ import { useUser } from "@/hooks/useUser"; // ✅ Added to track authentication 
 
 import Navbar from "@/app/components/Navbar";
 import Furniture3DViewer from "@/app/components/Furniture3DViewer";
+import AuthRequiredModal from "@/app/components/AuthRequiredModal";
 import BasicInfoSection from "@/app/components/sections/user/BasicInfoSection";
 import AssetsSection from "@/app/components/sections/user/AssetsSection";
 import VariantsSection from "@/app/components/sections/user/VariantSection";
@@ -316,58 +317,10 @@ export default function FurnitureDetailPage() {
           title={safeFurniture.name}
         />
 
-        {/* ═══════════════ FLOATING LOGIN MODAL ═══════════════ */}
-        {showAuthModal && (
-          <div 
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in"
-            onClick={() => setShowAuthModal(false)}
-          >
-            <div 
-              className="relative w-full max-w-sm p-6 text-center border bg-[#1C1209] border-white/10 rounded-2xl shadow-2xl animate-scale-up"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Close button */}
-              <button 
-                onClick={() => setShowAuthModal(false)}
-                className="absolute top-4 right-4 text-white/40 hover:text-white transition"
-                aria-label="Close dialog"
-              >
-                <X className="w-4 h-4" />
-              </button>
-
-              {/* Content Icon */}
-              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-[#D4A97A]/10 border border-[#D4A97A]/20 text-[#D4A97A] mb-4">
-                <ShoppingCart className="w-5 h-5" />
-              </div>
-
-              <h3 className="text-base font-bold text-white tracking-wide">
-                Login Required
-              </h3>
-              <p className="mt-2 text-xs text-white/50 leading-relaxed">
-                Please sign in to save blueprints, build out customized orders, and manage items in your cart.
-              </p>
-
-              {/* Action CTAs */}
-              <div className="mt-6 flex flex-col gap-2">
-                <button
-                  onClick={() => {
-                    setShowAuthModal(false);
-                    router.push("/auth/login");
-                  }}
-                  className="w-full bg-[#D4A97A] hover:bg-[#C4976A] py-2.5 rounded-xl font-semibold text-[#1C1209] text-sm transition shadow-lg"
-                >
-                  Sign In Now
-                </button>
-                <button
-                  onClick={() => setShowAuthModal(false)}
-                  className="w-full py-2.5 rounded-xl border border-white/10 font-medium text-white/60 hover:text-white hover:bg-white/5 text-sm transition"
-                >
-                  Keep Browsing
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <AuthRequiredModal
+          open={showAuthModal}
+          onClose={() => setShowAuthModal(false)}
+        />
       </div>
     </PageTransition>
   );

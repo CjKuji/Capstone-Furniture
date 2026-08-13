@@ -8,6 +8,8 @@ import { Box, Layers, ArrowRight, Scan, ImageIcon, ShoppingCart, Check, Loader2 
 import type { FurniturePublicListItem } from "@/types/furniture-public";
 
 import { useCart } from "@/hooks/useCart";
+import { useUser } from "@/hooks/useUser";
+import AuthRequiredModal from "@/app/components/AuthRequiredModal";
 import { getFurniturePublicById } from "@/services/furniturePublic";
 
 interface Props {
@@ -16,8 +18,10 @@ interface Props {
 
 export default function CustomerFurnitureCard({ item }: Props) {
   const router = useRouter();
+  const { authUser } = useUser();
   const { isInCart, toggleItem } = useCart();
   const [adding, setAdding] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
 
   /* ========================
      IMAGE LOGIC (FROM SERVICE)
@@ -57,6 +61,11 @@ export default function CustomerFurnitureCard({ item }: Props) {
         hasModel: item.hasModel,
         imageCount: item.imageCount,
       });
+      return;
+    }
+
+    if (!authUser) {
+      setShowAuthModal(true);
       return;
     }
 
@@ -206,11 +215,12 @@ export default function CustomerFurnitureCard({ item }: Props) {
         <div className="flex gap-2 mt-auto">
           <button
             type="button"
+            title="Explore this furniture item and customize details"
             onClick={(e) => {
               e.stopPropagation();
               router.push(`/furniture/${item.id}`);
             }}
-            className="flex justify-center items-center gap-2 py-2.5 border border-white/10 hover:border-[#D4A97A]/40 group-hover:border-[#D4A97A]/20 rounded-lg flex-1 font-medium text-white/50 hover:text-[#D4A97A] text-xs transition"
+            className="flex justify-center items-center gap-2 py-2.5 border border-white/10 bg-white/5 hover:border-[#D4A97A]/40 hover:bg-white/10 rounded-lg flex-1 font-medium text-white/70 hover:text-[#D4A97A] text-xs transition-all duration-200 shadow-sm hover:shadow-lg"
           >
             Explore Design
             <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
@@ -218,13 +228,14 @@ export default function CustomerFurnitureCard({ item }: Props) {
 
           <button
             type="button"
+            title="Add this furniture item to your cart"
             onClick={handleAddToCart}
             disabled={adding}
             className={`flex justify-center items-center gap-1.5 py-2.5 px-3 rounded-lg font-medium text-xs transition-all duration-200 ${
               isInCart(item.id)
-                ? "bg-[#D4A97A]/20 border border-[#D4A97A]/40 text-[#D4A97A] hover:bg-[#D4A97A]/30"
-                : "bg-[#D4A97A] border border-[#D4A97A] text-[#1C1209] hover:bg-[#D4A97A]/90"
-            } ${adding ? "opacity-60 pointer-events-none" : ""}`}
+                ? "bg-[#D4A97A]/20 border border-[#D4A97A]/40 text-[#D4A97A] hover:bg-[#D4A97A]/30 hover:shadow-lg"
+                : "bg-[#D4A97A] border border-[#D4A97A] text-[#1C1209] hover:bg-[#C4976A] hover:shadow-xl"
+            } ${adding ? "opacity-60 pointer-events-none" : "shadow-lg"}`}
           >
             {adding ? (
               <>
@@ -239,12 +250,13 @@ export default function CustomerFurnitureCard({ item }: Props) {
             ) : (
               <>
                 <ShoppingCart className="w-3.5 h-3.5" />
-                Add
+                Add to Cart
               </>
             )}
           </button>
         </div>
       </div>
+      <AuthRequiredModal open={showAuthModal} onClose={() => setShowAuthModal(false)} />
     </div>
   );
 }

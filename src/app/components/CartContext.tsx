@@ -7,6 +7,7 @@ import {
   useCallback,
   useEffect,
 } from "react";
+import { useUser } from "@/hooks/useUser";
 
 export type CartFurnitureVariant = {
   id: string;
@@ -39,12 +40,18 @@ type CartContextValue = {
   count: number;
 };
 
-const STORAGE_KEY = "woodforge_cart_v1";
+const STORAGE_KEY_PREFIX = "woodforge_cart_v1";
 
-function loadFromStorage(): CartFurnitureItem[] {
+function getStorageKey(userId: string | null): string {
+  if (!userId) return STORAGE_KEY_PREFIX + "_guest";
+  return STORAGE_KEY_PREFIX + "_" + userId;
+}
+
+function loadFromStorage(userId: string | null): CartFurnitureItem[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const key = getStorageKey(userId);
+    const raw = localStorage.getItem(key);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
@@ -53,10 +60,11 @@ function loadFromStorage(): CartFurnitureItem[] {
   }
 }
 
-function saveToStorage(items: CartFurnitureItem[]): void {
+function saveToStorage(userId: string | null, items: CartFurnitureItem[]): void {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+    const key = getStorageKey(userId);
+    localStorage.setItem(key, JSON.stringify(items));
   } catch {
     // quota exceeded or private browsing — fail silently
   }
@@ -65,19 +73,31 @@ function saveToStorage(items: CartFurnitureItem[]): void {
 export const CartContext = createContext<CartContextValue | null>(null);
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
+  const { authUser } = useUser();
   const [items, setItems] = useState<CartFurnitureItem[]>([]);
   const [hydrated, setHydrated] = useState(false);
+  const [lastUserId, setLastUserId] = useState<string | null>(null);
 
-  // Hydrate from localStorage on mount (client only)
+  // Hydrate from localStorage when user changes
   useEffect(() => {
-    setItems(loadFromStorage());
+    const userId = authUser?.id ?? null;
+    
+    // Only reload if user ID has actually changed
+    if (userId !== lastUserId) {
+      setItems(loadFromStorage(userId));
+      setLastUserId(userId);
+    }
+    
     setHydrated(true);
-  }, []);
+  }, [authUser?.id, lastUserId]);
 
   // Persist every time items change (after hydration to avoid overwriting)
   useEffect(() => {
-    if (hydrated) saveToStorage(items);
-  }, [items, hydrated]);
+    if (hydrated) {
+      const userId = authUser?.id ?? null;
+      saveToStorage(userId, items);
+    }
+  }, [items, hydrated, authUser?.id]);
 
   const isInCart = useCallback(
     (id: string) => items.some((i) => i.id === id),

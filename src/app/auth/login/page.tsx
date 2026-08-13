@@ -133,10 +133,14 @@ export default function Login() {
           <div className="absolute top-0 left-0 h-[2px] w-full bg-gradient-to-r from-transparent via-[#D4A97A]/40 to-transparent" />
 
           <div>
+            <button
+              type="button"
+              onClick={() => router.push("/")}
+              className="mb-4 text-[10px] text-white/40 hover:text-[#D4A97A] transition self-start"
+            >
+              ← Back to home
+            </button>
             <div className="mb-4 sm:mb-5">
-              <p className="text-[9px] font-black tracking-[0.22em] text-[#7A5C3A] uppercase mb-1">
-                Gateway Verification
-              </p>
               <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
                 Welcome back
               </h2>
@@ -144,6 +148,7 @@ export default function Login() {
                 Sign in to resume access to your configurations.
               </p>
             </div>
+          </div>
 
             {/* RESERVED CONTAINER FOR MAIN SYSTEM ERRORS */}
             <div className="min-h-[44px] mb-2 flex items-center">
@@ -227,7 +232,7 @@ export default function Login() {
                 {loading ? "Logging in..." : "Login"}
               </button>
             </form>
-          </div>
+
 
           <p className="mt-4 sm:mt-5 text-center text-xs sm:text-sm text-white/40">
             {`Don't have an account?`}{" "}

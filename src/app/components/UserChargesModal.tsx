@@ -85,7 +85,7 @@ export default function UserChargesModal({ open, onClose, charges, order, userId
 
   return (
     <div
-      className="fixed inset-0 z-[99999] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-0 sm:p-4"
+      className="fixed inset-0 z-[9999] flex flex-col justify-start gap-32 sm:gap-0 sm:justify-start sm:pt-20 items-center bg-black/70 backdrop-blur-sm p-4"
       onClick={onClose}
     >
       <div
@@ -93,7 +93,7 @@ export default function UserChargesModal({ open, onClose, charges, order, userId
         className="
           relative w-full sm:max-w-xl
           flex flex-col
-          max-h-[92vh] sm:max-h-[85vh]
+          max-h-[85vh]
           rounded-t-3xl sm:rounded-2xl overflow-hidden
           border-t border-x sm:border border-[#2A1F14]
           bg-[#0E0A06]

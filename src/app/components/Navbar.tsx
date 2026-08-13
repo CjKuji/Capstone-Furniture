@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Image from "next/image"; // Imported for optimized logo rendering
 import {
-  Search,
   ShoppingBag,
   ShoppingCart,
   MessageSquare,
@@ -58,13 +57,11 @@ export default function Navbar() {
   const orderCount = authUser ? (orders?.length ?? 0) : 0;
   const inquiryCount = authUser ? (inquiries?.length ?? 0) : 0;
 
-  const [searchOpen,   setSearchOpen]   = useState(false);
   const [menuOpen,     setMenuOpen]     = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [scrolled,     setScrolled]     = useState(false);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const searchRef   = useRef<HTMLInputElement>(null);
 
   const [prevPathname, setPrevPathname] = useState(pathname);
   if (pathname !== prevPathname) {
@@ -116,10 +113,6 @@ export default function Navbar() {
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
-
-  useEffect(() => {
-    if (searchOpen) searchRef.current?.focus();
-  }, [searchOpen]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -215,13 +208,13 @@ export default function Navbar() {
             aria-label="Woodforge Home"
             className="flex items-center shrink-0 group py-1"
           >
-            {/* Expanded box to fill the vertical space cleanly without squishing */}
-            <div className="relative w-48 h-11 sm:w-56 sm:h-13 transition-transform group-hover:scale-[1.01] duration-200">
+            {/* Slightly larger logo for more presence in the navbar */}
+            <div className="relative w-56 h-14 sm:w-64 sm:h-16 transition-transform group-hover:scale-[1.01] duration-200 overflow-hidden">
               <Image 
                 src="https://havfynxlaoaieomuomzy.supabase.co/storage/v1/object/public/System-Assets/Logo.png"
                 alt="Woodforge Logo"
                 fill
-                sizes="(max-width: 640px) 192px, 224px"
+                sizes="(max-width: 640px) 224px, 256px"
                 className="object-contain object-left brightness-110"
                 priority
               />
@@ -238,17 +231,6 @@ export default function Navbar() {
           {/* RIGHT ACTIONS */}
           <div className="flex items-center gap-0.5 sm:gap-1">
             <div className="hidden md:flex items-center gap-0.5 sm:gap-1">
-              {/* SEARCH TOGGLE */}
-              <button
-                onClick={() => setSearchOpen((p) => !p)}
-                aria-label="Toggle search"
-                className="hover:bg-white/10 p-2 rounded-full text-white/60 hover:text-white transition"
-              >
-                {searchOpen
-                  ? <X className="w-4 h-4 sm:w-5 sm:h-5" />
-                  : <Search className="w-4 h-4 sm:w-5 sm:h-5" />}
-              </button>
-
               {!initialized ? (
                 <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white/10 animate-pulse ml-0.5 sm:ml-1" />
               ) : authUser ? (
@@ -396,27 +378,7 @@ export default function Navbar() {
           </div>
         </div>
 
-        {/* SEARCH BAR */}
-        {searchOpen && (
-          <div className="bg-[#1C1209] px-3 sm:px-6 py-2.5 sm:py-3 border-white/10 border-t">
-            <div className="flex items-center gap-2 sm:gap-3 bg-white/5 mx-auto px-3 sm:px-4 py-2 sm:py-2.5 border border-white/10 rounded-lg max-w-2xl">
-              <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white/40 shrink-0" />
-              <input
-                ref={searchRef}
-                aria-label="Search designs"
-                placeholder="Search designs, materials, finishes…"
-                className="bg-transparent outline-none w-full text-white placeholder:text-white/30 text-xs sm:text-sm"
-                onKeyDown={(e) => e.key === "Escape" && setSearchOpen(false)}
-              />
-              <button
-                onClick={() => setSearchOpen(false)}
-                className="text-white/30 hover:text-white/60 transition"
-              >
-                <X className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              </button>
-            </div>
-          </div>
-        )}
+
       </header>
 
       {/* MOBILE SLIDE-DOWN MENU */}
@@ -428,18 +390,6 @@ export default function Navbar() {
           <div className="h-16 sm:h-20 shrink-0" onClick={() => setMenuOpen(false)} />
 
           <nav className="flex-1 overflow-y-auto px-4 py-2">
-            <div className="mb-5 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-              <button
-                onClick={() => {
-                  setSearchOpen(true);
-                  setMenuOpen(false);
-                }}
-                className="flex items-center justify-between w-full rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-left text-sm text-white/80 transition hover:bg-white/5"
-              >
-                <span>Search designs</span>
-                <Search className="w-4 h-4 text-[#D4A97A]" />
-              </button>
-            </div>
 
             <ul className="flex flex-col divide-y divide-white/5">
               {renderNavItems(true)}

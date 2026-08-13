@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Loader2, AlertTriangle, RefreshCw, ShieldCheck, Eye } from "lucide-react";
+import { Loader2, AlertTriangle, ShieldCheck, Eye } from "lucide-react";
 import PageTransition from "@/app/components/PageTransition";
 import Reveal from "@/app/components/Reveal";
 import AdminInquiryCard from "@/app/components/AdminInquiryCard"; 
@@ -39,16 +39,6 @@ export default function AdminInquiriesPage() {
               </div>
             </Reveal>
 
-            {/* LIVE STREAM RECONNECT BUTTON */}
-            {!isLoading && !error && inquiries && inquiries.length > 0 && (
-              <button
-                type="button"
-                onClick={() => refetch()}
-                className="inline-flex items-center gap-2 self-start md:self-auto text-[10px] font-black uppercase tracking-widest text-[#D4A97A] hover:text-white bg-[#D4A97A]/5 hover:bg-[#D4A97A]/10 border border-[#D4A97A]/20 px-4 h-9 rounded-xl transition-all"
-              >
-                <RefreshCw className="w-3 h-3" /> Refresh Queue
-              </button>
-            )}
           </div>
 
           {/* 3. FETCH STATE ROUTING CANVASES */}
@@ -71,7 +61,7 @@ export default function AdminInquiriesPage() {
                 onClick={() => refetch()}
                 className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-[#D4A97A] hover:text-white bg-[#D4A97A]/5 hover:bg-[#D4A97A]/10 border border-[#D4A97A]/20 px-4 py-2 rounded-lg transition-all"
               >
-                <RefreshCw className="w-3 h-3" /> Reconnect Live Stream
+                Reconnect Live Stream
               </button>
             </div>
           ) : !inquiries || inquiries.length === 0 ? (

@@ -35,6 +35,10 @@ function detectUnitScale(size: THREE.Vector3): number {
  * The returned scale is in metres-per-native-unit, ready to be passed
  * directly to a Three.js <group scale={s}>.
  */
+function clampScaleValue(value: number) {
+  return Math.max(0.001, Math.min(value, 100));
+}
+
 export function computeRealScale(
   scene: THREE.Object3D,
   dimensions: Dimensions
@@ -56,7 +60,48 @@ export function computeRealScale(
     : modelHeightM;
 
   const finalScale = (targetHeightM / modelHeightM) * unitScale;
-  return Math.max(0.001, Math.min(finalScale, 100));
+  return clampScaleValue(finalScale);
+}
+
+export function computeRenderScale(
+  scene: THREE.Object3D,
+  dimensions: Dimensions
+): THREE.Vector3 {
+  if (!scene) return new THREE.Vector3(1, 1, 1);
+
+  const box = new THREE.Box3().setFromObject(scene);
+  const size = new THREE.Vector3();
+  box.getSize(size);
+
+  if (size.y <= 0) return new THREE.Vector3(1, 1, 1);
+
+  const unitScale     = detectUnitScale(size);
+  const modelWidthM   = size.x * unitScale;
+  const modelDepthM   = size.z * unitScale;
+  const modelHeightM  = size.y * unitScale;
+
+  const widthCm  = dimensions?.width_cm;
+  const depthCm  = dimensions?.depth_cm;
+  const heightCm = dimensions?.height_cm;
+
+  if (
+    widthCm != null && widthCm > 0 &&
+    depthCm != null && depthCm > 0 &&
+    heightCm != null && heightCm > 0
+  ) {
+    const targetWidthM  = widthCm / 100;
+    const targetDepthM  = depthCm / 100;
+    const targetHeightM = heightCm / 100;
+
+    return new THREE.Vector3(
+      clampScaleValue(targetWidthM  / Math.max(modelWidthM, 0.00001)),
+      clampScaleValue(targetHeightM / Math.max(modelHeightM, 0.00001)),
+      clampScaleValue(targetDepthM  / Math.max(modelDepthM, 0.00001)),
+    );
+  }
+
+  const uniformScale = computeRealScale(scene, dimensions);
+  return new THREE.Vector3(uniformScale, uniformScale, uniformScale);
 }
 
 /**
@@ -91,24 +136,12 @@ export function computeARInfo(
     ? heightCm / 100
     : modelHeightM;
 
-  // This is the scale we hand to model-viewer. model-viewer treats 1 GLB unit
-  // = 1 metre, so we must account for the native unit system AND the desired
-  // real-world size.
-  const s       = (targetHeightM / modelHeightM) * unitScale;
-  const clamped = Math.max(0.001, Math.min(s, 100));
-
-  // box.min.y is the Y coordinate of the mesh's bottom face in GLB local space.
-  // After model-viewer applies `scale`, the bottom face will land at:
-  //   box.min.y * clamped  (metres, in model-viewer's world)
-  // If the GLB origin is at the mesh centroid, box.min.y ≈ -size.y/2, which
-  // means the model floats by ~targetHeightM/2.  We expose this offset so the
-  // caller can compensate.
-  const arYOffsetM = box.min.y * clamped; // negative → mesh bottom is below origin (good)
-                                           // positive → mesh bottom is above origin (floats)
+  const renderScale = computeRenderScale(scene, dimensions);
+  const arYOffsetM = box.min.y * renderScale.y;
 
   return {
     scaledHeightM: targetHeightM,
-    arScale: `${clamped} ${clamped} ${clamped}`,
+    arScale: `${renderScale.x} ${renderScale.y} ${renderScale.z}`,
     arYOffsetM,
   };
 }

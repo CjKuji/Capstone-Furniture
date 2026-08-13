@@ -130,6 +130,13 @@ export default function Register() {
           <div className="absolute top-0 left-0 h-[2px] w-full bg-gradient-to-r from-transparent via-[#D4A97A]/40 to-transparent" />
 
           <div>
+            <button
+              type="button"
+              onClick={() => router.push("/")}
+              className="mb-4 text-[10px] text-white/40 hover:text-[#D4A97A] transition self-start"
+            >
+              ← Back to home
+            </button>
             <div className="mb-4 sm:mb-5">
               <p className="text-[9px] font-black tracking-[0.22em] text-[#7A5C3A] uppercase mb-1">
                 Onboarding Portal

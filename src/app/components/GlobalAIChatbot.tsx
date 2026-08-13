@@ -90,10 +90,10 @@ export default function GlobalAIChatbot() {
       {/* Chat panel */}
       {open && (
         <div
-          className={"fixed z-50 left-1/2 -translate-x-1/2 bottom-6 print:hidden " +
-            "sm:bottom-24 sm:left-auto sm:translate-x-0 sm:right-6 " +
-            "flex flex-col w-[95vw] max-w-[420px] sm:w-[360px] h-[60vh] sm:h-[520px] " +
-            "rounded-3xl overflow-hidden bg-[#0B0704] border border-[#2A1F14]"}
+          className={"fixed z-[9999] left-1/2 -translate-x-1/2 bottom-6 print:hidden " +
+            "sm:bottom-auto sm:top-6 sm:left-auto sm:translate-x-0 sm:right-6 " +
+            "flex flex-col w-[95vw] max-w-[420px] sm:w-[420px] h-[60vh] max-h-[calc(100vh-96px)] " +
+            "sm:h-[calc(100vh-120px)] rounded-3xl overflow-hidden bg-[#0B0704] border border-[#2A1F14]"}
           style={{ boxShadow: "0 24px 64px rgba(0,0,0,0.7)" }}
         >
           {/* Header */}

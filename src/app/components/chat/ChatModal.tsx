@@ -189,7 +189,7 @@ export default function ChatModal({
   if (!open || !entityData?.id) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 pt-20 sm:pt-4">
       <div className="w-full max-w-3xl h-[88vh] flex flex-col rounded-3xl overflow-hidden bg-[#0B0704] border border-[#2A1F14] shadow-[0_32px_80px_rgba(0,0,0,0.8)]">
         <header className="flex items-center justify-between px-5 py-4 bg-[#0E0B06]/80 backdrop-blur border-b border-[#2A1F14] flex-shrink-0">
           <div className="space-y-0.5">

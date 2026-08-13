@@ -132,7 +132,7 @@ export const UserInquiryChargesModal: React.FC<UserInquiryChargesModalProps> = (
 
   return (
     <div
-      className="fixed inset-0 z-[99999] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-0 sm:p-4 animate-fade-in"
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
       onClick={onClose}
     >
       <div

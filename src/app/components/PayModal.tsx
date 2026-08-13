@@ -134,7 +134,7 @@ export default function PayModal({ open, onClose, order, inquiry, totalAmount }:
   return (
     /* ── OVERLAY ── */
     <div
-      className="fixed inset-0 z-[99999] flex justify-center p-4 pb-6 md:pb-8 backdrop-blur-md overflow-hidden bg-black/75"
+      className="fixed inset-0 z-[99999] flex justify-center p-4 pt-20 sm:pt-4 pb-6 md:pb-8 backdrop-blur-md overflow-hidden bg-black/75"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       {/* ── RESPONSIVE SHEET / CONTAINER ── */}
@@ -142,7 +142,7 @@ export default function PayModal({ open, onClose, order, inquiry, totalAmount }:
         className="
           w-full flex flex-col 
           rounded-2xl max-w-lg
-          mt-[76px] h-[calc(100vh-100px)] md:mt-[84px] md:h-[calc(100vh-116px)]
+          h-[calc(100vh-80px)] md:h-[calc(100vh-96px)]
           shadow-[0_24px_64px_rgba(0,0,0,0.85)] transition-all duration-200 overflow-hidden
           border border-white/[0.06] bg-[#0A0705]
         "

@@ -4,10 +4,8 @@ import React, { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { 
   Plus, 
-  Loader2, 
   Package, 
   AlertTriangle, 
-  RefreshCw, 
   CheckCircle2,
   ShieldCheck
 } from "lucide-react";
@@ -195,15 +193,6 @@ function InquiryManagementContent() {
           </Reveal>
 
           <div className="flex items-center gap-3 w-full md:w-auto shrink-0">
-            {!isLoading && !error && inquiries && inquiries.length > 0 && (
-              <button
-                type="button"
-                onClick={() => refetch()}
-                className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-[#D4A97A] hover:text-white bg-[#D4A97A]/5 hover:bg-[#D4A97A]/10 border border-[#D4A97A]/20 px-4 h-9 rounded-xl transition-all"
-              >
-                <RefreshCw className="w-3 h-3" /> Refresh Queue
-              </button>
-            )}
             <button 
               onClick={handleOpenModal}
               className="flex items-center justify-center gap-2 bg-[#D4A97A] hover:bg-[#C4976A] active:scale-95 px-5 h-9 rounded-xl font-bold text-[#1C1209] text-[10px] uppercase tracking-wider transition-all shadow-lg shadow-[#D4A97A]/10 w-full md:w-fit"
@@ -254,7 +243,7 @@ function InquiryManagementContent() {
               onClick={() => refetch()}
               className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-[#D4A97A] hover:text-white bg-[#D4A97A]/5 hover:bg-[#D4A97A]/10 border border-[#D4A97A]/20 px-4 py-2 rounded-lg transition-all"
             >
-              <RefreshCw className="w-3 h-3" /> Retry Stream Connection
+              Retry Stream Connection
             </button>
           </div>
         ) : !inquiries || inquiries.length === 0 ? (

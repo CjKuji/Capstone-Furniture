@@ -7,7 +7,7 @@ import { getCompletedOrderCount, getCompletedInquiryCount } from "./reportExport
    HELPERS
    ========================================================= */
 
-/** Format a non‑negative integer as PHP currency (no ± signs, safe fallback) */
+/** Format currency as plain single-line PHP value without sign stacking. */
 function formatPHPInt(n: number): string {
     const safe = Math.max(0, Math.round(n ?? 0));
     return "₱" + safe.toLocaleString("en-PH", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
@@ -16,6 +16,11 @@ function formatPHPInt(n: number): string {
 function formatPercent(value: number): string {
     const safe = Math.max(0, Math.min(100, Math.round(value ?? 0)));
     return `${safe}%`;
+}
+
+function truncateText(text: string, maxLength = 26): string {
+    const safe = String(text ?? "");
+    return safe.length > maxLength ? `${safe.slice(0, maxLength - 1).trimEnd()}…` : safe;
 }
 
 /* =========================================================
@@ -31,19 +36,22 @@ export function triggerReportPDFPrint(data: AnalyticsData) {
 
     // ── Color palette ──
     const C = {
-        headerBg:       [45, 55, 72] as [number, number, number],
+        headerBg:       [30, 40, 55] as [number, number, number],
         headerText:     [255, 255, 255] as [number, number, number],
-        bodyText:       [50, 50, 50] as [number, number, number],
-        accentGold:     [180, 120, 60] as [number, number, number],
-        mutedText:      [100, 100, 100] as [number, number, number],
-        lightBg:        [248, 248, 248] as [number, number, number],
-        border:         [210, 210, 210] as [number, number, number],
-        ordersHeader:   [70, 90, 110] as [number, number, number],
-        inquiriesHeader:[135, 95, 75] as [number, number, number],
-        productsHeader: [85, 65, 45] as [number, number, number],
-        revenueHeader:  [55, 55, 75] as [number, number, number],
-        auditHeader:    [175, 35, 35] as [number, number, number],
-        auditRow:       [255, 238, 238] as [number, number, number],
+        bodyText:       [40, 40, 40] as [number, number, number],
+        accentGold:     [212, 169, 122] as [number, number, number],
+        mutedText:      [110, 110, 110] as [number, number, number],
+        lightBg:        [250, 250, 250] as [number, number, number],
+        border:         [220, 220, 220] as [number, number, number],
+        ordersHeader:   [55, 85, 130] as [number, number, number],
+        inquiriesHeader:[150, 100, 70] as [number, number, number],
+        productsHeader: [100, 75, 45] as [number, number, number],
+        revenueHeader:  [70, 70, 90] as [number, number, number],
+        auditHeader:    [190, 50, 50] as [number, number, number],
+        auditRow:       [255, 245, 245] as [number, number, number],
+        kpiBox:         [245, 240, 235] as [number, number, number],
+        kpiBorder:      [212, 169, 122] as [number, number, number],
+        success:        [76, 175, 80] as [number, number, number],
     };
 
     // ── Track pages for header/footer ──
@@ -53,23 +61,32 @@ export function triggerReportPDFPrint(data: AnalyticsData) {
         const h = doc.internal.pageSize.getHeight();
 
         // Top accent line
-        doc.setFillColor(C.headerBg[0], C.headerBg[1], C.headerBg[2]);
-        doc.rect(margin, 4, contentWidth, 0.5, "F");
+        doc.setFillColor(C.accentGold[0], C.accentGold[1], C.accentGold[2]);
+        doc.rect(margin, 3.5, contentWidth, 0.8, "F");
 
+        doc.setFontSize(7.5);
+        doc.setTextColor(120, 120, 120);
+        doc.setFont("helvetica", "bold");
+        doc.text("Furniture Enterprise — Admin Operations Report", margin, 9.5);
+        
         doc.setFontSize(7);
-        doc.setTextColor(140, 140, 140);
+        doc.setTextColor(150, 150, 150);
         doc.setFont("helvetica", "normal");
-        doc.text("Furniture Enterprise — Admin Operations Report", margin, 10);
-        doc.text(`Page ${pageNum} of ${totalPages}`, pageWidth - margin, 10, { align: "right" });
+        doc.text(`Page ${pageNum} of ${totalPages}`, pageWidth - margin, 9.5, { align: "right" });
 
-        // Footer
-        doc.setFontSize(6.5);
-        doc.setTextColor(170, 170, 170);
+        // Footer separator line
+        doc.setDrawColor(C.border[0], C.border[1], C.border[2]);
+        doc.setLineWidth(0.3);
+        doc.line(margin, h - 7, pageWidth - margin, h - 7);
+
+        // Footer text
+        doc.setFontSize(6);
+        doc.setTextColor(160, 160, 160);
         doc.setFont("helvetica", "normal");
         doc.text(
-            `Generated ${new Date().toLocaleString("en-PH")} — Confidential`,
+            `Generated ${new Date().toLocaleString("en-PH", { dateStyle: "short", timeStyle: "short" })} — Confidential`,
             margin,
-            h - 4,
+            h - 3.5,
         );
     };
 
@@ -84,10 +101,16 @@ export function triggerReportPDFPrint(data: AnalyticsData) {
     // ── Reusable helpers ──
 
     function sectionTitle(text: string, y: number): number {
-        doc.setFontSize(14);
+        doc.setFontSize(13);
         doc.setTextColor(30, 30, 30);
         doc.setFont("helvetica", "bold");
         doc.text(text, margin, y);
+        
+        // Underline for section titles
+        doc.setDrawColor(C.accentGold[0], C.accentGold[1], C.accentGold[2]);
+        doc.setLineWidth(0.7);
+        doc.line(margin, y + 1.5, margin + 50, y + 1.5);
+        
         return y + 7;
     }
 
@@ -126,25 +149,37 @@ export function triggerReportPDFPrint(data: AnalyticsData) {
             margin: { left: margin, right: margin },
             tableWidth: contentWidth,
             didDrawPage,
+            theme: "grid",
             headStyles: {
                 fillColor: headColor,
                 textColor: 255,
                 fontStyle: "bold",
-                fontSize: 8,
-                cellPadding: 2.5,
+                fontSize: 7,
+                cellPadding: 2,
             },
             bodyStyles: {
-                fontSize: 8,
+                fontSize: 7,
                 textColor: C.bodyText,
-                cellPadding: 2,
+                cellPadding: 1.5,
+                overflow: "linebreak",
+                valign: "middle",
             },
             alternateRowStyles: {
                 fillColor: C.lightBg,
             },
-            columnStyles: colStyles,
+            columnStyles: {
+                ...colStyles,
+                "0": { ...colStyles["0"], overflow: "linebreak" },
+                "1": { ...colStyles["1"], overflow: "linebreak" },
+                "2": { ...colStyles["2"], overflow: "linebreak" },
+                "3": { ...colStyles["3"], overflow: "linebreak" },
+                "4": { ...colStyles["4"], overflow: "linebreak" },
+            },
             styles: {
                 lineColor: [230, 230, 230],
                 lineWidth: 0.15,
+                overflow: "linebreak",
+                cellPadding: 2,
             },
             tableLineColor: [220, 220, 220],
             tableLineWidth: 0.2,
@@ -166,31 +201,30 @@ export function triggerReportPDFPrint(data: AnalyticsData) {
     let y = 20;
 
     // ── TITLE SECTION ──
-    doc.setFontSize(22);
+    doc.setFontSize(24);
     doc.setTextColor(30, 30, 30);
     doc.setFont("helvetica", "bold");
     doc.text("Admin Operations Report", margin, y);
-    y += 8;
+    y += 7;
 
-    doc.setFontSize(9);
+    doc.setFontSize(10);
     doc.setTextColor(C.mutedText[0], C.mutedText[1], C.mutedText[2]);
     doc.setFont("helvetica", "normal");
-    doc.text(`Generated ${new Date().toLocaleString("en-PH")}`, margin, y);
-    y += 3;
+    const generatedDate = new Date().toLocaleString("en-PH", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+    });
+    doc.text(`Generated: ${generatedDate}`, margin, y);
+    y += 4;
 
-    // Separator line
-    doc.setDrawColor(C.border[0], C.border[1], C.border[2]);
+    doc.setDrawColor(C.accentGold[0], C.accentGold[1], C.accentGold[2]);
+    doc.setLineWidth(1.5);
     doc.line(margin, y, pageWidth - margin, y);
-    y += 8;
+    y += 10;
 
-    // ── REVENUE HEADER ──
-    doc.setFontSize(26);
-    doc.setTextColor(C.accentGold[0], C.accentGold[1], C.accentGold[2]);
-    doc.setFont("helvetica", "bold");
-    doc.text(`Total Revenue  ${formatPHPInt(data.totalRevenue)}`, margin, y);
-    y += 14;
-
-    // ── EXECUTIVE SUMMARY ──
     const completedOrders = getCompletedOrderCount(data.ordersByStatus);
     const completedInquiries = getCompletedInquiryCount(data.inquiriesByStatus);
     const processingOrders = data.totalOrders - completedOrders;
@@ -198,6 +232,18 @@ export function triggerReportPDFPrint(data: AnalyticsData) {
     const inquiryConversionPercent = data.totalInquiries > 0
         ? (data.paidInquiries / data.totalInquiries) * 100
         : 0;
+
+    doc.setFontSize(28);
+    doc.setTextColor(C.accentGold[0], C.accentGold[1], C.accentGold[2]);
+    doc.setFont("helvetica", "bold");
+    doc.text(formatPHPInt(data.totalRevenue), margin, y);
+    y += 6;
+
+    doc.setFontSize(10);
+    doc.setTextColor(C.mutedText[0], C.mutedText[1], C.mutedText[2]);
+    doc.setFont("helvetica", "normal");
+    doc.text("Total Revenue", margin, y);
+    y += 12;
 
     y = sectionTitle("Executive Summary", y);
 
@@ -214,7 +260,7 @@ export function triggerReportPDFPrint(data: AnalyticsData) {
     ];
 
     y = renderTable(summaryHeaders, summaryRows, y, C.headerBg);
-    y += 10;
+    y += 12;
 
     // ── ORDERS REPORT ──
     y = checkPageBreak(y, 80);
@@ -230,7 +276,7 @@ export function triggerReportPDFPrint(data: AnalyticsData) {
     ];
 
     y = renderTable(summaryHeaders, orderRows, y, C.ordersHeader);
-    y += 10;
+    y += 12;
 
     // ── BEST SELLING PRODUCTS ──
     y = checkPageBreak(y, data.topProducts.length > 0 ? 60 : 20);
@@ -240,7 +286,7 @@ export function triggerReportPDFPrint(data: AnalyticsData) {
         const prodHeaders = ["#", "Product Name", "Units Sold", "Revenue"];
         const prodRows = data.topProducts.map((p, i) => [
             String(i + 1),
-            p.name,
+            truncateText(p.name, 24),
             p.orders,
             formatPHPInt(Math.round(p.revenue)),
         ]);
@@ -256,8 +302,9 @@ export function triggerReportPDFPrint(data: AnalyticsData) {
         doc.setTextColor(C.mutedText[0], C.mutedText[1], C.mutedText[2]);
         doc.setFont("helvetica", "italic");
         doc.text("No product sales data available yet.", margin, y);
+        y += 8;
     }
-    y += 10;
+    y += 12;
 
     // ── INQUIRIES REPORT ──
     y = checkPageBreak(y, 80);
@@ -275,7 +322,7 @@ export function triggerReportPDFPrint(data: AnalyticsData) {
     ];
 
     y = renderTable(summaryHeaders, inquiryRows, y, C.inquiriesHeader);
-    y += 10;
+    y += 12;
 
     // ── REVENUE OVERVIEW (Bar Chart + Table) ──
     if (data.revenueByMonth.length > 0) {
@@ -285,10 +332,10 @@ export function triggerReportPDFPrint(data: AnalyticsData) {
 
         // ── Draw Bar Chart ──
         const chartLeft = margin + 5;
-        const chartAreaHeight = 52;
+        const chartAreaHeight = 58;  // Extra height for month labels
         const chartBottom = y + chartAreaHeight;
         const chartTop = y;
-        const chartHeight = chartAreaHeight - 12;
+        const chartHeight = chartAreaHeight - 18;  // More space for labels below
         const chartWidth = contentWidth - 10;
 
         const values = data.revenueByMonth.map((item) => Math.round(item.revenue));
@@ -301,45 +348,66 @@ export function triggerReportPDFPrint(data: AnalyticsData) {
         doc.setFontSize(6);
         doc.setTextColor(140, 140, 140);
         doc.setFont("helvetica", "normal");
-        doc.text(formatPHPInt(maxVal), chartLeft - 2, chartTop + 4, { align: "right" });
-        doc.text("0", chartLeft - 2, chartBottom - 2, { align: "right" });
+        const maxLabel = maxVal >= 1000000 ? `₱${(maxVal / 1000000).toFixed(1)}M` : formatPHPInt(maxVal);
+        doc.text(maxLabel, chartLeft - 3, chartTop + 4, { align: "right" });
+        
+        const midVal = maxVal / 2;
+        const midLabel = midVal >= 1000000 ? `₱${(midVal / 1000000).toFixed(1)}M` : formatPHPInt(Math.round(midVal));
+        doc.text(midLabel, chartLeft - 3, chartTop + chartHeight / 2 + 2, { align: "right" });
+        
+        doc.text("₱0", chartLeft - 3, chartBottom - 2, { align: "right" });
 
-        const barColor: [number, number, number] = [180, 120, 60];
+        const barColor: [number, number, number] = C.accentGold;
+        
+        // Determine label skip interval: show every Nth month to avoid crowding
+        let labelSkip = 1;
+        if (barCount > 18) labelSkip = 3;  // Show every 3rd month
+        else if (barCount > 12) labelSkip = 2; // Show every 2nd month
 
         values.forEach((val, i) => {
             const barH = maxVal > 0 ? (val / maxVal) * chartHeight : 0;
             const x = chartLeft + barGap + i * (barWidth + barGap);
             const yBar = chartBottom - 2 - barH;
 
-            // Bar rectangle
+            // Bar rectangle with gradient effect (using darker shade on edges)
             doc.setFillColor(barColor[0], barColor[1], barColor[2]);
             doc.rect(x, yBar, barWidth, barH, "F");
 
             // Value label above bar (only if bar is tall enough)
-            if (barH > 8) {
-                doc.setFontSize(6);
+            if (barH > 12) {
+                doc.setFontSize(5);
                 doc.setTextColor(80, 80, 80);
                 doc.setFont("helvetica", "bold");
-                doc.text(formatPHPInt(val), x + barWidth / 2, yBar - 2, { align: "center" });
+                const valueStr = formatPHPInt(val);
+                const displayVal = valueStr.length > 10 ? valueStr.substring(0, 8) + "k" : valueStr;
+                doc.text(displayVal, x + barWidth / 2, yBar - 2.5, { align: "center" });
             }
 
-            // Month label below bar
-            doc.setFontSize(6);
-            doc.setTextColor(100, 100, 100);
-            doc.setFont("helvetica", "normal");
-            doc.text(data.revenueByMonth[i].month, x + barWidth / 2, chartBottom + 3, { align: "center" });
+            // Month label below bar (only show every Nth label)
+            if (i % labelSkip === 0) {
+                doc.setFontSize(5);
+                doc.setTextColor(100, 100, 100);
+                doc.setFont("helvetica", "normal");
+                doc.text(data.revenueByMonth[i].month, x + barWidth / 2, chartBottom + 3.5, { align: "center" });
+            }
         });
 
-        // Axis line
+        // Y-axis line
+        doc.setDrawColor(140, 140, 140);
+        doc.setLineWidth(0.4);
+        doc.line(chartLeft - 1, chartTop, chartLeft - 1, chartBottom - 2);
+
+        // X-axis line
         doc.setDrawColor(180, 180, 180);
+        doc.setLineWidth(0.5);
         doc.line(chartLeft, chartBottom - 2, chartLeft + chartWidth, chartBottom - 2);
 
-        y = chartBottom + 12;
+        y = chartBottom + 16;  // More space for month labels
 
         // ── Revenue Table ──
         const revHeaders = ["Month", "Revenue"];
         const revRows = data.revenueByMonth.map((item) => [
-            item.month,
+            truncateText(item.month, 8),
             formatPHPInt(Math.round(item.revenue)),
         ]);
 
@@ -347,7 +415,7 @@ export function triggerReportPDFPrint(data: AnalyticsData) {
         revRows.push(["TOTAL", formatPHPInt(totalRev)]);
 
         y = renderTable(revHeaders, revRows, y, C.revenueHeader);
-        y += 10;
+        y += 12;
     }
 
     // ── AUDIT ALERTS ──
@@ -358,8 +426,8 @@ export function triggerReportPDFPrint(data: AnalyticsData) {
         const auditHeaders = ["Origin", "Reference", "Issue", "Expected", "Paid"];
         const auditRows = data.mismatches.slice(0, 10).map((m) => [
             m.type.charAt(0).toUpperCase() + m.type.slice(1),
-            m.reference,
-            m.issue.length > 50 ? m.issue.substring(0, 50) + "..." : m.issue,
+            truncateText(m.reference, 12),
+            truncateText(m.issue, 26),
             formatPHPInt(m.expectedAmount),
             formatPHPInt(m.paidAmount),
         ]);
@@ -383,13 +451,13 @@ export function triggerReportPDFPrint(data: AnalyticsData) {
                 fillColor: C.auditHeader,
                 textColor: 255,
                 fontStyle: "bold",
-                fontSize: 7,
-                cellPadding: 2.5,
+                fontSize: 6,
+                cellPadding: 2,
             },
             bodyStyles: {
-                fontSize: 7,
+                fontSize: 6,
                 textColor: C.bodyText,
-                cellPadding: 2,
+                cellPadding: 1.5,
             },
             alternateRowStyles: {
                 fillColor: C.auditRow,

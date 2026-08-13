@@ -14,11 +14,14 @@ import { Canvas } from "@react-three/fiber";
 import {
   OrbitControls,
   useGLTF,
-  Html,
   Environment,
 } from "@react-three/drei";
 
-import { computeRealScale, computeARInfo } from "@/lib/3D/nomarlizeFurnitureModel";
+import {
+  computeRealScale,
+  computeRenderScale,
+  computeARInfo,
+} from "@/lib/3D/nomarlizeFurnitureModel";
 import ARModal from "./ARModal";
 import { Scan, AlertTriangle, Loader2 } from "lucide-react";
 
@@ -32,10 +35,17 @@ type Dimensions = {
   height_cm?: number | null;
 };
 
+type DimensionInputs = {
+  width_cm: string;
+  depth_cm: string;
+  height_cm: string;
+};
+
 type ModelProps = {
   url: string;
   textureUrl?: string | null;
   dimensions?: Dimensions;
+  renderScale?: THREE.Vector3;
   onReady?: () => void;
 };
 
@@ -72,7 +82,7 @@ function ViewerFallback({
     MODEL LAYER
 ========================================================= */
 
-function Model({ url, textureUrl, dimensions, onReady }: ModelProps) {
+function Model({ url, textureUrl, dimensions, renderScale, onReady }: ModelProps) {
   const { scene } = useGLTF(url);
   const hasReportedReady = useRef(false);
   const lastUrlRef = useRef(url);
@@ -101,9 +111,14 @@ function Model({ url, textureUrl, dimensions, onReady }: ModelProps) {
   }, [scene]);
 
   const { scale, offset } = useMemo(() => {
-    const calculatedScale = dimensions
-      ? computeRealScale(clonedScene, dimensions)
-      : 1;
+    const calculatedScale = renderScale
+      ? renderScale
+      : dimensions
+      ? (() => {
+          const uniformScale = computeRealScale(clonedScene, dimensions);
+          return new THREE.Vector3(uniformScale, uniformScale, uniformScale);
+        })()
+      : new THREE.Vector3(1, 1, 1);
 
     const box = new THREE.Box3().setFromObject(clonedScene);
     const center = new THREE.Vector3();
@@ -112,12 +127,12 @@ function Model({ url, textureUrl, dimensions, onReady }: ModelProps) {
     return {
       scale: calculatedScale,
       offset: {
-        x: -center.x * calculatedScale,
-        y: -box.min.y * calculatedScale,
-        z: -center.z * calculatedScale,
+        x: -center.x * calculatedScale.x,
+        y: -box.min.y * calculatedScale.y,
+        z: -center.z * calculatedScale.z,
       },
     };
-  }, [clonedScene, dimensions]);
+  }, [clonedScene, dimensions, renderScale]);
 
   const originalMaps = useRef<Map<string, THREE.Texture | null>>(new Map());
 
@@ -228,6 +243,7 @@ type SafeCanvasProps = {
   modelUrl: string;
   textureUrl?: string | null;
   dimensions?: Dimensions;
+  renderScale?: THREE.Vector3 | undefined;
   eventSource: HTMLElement | null;
   onReady?: () => void;
 };
@@ -236,6 +252,7 @@ function SafeCanvas({
   modelUrl,
   textureUrl,
   dimensions,
+  renderScale,
   eventSource,
   onReady,
 }: SafeCanvasProps) {
@@ -256,7 +273,7 @@ function SafeCanvas({
   useEffect(() => {
     if (previousModelUrlRef.current !== modelUrl) {
       previousModelUrlRef.current = modelUrl;
-      setModelReady(false);
+      requestAnimationFrame(() => setModelReady(false));
     }
   }, [modelUrl]);
 
@@ -377,6 +394,7 @@ function SafeCanvas({
               url={modelUrl}
               textureUrl={textureUrl}
               dimensions={dimensions}
+              renderScale={renderScale}
               onReady={() => setModelReady(true)}
             />
           </Suspense>
@@ -405,15 +423,166 @@ export default function Furniture3DViewer({
   const [arOpen, setArOpen] = useState(false);
   const [arSupported, setArSupported] = useState<boolean | null>(null);
   const [containerElement, setContainerElement] = useState<HTMLDivElement | null>(null);
+  const [showDimensionModal, setShowDimensionModal] = useState(false);
+  const [useCustomDimensions, setUseCustomDimensions] = useState(false);
+  const [appliedCustomDimensions, setAppliedCustomDimensions] = useState<Dimensions | null>(null);
+  const initialDimensionInputs = useMemo(
+    () => ({
+      width_cm: dimensions?.width_cm?.toString() ?? "",
+      depth_cm: dimensions?.depth_cm?.toString() ?? "",
+      height_cm: dimensions?.height_cm?.toString() ?? "",
+    }),
+    [dimensions]
+  );
+  const [dimensionInputs, setDimensionInputs] = useState<DimensionInputs>(initialDimensionInputs);
+
+  const clampRatio = 0.25;
+  const parseDimensionInput = (value: string) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  };
+
+  const parsedDimensionInputs = useMemo(() => ({
+    width: parseDimensionInput(dimensionInputs.width_cm),
+    depth: parseDimensionInput(dimensionInputs.depth_cm),
+    height: parseDimensionInput(dimensionInputs.height_cm),
+  }), [dimensionInputs]);
+
+  const getDimensionWarning = (
+    value: number | null,
+    base: number | null,
+    label: string
+  ) => {
+    if (base == null || value == null) return null;
+    const ratio = value / base;
+    if (ratio > 1 + clampRatio) {
+      return `${label} is much larger than the product and may look too big.`;
+    }
+    if (ratio < 1 - clampRatio) {
+      return `${label} is much smaller than the product and may look too small.`;
+    }
+    return null;
+  };
+
+  const dimensionWarnings = useMemo(() => {
+    return {
+      width: getDimensionWarning(parsedDimensionInputs.width, dimensions?.width_cm ?? null, "Width"),
+      depth: getDimensionWarning(parsedDimensionInputs.depth, dimensions?.depth_cm ?? null, "Depth"),
+      height: getDimensionWarning(parsedDimensionInputs.height, dimensions?.height_cm ?? null, "Height"),
+    };
+  }, [parsedDimensionInputs, dimensions]);
+
+
+  const dimensionWarning = useMemo(() => {
+    const warnings = Object.values(dimensionWarnings).filter(Boolean);
+    return warnings.length > 0
+      ? `One or more values may make the preview look incorrect.`
+      : null;
+  }, [dimensionWarnings]);
+
+  const isCustomDimensionsValid = useMemo(() => {
+    return (
+      parsedDimensionInputs.width != null &&
+      parsedDimensionInputs.depth != null &&
+      parsedDimensionInputs.height != null
+    );
+  }, [parsedDimensionInputs]);
+
+  const { scene: preloadedScene } = useGLTF(modelUrl.trim() ? modelUrl : "");
+
+  const customDimensions = useMemo(() => {
+    if (!useCustomDimensions) return dimensions;
+    return appliedCustomDimensions ?? dimensions;
+  }, [useCustomDimensions, dimensions, appliedCustomDimensions]);
+
+  const viewerDimensions = useMemo(
+    () => (useCustomDimensions ? customDimensions : dimensions),
+    [useCustomDimensions, customDimensions, dimensions]
+  );
+
+  const renderScale = useMemo(() => {
+    if (!useCustomDimensions || !preloadedScene) return undefined;
+    return computeRenderScale(preloadedScene, customDimensions ?? dimensions ?? {});
+  }, [useCustomDimensions, customDimensions, dimensions, preloadedScene]);
+
+  const handleDimensionInputChange = (field: keyof DimensionInputs, value: string) => {
+    setDimensionInputs((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleDimensionInputBlur = (field: keyof DimensionInputs) => {
+    const value = dimensionInputs[field];
+    if (value.trim() !== "") return;
+
+    setDimensionInputs((prev) => ({
+      ...prev,
+      [field]: "",
+    }));
+  };
+
+  const handleOpenAr = () => {
+    if (arSupported === false) return;
+    setArOpen(true);
+  };
+
+  const handleOpenDimensionModal = () => {
+    const previewDimensions = useCustomDimensions
+      ? appliedCustomDimensions ?? dimensions
+      : dimensions;
+
+    setDimensionInputs({
+      width_cm: previewDimensions?.width_cm?.toString() ?? "",
+      depth_cm: previewDimensions?.depth_cm?.toString() ?? "",
+      height_cm: previewDimensions?.height_cm?.toString() ?? "",
+    });
+    setShowDimensionModal(true);
+  };
+
+  const handleDimensionCancel = () => {
+    setShowDimensionModal(false);
+  };
+
+  const handleResetDimensions = () => {
+    setDimensionInputs(initialDimensionInputs);
+  };
+
+  const handleDimensionSave = () => {
+    if (!isCustomDimensionsValid) return;
+
+    const savedDimensions = {
+      width_cm: parsedDimensionInputs.width!,
+      depth_cm: parsedDimensionInputs.depth!,
+      height_cm: parsedDimensionInputs.height!,
+    };
+
+    const baseDimensions = {
+      width_cm: dimensions?.width_cm ?? null,
+      depth_cm: dimensions?.depth_cm ?? null,
+      height_cm: dimensions?.height_cm ?? null,
+    };
+
+    const isBaseDimensions =
+      savedDimensions.width_cm === baseDimensions.width_cm &&
+      savedDimensions.depth_cm === baseDimensions.depth_cm &&
+      savedDimensions.height_cm === baseDimensions.height_cm;
+
+    if (isBaseDimensions) {
+      setAppliedCustomDimensions(null);
+      setUseCustomDimensions(false);
+    } else {
+      setAppliedCustomDimensions(savedDimensions);
+      setUseCustomDimensions(true);
+    }
+
+    setShowDimensionModal(false);
+  };
 
   // ── Pre-parse GLB outside Canvas to compute AR info ──
-  const { scene: preloadedScene } = useGLTF(modelUrl.trim() ? modelUrl : "");
   const arInfo = useMemo(() => {
     if (!preloadedScene || !modelUrl.trim()) {
       return { arScale: "1 1 1", arYOffsetM: 0 };
     }
-    return computeARInfo(preloadedScene, dimensions ?? {});
-  }, [preloadedScene, dimensions, modelUrl]);
+    return computeARInfo(preloadedScene, viewerDimensions ?? {});
+  }, [preloadedScene, viewerDimensions, modelUrl]);
 
   const containerCallbackRef = useCallback((node: HTMLDivElement | null) => {
     if (node !== null) setContainerElement(node);
@@ -448,28 +617,102 @@ export default function Furniture3DViewer({
         arYOffsetM={arInfo.arYOffsetM}
       />
 
+
+      {showDimensionModal && (
+        <div className="fixed inset-0 z-110 bg-black/80 flex items-center justify-center p-4">
+          <div className="w-full max-w-lg rounded-3xl border border-white/10 bg-[#0D0A08]/95 p-6 text-white shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-sm font-semibold uppercase tracking-[0.24em] text-[#D4A97A]">
+                  Preview Dimensions
+                </h2>
+                <p className="mt-3 text-sm text-white/70">
+                  Enter new width, depth, and height. This only affects the viewer and AR preview.
+                </p>
+              </div>
+              <button
+                onClick={handleResetDimensions}
+                className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-[10px] uppercase tracking-[0.22em] text-white/70 transition hover:border-[#D4A97A]/40"
+              >
+                Reset
+              </button>
+            </div>
+            <div className="mt-6 grid gap-4 sm:grid-cols-3">
+              {[
+                { label: "Width (cm)", field: "width_cm", warning: dimensionWarnings.width },
+                { label: "Depth (cm)", field: "depth_cm", warning: dimensionWarnings.depth },
+                { label: "Height (cm)", field: "height_cm", warning: dimensionWarnings.height },
+              ].map(({ label, field, warning }) => (
+                <label key={field} className="space-y-2 text-xs text-white/70">
+                  <span className="block font-semibold text-[11px] text-white/80">{label}</span>
+                  <input
+                    value={dimensionInputs[field as keyof DimensionInputs]}
+                    onChange={(event) => handleDimensionInputChange(field as keyof DimensionInputs, event.target.value)}
+                    onBlur={() => handleDimensionInputBlur(field as keyof DimensionInputs)}
+                    inputMode="decimal"
+                    className={`w-full rounded-2xl px-3 py-3 text-sm outline-none transition focus:border-[#D4A97A] ${warning ? "border border-amber-300 bg-amber-300/10 text-white" : "border border-white/10 bg-white/5 text-white"}`}
+                  />
+                  <p className="min-h-5 text-[10px] text-amber-200 leading-snug">
+                    {warning ?? "\u00A0"}
+                  </p>
+                </label>
+              ))}
+            </div>
+            {dimensionWarning && (
+              <div className="mt-4 rounded-2xl border border-amber-300/20 bg-amber-300/10 p-3 text-sm text-amber-100">
+                {dimensionWarning}
+              </div>
+            )}
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+              <button
+                onClick={handleDimensionSave}
+                disabled={!isCustomDimensionsValid}
+                className="w-full rounded-2xl bg-[#D4A97A] px-4 py-3 text-sm font-semibold text-[#1C1209] disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Apply and continue
+              </button>
+              <button
+                onClick={handleDimensionCancel}
+                className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white/80"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div
         ref={containerCallbackRef}
         className="relative w-full overflow-hidden rounded-2xl min-h-60 sm:min-h-80 md:min-h-95 lg:min-h-105 bg-[#0F0A06] border border-white/10"
       >
         {/* BUTTON CONTRAST FIX: Added dark backdrop and high-contrast text */}
-        <button
-          onClick={() => arSupported !== false && setArOpen(true)}
-          disabled={arSupported === false}
-          className={`absolute top-3 right-3 z-10 flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-[11px] uppercase tracking-wider transition-all shadow-xl
-            ${arSupported === false 
-              ? "bg-white/5 text-white/20 border border-white/5 cursor-not-allowed" 
-              : "bg-[#D4A97A] hover:bg-[#C4976A] text-[#1C1209] border border-[#D4A97A]"}`}
-        >
-          {arSupported === false ? <AlertTriangle size={14} /> : <Scan size={14} />}
-          <span>{arSupported === false ? "AR Unsupported" : "View in Space"}</span>
-        </button>
+        <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
+          <button
+            onClick={handleOpenDimensionModal}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-[11px] uppercase tracking-wider transition-all shadow-xl bg-white/10 text-white border border-white/10 hover:bg-white/15"
+          >
+            Change Dimension
+          </button>
+          <button
+            onClick={handleOpenAr}
+            disabled={arSupported === false}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-[11px] uppercase tracking-wider transition-all shadow-xl
+              ${arSupported === false 
+                ? "bg-white/5 text-white/20 border border-white/5 cursor-not-allowed" 
+                : "bg-[#D4A97A] hover:bg-[#C4976A] text-[#1C1209] border border-[#D4A97A]"}`}
+          >
+            {arSupported === false ? <AlertTriangle size={14} /> : <Scan size={14} />}
+            <span>{arSupported === false ? "AR Unsupported" : "View in Space"}</span>
+          </button>
+        </div>
 
         <div className="absolute inset-0">
           <SafeCanvas
             modelUrl={modelUrl}
             textureUrl={selectedVariantTextureUrl}
-            dimensions={dimensions}
+            dimensions={viewerDimensions}
+            renderScale={renderScale}
             onReady={onReady}
             eventSource={containerElement}
           />
