@@ -19,8 +19,8 @@ async function callAI(
 ): Promise<string> {
   const groq = getGroqClient();
   const response = await groq.chat.completions.create({
-    model: "llama-3.3-70b-versatile",
-    max_tokens: 400, // trimmed from 500 — 400 covers ~300 words, plenty for chat
+    model: "openai/gpt-oss-120b",
+    max_completion_tokens: 400, // 400 covers ~300 words, plenty for chat
     messages: [
       { role: "system", content: systemPrompt },
       ...messages.map((m) => ({
@@ -62,6 +62,8 @@ async function callAI(
 
 const BASE_SYSTEM_PROMPT = `You are a furniture shopping assistant for WoodForge, a custom made-to-order furniture store in the Philippines.
 
+Use the database catalog supplied below as the source of truth for published products, base prices, and dimensions. Do not guess or substitute product prices or dimensions. If a product or value is not in the supplied context, say you cannot verify it.
+
 Help customers with:
 - Furniture recommendations based on space, style, and budget
 - Room fit checks — always ask for room dimensions if not provided
@@ -97,7 +99,7 @@ The frontend will strip this tag before showing it to the user.`;
 async function fetchCatalogContext(
   supabase: ReturnType<typeof createServerClient>
 ): Promise<string | null> {
-  const { data: catalog } = await supabase
+  const { data: catalog, error } = await supabase
     .from("furniture")
     .select(`
       name,
@@ -110,8 +112,12 @@ async function fetchCatalogContext(
     `)
     .is("deleted_at", null)
     .eq("publish_status", "published")
+    .order("created_at", { ascending: false })
     .limit(20);
 
+  if (error) throw error;
+
+  console.info(`[AI] Catalog context: ${catalog?.length ?? 0} published products loaded`);
   if (!catalog || catalog.length === 0) return null;
 
   // Compact format: one line per item, variants on the same line.
@@ -120,6 +126,8 @@ async function fetchCatalogContext(
     .map((f) => {
       const cat =
         (f.furniture_categories as { name: string } | null)?.name ?? "Other";
+      const basePrice =
+        f.base_price == null ? "base price unavailable" : `₱${f.base_price}`;
       const dims =
         f.width_cm && f.depth_cm && f.height_cm
           ? ` ${f.width_cm}×${f.depth_cm}×${f.height_cm}cm`
@@ -136,7 +144,7 @@ async function fetchCatalogContext(
         })
         .join("|");
       return (
-        `${f.name} (${cat}) ₱${f.base_price}${dims}` +
+        `${f.name} (${cat}) ${basePrice}${dims}` +
         (activeVariants ? ` [${activeVariants}]` : "")
       );
     })
@@ -240,9 +248,9 @@ export async function POST(req: NextRequest) {
     // 1. Catalog (always injected — compact format)
     try {
       const catalog = await fetchCatalogContext(supabase);
-      if (catalog) parts.push(`CATALOG:\n${catalog}`);
-    } catch {
-      // Non-fatal — continue without catalog
+      if (catalog) parts.push(`DATABASE CATALOG:\n${catalog}`);
+    } catch (error) {
+      console.error("[AI] Catalog fetch error:", error);
     }
 
     // 2. Order history (logged-in users only)

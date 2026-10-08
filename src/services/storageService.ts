@@ -38,11 +38,12 @@ export const buildPaths = {
 
 /* ================= UPLOAD ================= */
 
-export async function upload(file: File, path: string) {
+export async function upload(file: File, path: string, options?: { contentType?: string }) {
   const { error } = await supabase.storage
     .from(BUCKET)
     .upload(path, file, {
       cacheControl: "3600",
+      ...(options?.contentType && { contentType: options.contentType }),
       upsert: false, // ❗ FIX: prevents accidental overwrites
     });
 

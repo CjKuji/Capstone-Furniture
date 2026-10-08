@@ -12,7 +12,7 @@ import type {
 
 import type { Database } from "@/types/supabase";
 import type { ARReadiness } from "@/types/modelValidation";
-import { upload, buildPaths } from "@/services/storageService";
+import { upload, buildPaths, removeFiles } from "@/services/storageService";
 
 import {
   createImages,
@@ -31,12 +31,12 @@ import {
 ========================================================= */
 const DEBUG = true;
 
-const log = (step: string, data?: any) => {
+const log = (step: string, data?: unknown) => {
   if (!DEBUG) return;
   console.log(`🟦 [FURNITURE:${step}]`, data ?? "");
 };
 
-const err = (step: string, error: any, extra?: any) => {
+const err = (step: string, error: unknown, extra?: unknown) => {
   console.error(`🟥 [FURNITURE:${step}]`, error, extra ?? "");
 };
 
@@ -247,7 +247,8 @@ export async function createFurniture(
     if (modelFile instanceof File) {
       const url = await upload(
         modelFile,
-        buildPaths.model(id, modelFile)
+        buildPaths.model(id, modelFile),
+        { contentType: "model/gltf-binary" }
       );
 
       const { error: updateError } = await supabase
@@ -257,6 +258,11 @@ export async function createFurniture(
 
       if (updateError) {
         err("MODEL_UPDATE", updateError);
+        try {
+          await removeFiles([url]);
+        } catch (cleanupError) {
+          err("MODEL_UPLOAD_ROLLBACK", cleanupError, { id, url });
+        }
         throw updateError;
       }
     }
@@ -326,13 +332,24 @@ export async function updateFurniture(
   if (modelFile instanceof File) {
     const url = await upload(
       modelFile,
-      buildPaths.model(id, modelFile)
+      buildPaths.model(id, modelFile),
+      { contentType: "model/gltf-binary" }
     );
 
-    await supabase
+    const { error: modelUrlError } = await supabase
       .from("furniture")
       .update({ model_url: url } as Database["public"]["Tables"]["furniture"]["Update"])
       .eq("id", id);
+
+    if (modelUrlError) {
+      err("MODEL_URL_UPDATE", modelUrlError, { id });
+      try {
+        await removeFiles([url]);
+      } catch (cleanupError) {
+        err("MODEL_UPLOAD_ROLLBACK", cleanupError, { id, url });
+      }
+      throw modelUrlError;
+    }
   }
 
   await updateImages(id, payload.images ?? []);

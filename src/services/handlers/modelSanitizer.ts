@@ -11,6 +11,46 @@ export interface SanitizeDimensions {
   heightCm: number;
 }
 
+function removeLightsCamerasHiddenAndEmpty(scene: THREE.Object3D): void {
+  const removable: THREE.Object3D[] = [];
+  scene.traverse((node) => {
+    if (node instanceof THREE.Light || node instanceof THREE.Camera || node.visible === false) {
+      removable.push(node);
+    }
+  });
+  removable.forEach((node) => node.parent?.remove(node));
+
+  function pruneEmpty(node: THREE.Object3D): void {
+    for (const child of [...node.children]) {
+      pruneEmpty(child);
+      if (child.parent !== node) continue;
+
+      const hasGeometry =
+        child instanceof THREE.Mesh ||
+        child instanceof THREE.Line ||
+        child instanceof THREE.Points ||
+        child instanceof THREE.SkinnedMesh ||
+        child instanceof THREE.Bone;
+      if (!hasGeometry && child.children.length === 0) node.remove(child);
+    }
+  }
+
+  pruneEmpty(scene);
+  scene.updateMatrixWorld(true);
+}
+
+/**
+ * Measures the precise visible geometry that the sanitizer will retain.
+ * The supplied scene is never mutated.
+ */
+export function measureCleanSize(scene: THREE.Object3D): THREE.Vector3 {
+  const clone = scene.clone(true);
+  removeLightsCamerasHiddenAndEmpty(clone);
+
+  const box = new THREE.Box3().setFromObject(clone, true);
+  return box.getSize(new THREE.Vector3());
+}
+
 /**
  * Sanitizes a loaded THREE.Group scene for AR use.
  *
@@ -18,11 +58,10 @@ export interface SanitizeDimensions {
  *  1. Strip lights
  *  2. Strip cameras
  *  3. Prune empty nodes
- *  4. Compute bounding box
- *  5. Scale normalize (largest axis → provided real-world dimensions)
- *  6. Recompute bounding box after scale
- *  7. Center pivot on XZ
- *  8. Floor-align Y
+ *  4. Strip hidden nodes
+ *  5. Compute a precise bounding box
+ *  6. Scale each axis to the provided real-world dimensions
+ *  7. Recompute bounds, center pivot on XZ, and floor-align Y
  *
  * Returns the mutated scene and an autoFixLog describing every change made.
  *
@@ -77,7 +116,8 @@ export function sanitizeModel(
       node instanceof THREE.Mesh ||
       node instanceof THREE.Line ||
       node instanceof THREE.Points ||
-      node instanceof THREE.SkinnedMesh;
+      node instanceof THREE.SkinnedMesh ||
+      node instanceof THREE.Bone;
     const hasChildren = node.children.length > 0;
 
     if (!hasMesh && !hasChildren && node !== scene) {
@@ -93,9 +133,19 @@ export function sanitizeModel(
     autoFixLog.push("No empty nodes found — nothing pruned");
   }
 
-  // ─── 4. Compute Bounding Box ────────────────────────────────────────────────
+  // ─── 4. Strip Hidden Nodes ──────────────────────────────────────────────────
+  const hiddenNodes: THREE.Object3D[] = [];
+  scene.traverse((node) => {
+    if (node.visible === false) hiddenNodes.push(node);
+  });
+  hiddenNodes.forEach((node) => {
+    node.parent?.remove(node);
+    autoFixLog.push(`Removed hidden ${node.type} ("${node.name || node.uuid.slice(0, 8)}")`);
+  });
+
+  // ─── 5. Compute Bounding Box ────────────────────────────────────────────────
   scene.updateMatrixWorld(true);
-  const box = new THREE.Box3().setFromObject(scene);
+  const box = new THREE.Box3().setFromObject(scene, true);
   const modelSize = new THREE.Vector3();
   box.getSize(modelSize);
 
@@ -106,7 +156,7 @@ export function sanitizeModel(
       `D: ${modelSize.z.toFixed(4)} m`
   );
 
-  // ─── 5. Scale Normalize ─────────────────────────────────────────────────────
+  // ─── 6. Scale Normalize ─────────────────────────────────────────────────────
   const { widthCm, depthCm, heightCm } = dimensions;
 
   const targetWidth  = widthCm  / 100;
@@ -119,30 +169,31 @@ export function sanitizeModel(
     { axis: "Z (depth)",  modelDim: modelSize.z, targetDim: targetDepth  },
   ];
 
-  const validCandidates = candidates.filter((c) => c.modelDim > 0.00001);
+  const validCandidates = candidates.filter(
+    (c) => c.modelDim > 0.00001 && c.targetDim > 0
+  );
 
   if (validCandidates.length === 0) {
     autoFixLog.push("WARNING: Model has zero or near-zero bounding box — scale skipped");
   } else {
-    const dominant = validCandidates.reduce((prev, curr) =>
-      curr.modelDim / curr.targetDim > prev.modelDim / prev.targetDim ? curr : prev
+    const scaleFactors = new THREE.Vector3(
+      modelSize.x > 0.00001 && targetWidth > 0 ? targetWidth / modelSize.x : 1,
+      modelSize.y > 0.00001 && targetHeight > 0 ? targetHeight / modelSize.y : 1,
+      modelSize.z > 0.00001 && targetDepth > 0 ? targetDepth / modelSize.z : 1
     );
 
-    const scaleFactor = dominant.targetDim / dominant.modelDim;
-
-    scene.scale.multiplyScalar(scaleFactor);
+    scene.scale.multiply(scaleFactors);
     scene.updateMatrixWorld(true);
 
     autoFixLog.push(
-      `Scale normalized — dominant axis: ${dominant.axis}, ` +
-        `scale factor: ${scaleFactor.toFixed(6)} ` +
-        `(model ${(dominant.modelDim * 100).toFixed(2)} cm → target ${(dominant.targetDim * 100).toFixed(2)} cm)`
+      `Scale normalized independently — X: ${scaleFactors.x.toFixed(6)}, ` +
+        `Y: ${scaleFactors.y.toFixed(6)}, Z: ${scaleFactors.z.toFixed(6)}`
     );
   }
 
-  // ─── 6. Recompute Bounding Box After Scale ──────────────────────────────────
+  // ─── 7. Recompute Bounding Box After Scale ──────────────────────────────────
   scene.updateMatrixWorld(true);
-  box.setFromObject(scene);
+  box.setFromObject(scene, true);
   box.getSize(modelSize);
 
   autoFixLog.push(
@@ -152,7 +203,7 @@ export function sanitizeModel(
       `D: ${(modelSize.z * 100).toFixed(2)} cm`
   );
 
-  // ─── 7. Center Pivot on XZ ──────────────────────────────────────────────────
+  // ─── 8. Center Pivot on XZ ──────────────────────────────────────────────────
   const center = new THREE.Vector3();
   box.getCenter(center);
 
@@ -164,8 +215,8 @@ export function sanitizeModel(
     `Pivot centered on XZ — offset applied: X ${(-center.x).toFixed(4)} m, Z ${(-center.z).toFixed(4)} m`
   );
 
-  // ─── 8. Floor Align Y ───────────────────────────────────────────────────────
-  box.setFromObject(scene);
+  // ─── 9. Floor Align Y ───────────────────────────────────────────────────────
+  box.setFromObject(scene, true);
   const yFloorOffset = -box.min.y;
   scene.position.y += yFloorOffset;
   scene.updateMatrixWorld(true);

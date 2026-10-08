@@ -8,9 +8,6 @@ export interface ExportResult {
 
 /**
  * Derives the cleaned filename from the original.
- *
- Component	Furniture3DViewer usage	dimensions passed?	AR gets AR info?
- furniture/[id]/page.tsx (public)	Lines 187-191	
  * Examples:
  *   "sofa.glb"        → "sofa-cleaned.glb"
  *   "chair.GLB"       → "chair-cleaned.GLB"
@@ -47,9 +44,9 @@ export async function exportCleanedModel(
 
   const options: GLTFExporterOptions = {
     binary: true,           // Produce GLB (binary glTF), not JSON glTF
-    embedImages: true,      // Inline textures so the file is self-contained
-    onlyVisible: false,     // Export all nodes regardless of visibility flag
-    maxTextureSize: 4096,   // Cap texture dimensions for AR performance
+    onlyVisible: true,
+    trs: true,
+    maxTextureSize: 2048,
   };
 
   const arrayBuffer = await new Promise<ArrayBuffer>((resolve, reject) => {

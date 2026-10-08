@@ -16,7 +16,7 @@ import type {
   VariantUI,
 } from "@/types/furniture-ui";
 
-import type { ValidationReport, FurnitureSizePreset } from "@/types/modelValidation";
+import type { ValidationReport } from "@/types/modelValidation";
 
 /* ========================================================= */
 
@@ -37,7 +37,7 @@ export type FormState = {
   name: string;
   description: string;
   categoryId: string;
-  /** Resolved category slug/name used for preset generation, e.g. "dining_table" */
+  /** Resolved category slug/name used by category dimension validation. */
   categorySlug: string;
   basePrice: number | null;
 
@@ -49,13 +49,7 @@ export type FormState = {
   widthCm: number | null;
   depthCm: number | null;
   heightCm: number | null;
-
-  /**
-   * Tracks which preset chip the admin last clicked ("Small" | "Medium" | "Large"),
-   * or null if the admin has manually typed their own dimensions.
-   * Used purely for UI highlight state — does not affect the pipeline.
-   */
-  activePreset: FurnitureSizePreset["label"] | null;
+  dimensionSource: "model" | "manual";
 
   // ── GLB pipeline state ──────────────────────────────────────────────────
   isAnalyzing: boolean;
@@ -117,10 +111,10 @@ function buildInitial(
       depthCm:  item.depth_cm  ?? null,
       heightCm: item.height_cm ?? null,
 
-      activePreset:     null,
       isAnalyzing:      false,
       cleanedModelFile: null,
       validationReport: null,
+      dimensionSource:  "model",
     };
   }
 
@@ -137,10 +131,10 @@ function buildInitial(
     depthCm:      null,
     heightCm:     null,
 
-    activePreset:     null,
     isAnalyzing:      false,
     cleanedModelFile: null,
     validationReport: null,
+    dimensionSource:  "model",
   };
 }
 
@@ -211,7 +205,7 @@ export function useFurnitureForm({ mode, item, isOpen }: Params) {
         widthCm,
         depthCm,
         heightCm,
-        activePreset: null,
+        dimensionSource: "model",
       }));
       setErrors((prev) => ({ ...prev, dimensions: undefined }));
     },
@@ -219,31 +213,20 @@ export function useFurnitureForm({ mode, item, isOpen }: Params) {
   );
 
   /* =========================================================
-     PRESET CHIP HANDLER
-  ========================================================= */
-
-  const applyPreset = useCallback((preset: FurnitureSizePreset) => {
-    setForm((prev) => ({
-      ...prev,
-      widthCm:      preset.dimensions.widthCm,
-      depthCm:      preset.dimensions.depthCm,
-      heightCm:     preset.dimensions.heightCm,
-      activePreset: preset.label,
-    }));
-    setErrors((prev) => ({ ...prev, dimensions: undefined }));
-  }, []);
-
-  /* =========================================================
      MANUAL DIMENSION EDIT
   ========================================================= */
 
   const setDimensionField = useCallback(
     (key: "widthCm" | "depthCm" | "heightCm", value: number | null) => {
-      setForm((prev) => ({ ...prev, [key]: value, activePreset: null }));
+      setForm((prev) => ({ ...prev, [key]: value, dimensionSource: "manual" }));
       setErrors((prev) => ({ ...prev, dimensions: undefined }));
     },
     []
   );
+
+  const setGeneralError = useCallback((message?: string) => {
+    setErrors((prev) => ({ ...prev, general: message }));
+  }, []);
 
   /* =========================================================
      PIPELINE SETTERS
@@ -286,16 +269,17 @@ export function useFurnitureForm({ mode, item, isOpen }: Params) {
     setForm((prev) => ({
       ...prev,
       modelFile: file,
+      isAnalyzing: false,
+      cleanedModelFile: null,
+      validationReport: null,
+      dimensionSource: "model",
       ...(!file && {
-        isAnalyzing:      false,
-        cleanedModelFile: null,
-        validationReport: null,
         widthCm:          null,
         depthCm:          null,
         heightCm:         null,
-        activePreset:     null,
       }),
     }));
+    setErrors((prev) => ({ ...prev, general: undefined }));
     // Model file changes do NOT clear the assets error — only adding
     // images clears that error, since images are required.
   }, []);
@@ -399,6 +383,7 @@ export function useFurnitureForm({ mode, item, isOpen }: Params) {
 
   const validate = useCallback((): boolean => {
     const newErrors: FormErrors = {};
+    if (errors.general) newErrors.general = errors.general;
 
     if (!form.name.trim()) {
       newErrors.name = "Furniture name is required";
@@ -414,17 +399,18 @@ export function useFurnitureForm({ mode, item, isOpen }: Params) {
       newErrors.assets = "At least one product image is required";
     }
 
+    const dimensions = [form.widthCm, form.depthCm, form.heightCm];
     if (
-      form.widthCm  == null ||
-      form.depthCm  == null ||
-      form.heightCm == null
+      dimensions.some(
+        (value) => value == null || !Number.isFinite(value) || value <= 0 || value >= 1000
+      )
     ) {
-      newErrors.dimensions = "All three dimensions (W × D × H) are required";
+      newErrors.dimensions = "All dimensions must be finite values greater than 0 and less than 1000 cm";
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  }, [form]);
+  }, [form, errors.general]);
 
   /* =========================================================
      PRIMARY IMAGE SAFETY
@@ -450,6 +436,22 @@ export function useFurnitureForm({ mode, item, isOpen }: Params) {
 
   const buildPayload = useCallback((): FurnitureFormPayload | null => {
     if (!validate()) return null;
+
+    if (form.modelFile && !form.cleanedModelFile) {
+      setErrors((prev) => ({
+        ...prev,
+        general: "3D model processing failed or is still running. Re-upload the model.",
+      }));
+      return null;
+    }
+
+    if (form.isAnalyzing) {
+      setErrors((prev) => ({
+        ...prev,
+        general: "3D model processing failed or is still running. Re-upload the model.",
+      }));
+      return null;
+    }
 
     if (
       form.widthCm   == null ||
@@ -507,7 +509,7 @@ export function useFurnitureForm({ mode, item, isOpen }: Params) {
     setModelFile,
     setDimensionField,
     applyDetectedDimensions,
-    applyPreset,
+    setGeneralError,
 
     // Pipeline setters
     isAnalyzing:         form.isAnalyzing,

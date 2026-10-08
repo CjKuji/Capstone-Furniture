@@ -581,7 +581,7 @@ export default function AssetsSection({
         style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
       >
         <div className="flex items-center justify-between">
-          <label className={labelClass}>3D Model (.glb / .gltf)</label>
+          <label className={labelClass}>3D Model (.glb)</label>
           {/* Static hint — no lock state anymore */}
           <span
             className="flex items-center gap-1 text-[10px] font-medium"
@@ -606,7 +606,7 @@ export default function AssetsSection({
 
         <input
           type="file"
-          accept=".glb,.gltf"
+          accept=".glb,model/gltf-binary"
           disabled={isAnalyzing}
           onChange={(e) => {
             // Reset the input value so the same file can be re-uploaded
@@ -624,6 +624,9 @@ export default function AssetsSection({
               : "bg-white/[0.04] border-white/10 file:bg-[#D4A97A]/20 file:text-[#D4A97A] hover:file:bg-[#D4A97A]/30",
           ].join(" ")}
         />
+        <p className="text-[10px] text-white/30">
+          Upload a single-file .glb. .gltf files are not supported because external buffers and textures may be missing.
+        </p>
 
         {/* Pipeline states */}
         {isAnalyzing && <AnalyzingState />}

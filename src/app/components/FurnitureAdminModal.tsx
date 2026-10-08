@@ -58,6 +58,8 @@ export default function FurnitureModalContainer({
     modelPreviewUrl,
     activeVariantTexture,
     activeVariantId,
+    detectedDimensions,
+    dimensionSource,
     setBasicInfoField,
     setActiveVariantId,
     setModelFile,
@@ -73,12 +75,6 @@ export default function FurnitureModalContainer({
     getKey,
   } = controller;
 
-  /* ── DERIVED: dimension gate ── */
-  const dimensionsFilled =
-    Number(state.widthCm) > 0 &&
-    Number(state.depthCm) > 0 &&
-    Number(state.heightCm) > 0;
-
   /* ── VALIDATION ERRORS ── */
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const errors = form.errors;
@@ -92,7 +88,19 @@ export default function FurnitureModalContainer({
     errors.general,
   ].filter(Boolean) as string[];
 
-  const showErrors = submitAttempted && errorMessages.length > 0;
+  const showErrors = Boolean(errors.general) || (submitAttempted && errorMessages.length > 0);
+  const detectedModelSize = detectedDimensions ?? (
+    (state.modelFile || item?.model_url) &&
+    state.widthCm != null &&
+    state.depthCm != null &&
+    state.heightCm != null
+      ? {
+          widthCm: state.widthCm,
+          depthCm: state.depthCm,
+          heightCm: state.heightCm,
+        }
+      : null
+  );
 
   /* ── MOBILE 3D VIEWER TOGGLE ── */
   const [show3DViewer, setShow3DViewer] = useState(false);
@@ -297,6 +305,7 @@ export default function FurnitureModalContainer({
                       <Furniture3DViewer
                         modelUrl={modelPreviewUrl}
                         selectedVariantTextureUrl={activeVariantTexture}
+                        allowDimensionPreview={false}
                         dimensions={{
                           width_cm: Number(state.widthCm) > 0 ? Number(state.widthCm) : null,
                           depth_cm: Number(state.depthCm) > 0 ? Number(state.depthCm) : null,
@@ -360,9 +369,12 @@ export default function FurnitureModalContainer({
                       widthCm:     state.widthCm,
                       depthCm:     state.depthCm,
                       heightCm:    state.heightCm,
+                      dimensionSource,
                     }}
                     setField={setBasicInfoField}
                     categories={categories}
+                    detectedDimensions={detectedModelSize}
+                    isAnalyzing={isAnalyzing}
                   />
                 </div>
 
@@ -386,7 +398,6 @@ export default function FurnitureModalContainer({
                     addImages={addImages}
                     removeImage={removeImage}
                     setPrimaryImage={setPrimaryImage}
-                    dimensionsFilled={dimensionsFilled}
                     isAnalyzing={isAnalyzing}
                     validationReport={state.validationReport}
                   />

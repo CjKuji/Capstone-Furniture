@@ -13,7 +13,6 @@ import {
   deriveARReadiness,
   deriveARSafetyStatus,
   getDimensionRecommendation,
-  generatePresetSuggestions,
 } from "@/types/modelValidation";
 
 /* =========================================================
@@ -28,6 +27,8 @@ const PIVOT_INFO_THRESHOLD_CM = 1;
 const SCALE_ERROR_RATIO       = 1.5;
 const SCALE_WARN_RATIO        = 1.1;
 const M_TO_CM                 = 100;
+const FURNITURE_MIN_LONGEST_SIDE_CM = 20;
+const FURNITURE_MAX_LONGEST_SIDE_CM = 500;
 
 /* =========================================================
    VALIDATOR OPTIONS
@@ -41,20 +42,19 @@ export interface ValidateModelOptions extends ModelDimensions {
   autoFixLog: string[];
   /**
    * When true the validator treats scale-mismatch findings as already
-   * auto-fixed (because sanitizeModel already corrected the scale).
-   * Defaults to true — always pass sanitized scenes to this function.
+   * auto-fixed because sanitizeModel will correct the scale.
    */
   scaleWasNormalized?: boolean;
   /**
    * Furniture category used to:
    *   1. Look up dimension recommendations (DimensionRecommendation).
-   *   2. Generate Small / Medium / Large preset suggestions.
+   *   2. Evaluate category dimension recommendations.
    *
    * Accepts underscore_case ("dining_table") or space-separated
    * ("dining table") — both are normalised internally.
    *
-   * When omitted, preset suggestions and dimension recommendations
-   * are skipped but all geometry checks still run normally.
+   * When omitted, dimension recommendations are skipped but all geometry
+   * checks still run normally.
    */
   category?: string;
 }
@@ -75,9 +75,16 @@ function finding(
 function computeTightBBox(scene: THREE.Group): THREE.Box3 {
   const box = new THREE.Box3();
   scene.traverse((node) => {
-    if (node instanceof THREE.Mesh && node.visible && node.geometry) {
+    let visible = true;
+    for (let ancestor: THREE.Object3D | null = node; ancestor; ancestor = ancestor.parent) {
+      if (!ancestor.visible) {
+        visible = false;
+        break;
+      }
+    }
+    if (node instanceof THREE.Mesh && visible && node.geometry) {
       node.updateWorldMatrix(true, false);
-      box.union(new THREE.Box3().setFromObject(node));
+      box.union(new THREE.Box3().setFromObject(node, true));
     }
   });
   return box;
@@ -88,7 +95,7 @@ function computeLooseBBox(scene: THREE.Group): THREE.Box3 {
   scene.traverse((node) => {
     if (node instanceof THREE.Mesh && node.geometry) {
       node.updateWorldMatrix(true, false);
-      box.union(new THREE.Box3().setFromObject(node));
+      box.union(new THREE.Box3().setFromObject(node, true));
     }
   });
   return box;
@@ -151,7 +158,14 @@ function inspectSceneGraph(scene: THREE.Group): SceneGraphReport {
     }
 
     if (node instanceof THREE.Mesh) {
-      if (node.visible) {
+      let visible = true;
+      for (let ancestor: THREE.Object3D | null = node; ancestor; ancestor = ancestor.parent) {
+        if (!ancestor.visible) {
+          visible = false;
+          break;
+        }
+      }
+      if (visible) {
         visibleMeshCount++;
       } else {
         hiddenMeshCount++;
@@ -180,7 +194,7 @@ function inspectSceneGraph(scene: THREE.Group): SceneGraphReport {
 
 /**
  * Normalises a category string to the underscore_case keys used in
- * FURNITURE_STANDARDS and CATEGORY_RANGES (e.g. "Dining Table" → "dining_table").
+ * category dimension ranges (e.g. "Dining Table" → "dining_table").
  */
 function normaliseCategory(raw: string): string {
   return raw.toLowerCase().trim().replace(/\s+/g, "_");
@@ -191,23 +205,17 @@ function normaliseCategory(raw: string): string {
 ========================================================= */
 
 /**
- * Validates a scene that has already been run through sanitizeModel().
+ * Validates the ORIGINAL (pre-sanitize) scene against the target dimensions
+ * that the pipeline will scale it to.
  *
  * Changes vs original:
- *  - Accepts an optional `category` to drive preset suggestions and
- *    dimension recommendation lookups.
+ *  - Accepts an optional `category` to drive dimension recommendations.
  *  - Returns `arSafetyStatus` ("SAFE_FOR_AR" | "NOT_OPTIMAL_FOR_AR")
  *    alongside the existing `arReadiness` field.
- *  - Returns `presetSuggestions` (Small / Medium / Large) when a matching
- *    FurnitureStandardConfig exists for the given category.
  *  - Scale-mismatch findings are marked autoFixed=true when
  *    scaleWasNormalized is true (default).
- *  - Floor / pivot findings are also marked autoFixed=true because
- *    sanitizeModel() always corrects them.
+ *  - Findings describe the original downloaded file, before sanitization.
  *
- * NOTE: modelSanitizer.ts is NOT touched. It continues to use uniform
- * scaling (multiplyScalar) exclusively. Presets are advisory metadata
- * for the UI — they do not re-scale the geometry.
  */
 export function validateModel(
   scene: THREE.Group,
@@ -288,13 +296,15 @@ export function validateModel(
 
   // ── Scale mismatch ─────────────────────────────────────────────────────────
   if (scaleMismatchRatio >= SCALE_ERROR_RATIO) {
+    const likelyUnits = [10, 25.4, 100, 1000].some(
+      (ratio) => Math.abs(scaleMismatchRatio - ratio) / ratio <= 0.05
+    );
     findings.push(
       finding(
         "SCALE_MISMATCH_LARGE",
         "error",
-        `Model dimensions (W:${detectedDimensions.widthCm}cm D:${detectedDimensions.depthCm}cm H:${detectedDimensions.heightCm}cm) ` +
-          `differed from entered dimensions (W:${dimensions.widthCm}cm D:${dimensions.depthCm}cm H:${dimensions.heightCm}cm) ` +
-          `by ${((scaleMismatchRatio - 1) * 100).toFixed(0)}%. Likely a unit system mismatch (e.g. mm exported as m). Auto-fixed.`,
+        `The file's size differed from the target dimensions by ${((scaleMismatchRatio - 1) * 100).toFixed(0)}% and was rescaled.` +
+          (likelyUnits ? " The ratio is consistent with a likely unit mismatch." : ""),
         scaleWasNormalized
       )
     );
@@ -411,7 +421,8 @@ export function validateModel(
       finding(
         "HIDDEN_MESHES_PRESENT",
         "warning",
-        `${graph.hiddenMeshCount} hidden mesh${graph.hiddenMeshCount > 1 ? "es" : ""} found. Review manually — these were not changed.`
+        `${graph.hiddenMeshCount} hidden mesh${graph.hiddenMeshCount > 1 ? "es" : ""} found in the original file and removed. Review the source if they were intentional.`,
+        true
       )
     );
   }
@@ -428,20 +439,35 @@ export function validateModel(
     );
   }
 
+  // ── Category-driven enrichment ────────────────────────────────────────────
+  // Recommendations use the dimensions that the pipeline intends to produce.
+  const dimensionRecommendation = normalisedCategory
+    ? getDimensionRecommendation(normalisedCategory, dimensions)
+    : undefined;
+
+  const longestSideCm = Math.max(dimensions.widthCm, dimensions.depthCm, dimensions.heightCm);
+  const unusualSizeReasons: string[] = [];
+  if (longestSideCm < FURNITURE_MIN_LONGEST_SIDE_CM) {
+    unusualSizeReasons.push(`the longest side is only ${longestSideCm.toFixed(1)} cm`);
+  } else if (longestSideCm > FURNITURE_MAX_LONGEST_SIDE_CM) {
+    unusualSizeReasons.push(`the longest side is ${longestSideCm.toFixed(1)} cm`);
+  }
+  if (dimensionRecommendation && !dimensionRecommendation.withinRange) {
+    unusualSizeReasons.push(`the dimensions are outside the typical ${dimensionRecommendation.category} range`);
+  }
+  if (unusualSizeReasons.length > 0) {
+    findings.push(
+      finding(
+        "MODEL_SIZE_UNUSUAL",
+        "warning",
+        `GLB coordinates are treated as meters. The measured size looks unusual for furniture because ${unusualSizeReasons.join(" and ")}. Verify the source model's scale and correct the dimensions before saving.`
+      )
+    );
+  }
+
   // ── Derive readiness & safety status ──────────────────────────────────────
   const arReadiness    = deriveARReadiness(findings);
   const arSafetyStatus = deriveARSafetyStatus(arReadiness);
-
-  // ── Category-driven enrichment ────────────────────────────────────────────
-  // Both helpers use detectedDimensions (the model's physical reality after
-  // sanitization) so the data reflects what will actually render in AR.
-  const dimensionRecommendation = normalisedCategory
-    ? getDimensionRecommendation(normalisedCategory, detectedDimensions)
-    : undefined;
-
-  const presetSuggestions = normalisedCategory
-    ? generatePresetSuggestions(normalisedCategory, detectedDimensions)
-    : undefined;
 
   return {
     findings,
@@ -453,6 +479,5 @@ export function validateModel(
     autoFixLog,
     wasReExported: false,
     dimensionRecommendation,
-    presetSuggestions,
   };
 }

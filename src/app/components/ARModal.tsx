@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
+import type { ComponentType, HTMLAttributes, ReactNode, Ref } from "react";
 import {
   X,
   Smartphone,
@@ -20,45 +21,33 @@ type ARModalProps = {
   onClose: () => void;
   modelUrl: string;
   name?: string;
-  isSupported?: boolean;
-  /** "x y z" scale string from computeARInfo — already accounts for unit system + target size. */
-  arScale?: string;
-  /**
-   * How far (metres, post-scale) the mesh origin sits above the true bottom face.
-   * Positive  → origin is above the floor → model-viewer would float the model.
-   * Negative  → origin is below the floor → model would sink (rare).
-   * Zero      → origin is exactly at the bottom face (ideal GLB export).
-   *
-   * We compensate by translating the model-viewer element down by this amount
-   * via the `camera-target` + a CSS Y-transform trick so the AR hit-test
-   * floor snap lands on the mesh's actual bottom, not its origin.
-   */
-  arYOffsetM?: number;
 };
 
-type Status = "checking" | "supported" | "unsupported" | "insecure";
+type Status = "checking" | "supported" | "unsupported" | "insecure" | "error";
+type ModelViewerProps = HTMLAttributes<HTMLElement> & {
+  src: string;
+  alt: string;
+  ar?: boolean;
+  "ar-modes"?: string;
+  "ar-scale"?: string;
+  "ar-placement"?: string;
+  "interaction-prompt"?: string;
+  "camera-controls"?: boolean;
+  "touch-action"?: string;
+  "auto-rotate"?: boolean;
+  "auto-rotate-delay"?: string;
+  "environment-image"?: string;
+  "xr-environment"?: boolean;
+  "shadow-intensity"?: string;
+  "shadow-softness"?: string;
+  exposure?: string;
+  children?: ReactNode;
+  ref?: Ref<HTMLElement>;
+};
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/**
- * Builds the model-viewer `position` attribute to compensate for off-centre
- * GLB origins.
- *
- * In model-viewer, `position` shifts the model in world space.
- * If the mesh bottom face is above the GLB origin (arYOffsetM > 0), the model
- * floats above the floor — we push it down by -arYOffsetM.
- * If the mesh bottom face is below the GLB origin (arYOffsetM < 0), the model
- * sinks into the floor — we lift it up by |arYOffsetM|.
- *
- * For normalized models (floor-aligned by modelSanitizer), arYOffsetM ≈ 0
- * and no position compensation is needed.
- */
-function buildModelPosition(arYOffsetM: number): string {
-  // model-viewer expects "Xm Ym Zm" where each value is in metres
-  return `0m ${-arYOffsetM}m 0m`;
-}
 
 /**
  * Loads @google/model-viewer if not already registered.
@@ -79,74 +68,77 @@ export default function ARModal({
   onClose,
   modelUrl,
   name,
-  isSupported,
-  arScale = "1 1 1",
-  arYOffsetM = 0,
 }: ARModalProps) {
   const [status, setStatus] = useState<Status>("checking");
-  const modelViewerRef = useRef<any>(null);
+  const [viewerLoaded, setViewerLoaded] = useState(false);
+  const [canActivateAR, setCanActivateAR] = useState<boolean | null>(null);
+  const modelViewerRef = useRef<HTMLElement | null>(null);
+  const loadListenerRef = useRef<(() => void) | null>(null);
 
-  // Apply ar-placement and interaction-prompt once the element mounts
-  const setModelViewerRef = useCallback((node: any) => {
+  const setModelViewerRef = useCallback((node: HTMLElement | null) => {
+    if (modelViewerRef.current && loadListenerRef.current) {
+      modelViewerRef.current.removeEventListener("load", loadListenerRef.current);
+    }
     modelViewerRef.current = node;
     if (!node) return;
-    node.setAttribute("ar-placement", "floor");
-    node.setAttribute("interaction-prompt", "auto");
+
+    const handleLoad = () => {
+      const available = (node as HTMLElement & { canActivateAR?: boolean }).canActivateAR === true;
+      setCanActivateAR(available);
+      setStatus(available ? "supported" : "unsupported");
+    };
+    loadListenerRef.current = handleLoad;
+    node.addEventListener("load", handleLoad, { once: true });
   }, []);
 
   useEffect(() => {
     if (!open) return;
-
-    setStatus("checking");
 
     const isLocal =
       window.location.hostname === "localhost" ||
       window.location.hostname === "127.0.0.1";
 
     if (window.location.protocol !== "https:" && !isLocal) {
-      setStatus("insecure");
+      Promise.resolve().then(() => setStatus("insecure"));
       return;
     }
 
-    if (isSupported !== undefined) {
-      if (isSupported) {
-        loadModelViewer()
-          .then(() => setStatus("supported"))
-          .catch(() => setStatus("unsupported"));
-      } else {
-        setStatus("unsupported");
-      }
-      return;
-    }
+    let cancelled = false;
+    loadModelViewer()
+      .then(() => {
+        if (!cancelled) {
+          setStatus("checking");
+          setCanActivateAR(null);
+          setViewerLoaded(true);
+        }
+      })
+      .catch((error) => {
+        console.error("[AR model-viewer load failed]", error);
+        if (!cancelled) setStatus("error");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, modelUrl]);
 
-    // Runtime check (fallback when isSupported prop is not provided)
-    (async () => {
-      try {
-        if (!navigator.xr) { setStatus("unsupported"); return; }
-        const ok = await navigator.xr.isSessionSupported("immersive-ar");
-        if (!ok) { setStatus("unsupported"); return; }
-        await loadModelViewer();
-        setStatus("supported");
-      } catch {
-        setStatus("unsupported");
-      }
-    })();
-
-    const handleKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+  useEffect(() => {
+    if (!open) return;
+    const originalOverflow = document.body.style.overflow;
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
     window.addEventListener("keydown", handleKey);
     document.body.style.overflow = "hidden";
     return () => {
       window.removeEventListener("keydown", handleKey);
-      document.body.style.overflow = "auto";
+      document.body.style.overflow = originalOverflow;
     };
-  }, [open, onClose, isSupported]);
+  }, [open, onClose]);
 
   if (!open) return null;
 
-  // model-viewer is a custom element — cast to any to avoid TS complaints about unknown props.
-  const ModelViewer: any = "model-viewer";
-
-  const modelPosition = buildModelPosition(arYOffsetM);
+  // model-viewer is a custom element with attributes not included in React's built-in types.
+  const ModelViewer = "model-viewer" as unknown as ComponentType<ModelViewerProps>;
 
   return (
     <div className="ar-modal-root z-[100] fixed inset-0 flex flex-col bg-[#0A0705]/98 backdrop-blur-xl overscroll-contain">
@@ -217,8 +209,18 @@ export default function ARModal({
           </div>
         )}
 
+        {status === "error" && (
+          <div className="flex flex-col items-center text-center px-10 max-w-md">
+            <AlertCircle className="w-12 h-12 text-red-400 mb-6" />
+            <h3 className="text-white text-lg font-medium mb-2">AR Viewer Failed to Load</h3>
+            <p className="text-white/50 text-sm leading-relaxed">
+              The model viewer could not be loaded. Check your connection and try again.
+            </p>
+          </div>
+        )}
+
         {/* ── Supported ── */}
-        {status === "supported" && (
+        {viewerLoaded && canActivateAR !== false && status !== "insecure" && status !== "error" && (
           <>
             {/* Top hint bar */}
             <div className="absolute top-0 inset-x-0 z-10 flex justify-center items-center bg-gradient-to-b from-black/45 to-transparent px-4 pt-3 pb-6 text-white/40 text-[10px] sm:text-[11px] pointer-events-none">
@@ -255,16 +257,8 @@ export default function ARModal({
               </div>
             </div>
 
-            {/*
-              model-viewer notes:
-              - scale       → from computeARInfo; accounts for native unit system (mm/cm/m) AND target height
-              - camera-target → shifts the orbit/view pivot to compensate for off-centre GLB origins,
-                                which also partially corrects the AR floor snap
-              - ar-placement="floor" → tells WebXR to snap the model to a detected floor plane
-              - ar-scale="fixed"     → prevents model-viewer from auto-resizing in AR
-              - xr-environment       → uses the real-world lighting estimate in AR (looks more natural)
-            */}
             <ModelViewer
+              key={modelUrl}
               ref={setModelViewerRef}
               className="ar-modal-viewer"
               src={modelUrl}
@@ -272,8 +266,8 @@ export default function ARModal({
               ar
               ar-modes="webxr scene-viewer quick-look"
               ar-scale="fixed"
-              scale={arScale}
-              position={modelPosition}
+              ar-placement="floor"
+              interaction-prompt="auto"
               camera-controls
               touch-action="none"
               auto-rotate

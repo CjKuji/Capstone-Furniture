@@ -10,6 +10,10 @@ import React, {
 } from "react";
 
 import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
+import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
+import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
 import { Canvas } from "@react-three/fiber";
 import {
   OrbitControls,
@@ -17,13 +21,8 @@ import {
   Environment,
 } from "@react-three/drei";
 
-import {
-  computeRealScale,
-  computeRenderScale,
-  computeARInfo,
-} from "@/lib/3D/nomarlizeFurnitureModel";
 import ARModal from "./ARModal";
-import { Scan, AlertTriangle, Loader2 } from "lucide-react";
+import { Scan, Loader2 } from "lucide-react";
 
 /* =========================================================
     TYPES
@@ -44,20 +43,60 @@ type DimensionInputs = {
 type ModelProps = {
   url: string;
   textureUrl?: string | null;
-  dimensions?: Dimensions;
-  renderScale?: THREE.Vector3;
+  scale?: [number, number, number];
   onReady?: () => void;
-};
-
-type XRNavigator = Navigator & {
-  xr?: {
-    isSessionSupported?: (mode: string) => Promise<boolean>;
-  };
 };
 
 type WebGLRendererWithCleanup = THREE.WebGLRenderer & {
   _cleanupContextLostListener?: () => void;
 };
+
+async function createScaledPreviewGlb(
+  modelUrl: string,
+  scale: [number, number, number]
+): Promise<Blob> {
+  const response = await fetch(modelUrl);
+  if (!response.ok) {
+    throw new Error(`Could not load the saved model for AR preview (${response.status}).`);
+  }
+  const data = await response.arrayBuffer();
+  const loader = new GLTFLoader();
+  const dracoLoader = new DRACOLoader();
+  dracoLoader.setDecoderPath("https://www.gstatic.com/draco/versioned/decoders/1.5.7/");
+  loader.setDRACOLoader(dracoLoader);
+  loader.setMeshoptDecoder(MeshoptDecoder);
+
+  const scene = await new Promise<THREE.Group>((resolve, reject) => {
+    loader.parse(
+      data,
+      "",
+      (gltf) => resolve(gltf.scene),
+      (error) => reject(error)
+    );
+  }).finally(() => dracoLoader.dispose());
+
+  scene.scale.multiply(new THREE.Vector3(...scale));
+  scene.updateMatrixWorld(true);
+
+  const buffer = await new Promise<ArrayBuffer>((resolve, reject) => {
+    new GLTFExporter().parse(
+      scene,
+      (result) => {
+        if (result instanceof ArrayBuffer) resolve(result);
+        else reject(new Error("Could not encode the scaled AR preview as a GLB."));
+      },
+      (error) => reject(error),
+      {
+        binary: true,
+        onlyVisible: true,
+        trs: true,
+        maxTextureSize: 2048,
+      }
+    );
+  });
+
+  return new Blob([buffer], { type: "model/gltf-binary" });
+}
 
 /* =========================================================
     FALLBACK
@@ -82,7 +121,7 @@ function ViewerFallback({
     MODEL LAYER
 ========================================================= */
 
-function Model({ url, textureUrl, dimensions, renderScale, onReady }: ModelProps) {
+function Model({ url, textureUrl, scale = [1, 1, 1], onReady }: ModelProps) {
   const { scene } = useGLTF(url);
   const hasReportedReady = useRef(false);
   const lastUrlRef = useRef(url);
@@ -110,29 +149,19 @@ function Model({ url, textureUrl, dimensions, renderScale, onReady }: ModelProps
     return clone;
   }, [scene]);
 
-  const { scale, offset } = useMemo(() => {
-    const calculatedScale = renderScale
-      ? renderScale
-      : dimensions
-      ? (() => {
-          const uniformScale = computeRealScale(clonedScene, dimensions);
-          return new THREE.Vector3(uniformScale, uniformScale, uniformScale);
-        })()
-      : new THREE.Vector3(1, 1, 1);
-
-    const box = new THREE.Box3().setFromObject(clonedScene);
+  const { offset } = useMemo(() => {
+    const box = new THREE.Box3().setFromObject(clonedScene, true);
     const center = new THREE.Vector3();
     box.getCenter(center);
 
     return {
-      scale: calculatedScale,
       offset: {
-        x: -center.x * calculatedScale.x,
-        y: -box.min.y * calculatedScale.y,
-        z: -center.z * calculatedScale.z,
+        x: -center.x * scale[0],
+        y: -box.min.y * scale[1],
+        z: -center.z * scale[2],
       },
     };
-  }, [clonedScene, dimensions, renderScale]);
+  }, [clonedScene, scale]);
 
   const originalMaps = useRef<Map<string, THREE.Texture | null>>(new Map());
 
@@ -242,8 +271,7 @@ function Model({ url, textureUrl, dimensions, renderScale, onReady }: ModelProps
 type SafeCanvasProps = {
   modelUrl: string;
   textureUrl?: string | null;
-  dimensions?: Dimensions;
-  renderScale?: THREE.Vector3 | undefined;
+  previewScale?: [number, number, number];
   eventSource: HTMLElement | null;
   onReady?: () => void;
 };
@@ -251,8 +279,7 @@ type SafeCanvasProps = {
 function SafeCanvas({
   modelUrl,
   textureUrl,
-  dimensions,
-  renderScale,
+  previewScale = [1, 1, 1],
   eventSource,
   onReady,
 }: SafeCanvasProps) {
@@ -393,8 +420,7 @@ function SafeCanvas({
               key={modelUrl}
               url={modelUrl}
               textureUrl={textureUrl}
-              dimensions={dimensions}
-              renderScale={renderScale}
+              scale={previewScale}
               onReady={() => setModelReady(true)}
             />
           </Suspense>
@@ -414,14 +440,19 @@ export default function Furniture3DViewer({
   selectedVariantTextureUrl,
   dimensions,
   onReady,
+  allowDimensionPreview = true,
 }: {
   modelUrl: string;
   selectedVariantTextureUrl?: string | null;
   dimensions?: Dimensions;
   onReady?: () => void;
+  allowDimensionPreview?: boolean;
 }) {
   const [arOpen, setArOpen] = useState(false);
-  const [arSupported, setArSupported] = useState<boolean | null>(null);
+  const [arPreparing, setArPreparing] = useState(false);
+  const [arPreviewError, setArPreviewError] = useState<string | null>(null);
+  const [arModelUrl, setArModelUrl] = useState<string | null>(null);
+  const arRunIdRef = useRef(0);
   const [containerElement, setContainerElement] = useState<HTMLDivElement | null>(null);
   const [showDimensionModal, setShowDimensionModal] = useState(false);
   const [useCustomDimensions, setUseCustomDimensions] = useState(false);
@@ -488,22 +519,30 @@ export default function Furniture3DViewer({
     );
   }, [parsedDimensionInputs]);
 
-  const { scene: preloadedScene } = useGLTF(modelUrl.trim() ? modelUrl : "");
-
   const customDimensions = useMemo(() => {
     if (!useCustomDimensions) return dimensions;
     return appliedCustomDimensions ?? dimensions;
   }, [useCustomDimensions, dimensions, appliedCustomDimensions]);
 
-  const viewerDimensions = useMemo(
-    () => (useCustomDimensions ? customDimensions : dimensions),
-    [useCustomDimensions, customDimensions, dimensions]
-  );
+  const previewScale = useMemo(() => {
+    if (!allowDimensionPreview || !useCustomDimensions) return [1, 1, 1] as [number, number, number];
+    const ratio = (target?: number | null, base?: number | null) =>
+      target != null && base != null && Number.isFinite(target) &&
+        Number.isFinite(base) && target > 0 && base > 0
+        ? target / base
+        : 1;
+    return [
+      ratio(customDimensions?.width_cm, dimensions?.width_cm),
+      ratio(customDimensions?.height_cm, dimensions?.height_cm),
+      ratio(customDimensions?.depth_cm, dimensions?.depth_cm),
+    ] as [number, number, number];
+  }, [allowDimensionPreview, useCustomDimensions, customDimensions, dimensions]);
+  const hasCustomPreviewScale = previewScale.some((scale) => Math.abs(scale - 1) > 0.0001);
 
-  const renderScale = useMemo(() => {
-    if (!useCustomDimensions || !preloadedScene) return undefined;
-    return computeRenderScale(preloadedScene, customDimensions ?? dimensions ?? {});
-  }, [useCustomDimensions, customDimensions, dimensions, preloadedScene]);
+  useEffect(() => {
+    if (!arModelUrl?.startsWith("blob:")) return;
+    return () => URL.revokeObjectURL(arModelUrl);
+  }, [arModelUrl]);
 
   const handleDimensionInputChange = (field: keyof DimensionInputs, value: string) => {
     setDimensionInputs((prev) => ({ ...prev, [field]: value }));
@@ -519,9 +558,37 @@ export default function Furniture3DViewer({
     }));
   };
 
-  const handleOpenAr = () => {
-    if (arSupported === false) return;
-    setArOpen(true);
+  const handleCloseAr = () => {
+    arRunIdRef.current += 1;
+    setArOpen(false);
+    setArModelUrl(null);
+  };
+
+  const handleOpenAr = async () => {
+    setArPreviewError(null);
+    if (!hasCustomPreviewScale) {
+      setArModelUrl(null);
+      setArOpen(true);
+      return;
+    }
+
+    const myRun = ++arRunIdRef.current;
+    setArPreparing(true);
+    try {
+      const previewBlob = await createScaledPreviewGlb(modelUrl, previewScale);
+      if (myRun !== arRunIdRef.current) return;
+      setArModelUrl(URL.createObjectURL(previewBlob));
+      setArOpen(true);
+    } catch (error) {
+      console.error("[AR preview GLB generation failed]", error);
+      if (myRun === arRunIdRef.current) {
+        setArPreviewError(
+          error instanceof Error ? error.message : "Could not prepare the preview model for AR."
+        );
+      }
+    } finally {
+      if (myRun === arRunIdRef.current) setArPreparing(false);
+    }
   };
 
   const handleOpenDimensionModal = () => {
@@ -547,6 +614,8 @@ export default function Furniture3DViewer({
 
   const handleDimensionSave = () => {
     if (!isCustomDimensionsValid) return;
+    arRunIdRef.current += 1;
+    setArPreparing(false);
 
     const savedDimensions = {
       width_cm: parsedDimensionInputs.width!,
@@ -576,27 +645,8 @@ export default function Furniture3DViewer({
     setShowDimensionModal(false);
   };
 
-  // ── Pre-parse GLB outside Canvas to compute AR info ──
-  const arInfo = useMemo(() => {
-    if (!preloadedScene || !modelUrl.trim()) {
-      return { arScale: "1 1 1", arYOffsetM: 0 };
-    }
-    return computeARInfo(preloadedScene, viewerDimensions ?? {});
-  }, [preloadedScene, viewerDimensions, modelUrl]);
-
   const containerCallbackRef = useCallback((node: HTMLDivElement | null) => {
     if (node !== null) setContainerElement(node);
-  }, []);
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const checkAR = async () => {
-        const xrNavigator = navigator as XRNavigator;
-        const supported = !!(xrNavigator.xr && await xrNavigator.xr.isSessionSupported?.("immersive-ar"));
-        setArSupported(supported);
-      };
-      checkAR();
-    }
   }, []);
 
   if (!modelUrl.trim()) {
@@ -611,23 +661,21 @@ export default function Furniture3DViewer({
     <>
       <ARModal
         open={arOpen}
-        onClose={() => setArOpen(false)}
-        modelUrl={modelUrl}
-        arScale={arInfo.arScale}
-        arYOffsetM={arInfo.arYOffsetM}
+        onClose={handleCloseAr}
+        modelUrl={arModelUrl ?? modelUrl}
       />
 
 
-      {showDimensionModal && (
+      {allowDimensionPreview && showDimensionModal && (
         <div className="fixed inset-0 z-110 bg-black/80 flex items-center justify-center p-4">
           <div className="w-full max-w-lg rounded-3xl border border-white/10 bg-[#0D0A08]/95 p-6 text-white shadow-2xl">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-sm font-semibold uppercase tracking-[0.24em] text-[#D4A97A]">
-                  Preview Dimensions
+                  Preview Dimensions (preview only)
                 </h2>
                 <p className="mt-3 text-sm text-white/70">
-                  Enter new width, depth, and height. This only affects the viewer and AR preview.
+                  Enter dimensions to resize each axis in the viewer and AR. Saved model dimensions and the stored model are not changed.
                 </p>
               </div>
               <button
@@ -688,31 +736,39 @@ export default function Furniture3DViewer({
       >
         {/* BUTTON CONTRAST FIX: Added dark backdrop and high-contrast text */}
         <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
-          <button
-            onClick={handleOpenDimensionModal}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-[11px] uppercase tracking-wider transition-all shadow-xl bg-white/10 text-white border border-white/10 hover:bg-white/15"
-          >
-            Change Dimension
-          </button>
+          {allowDimensionPreview && (
+            <button
+              onClick={handleOpenDimensionModal}
+              disabled={arPreparing}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-[11px] uppercase tracking-wider transition-all shadow-xl bg-white/10 text-white border border-white/10 hover:bg-white/15"
+            >
+              Change Dimension (preview only)
+            </button>
+          )}
           <button
             onClick={handleOpenAr}
-            disabled={arSupported === false}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-[11px] uppercase tracking-wider transition-all shadow-xl
-              ${arSupported === false 
-                ? "bg-white/5 text-white/20 border border-white/5 cursor-not-allowed" 
-                : "bg-[#D4A97A] hover:bg-[#C4976A] text-[#1C1209] border border-[#D4A97A]"}`}
+            disabled={arPreparing}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-[11px] uppercase tracking-wider transition-all shadow-xl bg-[#D4A97A] hover:bg-[#C4976A] text-[#1C1209] border border-[#D4A97A]"
           >
-            {arSupported === false ? <AlertTriangle size={14} /> : <Scan size={14} />}
-            <span>{arSupported === false ? "AR Unsupported" : "View in Space"}</span>
+            <Scan size={14} />
+            <span>{arPreparing ? "Preparing AR Preview…" : "View in Space"}</span>
           </button>
         </div>
+
+        {arPreviewError && (
+          <p
+            role="alert"
+            className="absolute top-16 right-3 z-10 max-w-sm rounded-xl border border-red-400/20 bg-black/80 px-3 py-2 text-xs text-red-200"
+          >
+            {arPreviewError}
+          </p>
+        )}
 
         <div className="absolute inset-0">
           <SafeCanvas
             modelUrl={modelUrl}
             textureUrl={selectedVariantTextureUrl}
-            dimensions={viewerDimensions}
-            renderScale={renderScale}
+            previewScale={previewScale}
             onReady={onReady}
             eventSource={containerElement}
           />
