@@ -371,7 +371,7 @@ function SafeCanvas({
     <div className="relative w-full h-full overflow-hidden rounded-2xl">
       {/* Smooth fade placeholder - stays in DOM for clean animation */}
       <div 
-        className={`absolute inset-0 z-10 flex items-center justify-center bg-[#050302] transition-opacity duration-500 ease-out pointer-events-none ${
+        className={`absolute inset-0 z-10 flex items-center justify-center bg-[#707070] transition-opacity duration-500 ease-out pointer-events-none ${
           modelReady ? 'opacity-0' : 'opacity-100'
         }`}
       >
@@ -408,12 +408,13 @@ function SafeCanvas({
             };
           }}
         >
+          <color attach="background" args={["#707070"]} />
           <ambientLight intensity={0.5} />
           <directionalLight position={[5, 8, 5]} intensity={1} />
           <Environment preset="city" />
           <mesh rotation={[-Math.PI / 2, 0, 0]}>
             <planeGeometry args={[20, 20]} />
-            <meshStandardMaterial color="#E5E5E5" transparent opacity={0.1} />
+            <meshStandardMaterial color="#A0A0A0" roughness={1} />
           </mesh>
           <Suspense fallback={null}>
             <Model

@@ -441,24 +441,25 @@ export function useFurnitureModalController({
 
   const setDimensionField = useCallback(
     (axis: DimensionAxis, value: number | null) => {
-      updateDimensionField(axis, value);
+      const normalizedValue = value == null ? null : Math.round(value);
+      updateDimensionField(axis, normalizedValue);
       clearDimensionTimer();
       runIdRef.current += 1;
       setGeneralError(undefined);
-      if (value == null || !Number.isFinite(value) || value <= 0) {
-        dimensionValuesRef.current = { ...dimensionValuesRef.current, [axis]: value };
+      if (normalizedValue == null || !Number.isFinite(normalizedValue) || normalizedValue <= 0) {
+        dimensionValuesRef.current = { ...dimensionValuesRef.current, [axis]: normalizedValue };
         setIsAnalyzing(false);
         return;
       }
-      dimensionValuesRef.current = { ...dimensionValuesRef.current, [axis]: value };
+      dimensionValuesRef.current = { ...dimensionValuesRef.current, [axis]: normalizedValue };
       if (!originalFileRef.current && !(item?.model_url && item?.id)) {
         setIsAnalyzing(false);
         return;
       }
 
       const lastValue = lastProcessedDimsRef.current?.[axis];
-      if (lastValue != null && Math.abs(value - lastValue) <= 0.1) {
-        updateDimensionField(axis, Math.round(lastValue * 10) / 10);
+      if (lastValue != null && Math.abs(normalizedValue - lastValue) <= 0.1) {
+        updateDimensionField(axis, Math.round(lastValue));
         setIsAnalyzing(false);
         return;
       }

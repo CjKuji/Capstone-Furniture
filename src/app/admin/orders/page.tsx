@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Box, RefreshCw, LoaderCircle } from "lucide-react";
 
 import {
@@ -16,6 +17,7 @@ import {
 import type { OrderStatus } from "@/types/enums";
 import OrderAdminCard from "@/app/components/OrderAdminCard";
 import { supabase } from "@/lib/supabase";
+import { paymentKeys } from "@/hooks/useFetchPayments";
 
 export default function AdminOrdersPage() {
   const {
@@ -25,6 +27,7 @@ export default function AdminOrdersPage() {
     isFetching,
   } = useAdminOrders();
   const { updateStatus, invalidateOrders } = useAdminOrderActions();
+  const queryClient = useQueryClient();
 
   /* ================= AUTH ================= */
   const [adminId, setAdminId] = useState<string | null>(null);
@@ -72,10 +75,35 @@ export default function AdminOrdersPage() {
       )
       .subscribe();
 
+    const paymentsChannel = supabase
+      .channel("admin-order-payments-live-sync")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "payments",
+        },
+        (payload) => {
+          const newPayment = payload.new as { order_id?: string | null };
+          const oldPayment = payload.old as { order_id?: string | null };
+          const orderId = newPayment?.order_id || oldPayment?.order_id;
+
+          if (orderId) {
+            void queryClient.invalidateQueries({
+              queryKey: paymentKeys.byOrder(orderId),
+            });
+            void invalidateOrders();
+          }
+        }
+      )
+      .subscribe();
+
     return () => {
       supabase.removeChannel(channel);
+      supabase.removeChannel(paymentsChannel);
     };
-  }, [invalidateOrders]);
+  }, [invalidateOrders, queryClient]);
 
   /* ================= CONVERSATIONS ================= */
   const { conversations } = useConversationList({

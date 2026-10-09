@@ -107,9 +107,9 @@ function buildInitial(
         isDeleted:       false,
       })),
 
-      widthCm:  item.width_cm  ?? null,
-      depthCm:  item.depth_cm  ?? null,
-      heightCm: item.height_cm ?? null,
+      widthCm:  item.width_cm  == null ? null : Math.round(item.width_cm),
+      depthCm:  item.depth_cm  == null ? null : Math.round(item.depth_cm),
+      heightCm: item.height_cm == null ? null : Math.round(item.height_cm),
 
       isAnalyzing:      false,
       cleanedModelFile: null,
@@ -202,9 +202,9 @@ export function useFurnitureForm({ mode, item, isOpen }: Params) {
     (widthCm: number, depthCm: number, heightCm: number) => {
       setForm((prev) => ({
         ...prev,
-        widthCm,
-        depthCm,
-        heightCm,
+        widthCm: Math.round(widthCm),
+        depthCm: Math.round(depthCm),
+        heightCm: Math.round(heightCm),
         dimensionSource: "model",
       }));
       setErrors((prev) => ({ ...prev, dimensions: undefined }));
@@ -218,7 +218,8 @@ export function useFurnitureForm({ mode, item, isOpen }: Params) {
 
   const setDimensionField = useCallback(
     (key: "widthCm" | "depthCm" | "heightCm", value: number | null) => {
-      setForm((prev) => ({ ...prev, [key]: value, dimensionSource: "manual" }));
+      const normalizedValue = value == null ? null : Math.round(value);
+      setForm((prev) => ({ ...prev, [key]: normalizedValue, dimensionSource: "manual" }));
       setErrors((prev) => ({ ...prev, dimensions: undefined }));
     },
     []

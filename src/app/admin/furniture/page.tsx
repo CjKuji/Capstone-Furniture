@@ -275,18 +275,20 @@ export default function AdminFurniture() {
                       {new Date(item.created_at).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition justify-end">
+                      <div className="flex items-center gap-1 justify-end">
                         <button
                           onClick={() => openEdit(item)}
-                          className="p-1.5 rounded-lg hover:bg-white/10 text-white/40 hover:text-white transition"
+                          className="p-1.5 rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition"
                           title="Edit"
+                          aria-label={`Edit ${item.name}`}
                         >
                           <Pencil size={14} />
                         </button>
                         <button
                           onClick={() => openDeleteConfirm(item)}
-                          className="p-1.5 rounded-lg hover:bg-red-950/40 text-white/40 hover:text-red-400 transition"
+                          className="p-1.5 rounded-lg hover:bg-red-950/40 text-white/60 hover:text-red-400 transition"
                           title="Delete"
+                          aria-label={`Delete ${item.name}`}
                         >
                           <Trash2 size={14} />
                         </button>

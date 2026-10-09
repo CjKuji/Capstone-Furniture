@@ -174,6 +174,8 @@ export default function BasicInfoSection({
               <input
                 key={key}
                 type="number"
+                min={1}
+                step={1}
                 value={value ?? ""}
                 onChange={(e) =>
                   setField(key, e.target.value === "" ? null : Number(e.target.value))

@@ -52,6 +52,10 @@ export type FurnitureServicePayload = FurnitureFormPayload & {
   arReadiness?: ARReadiness | null;
 };
 
+function normalizeDimensionCm(value: number | null | undefined): number | null {
+  return value == null ? null : Math.round(value);
+}
+
 /* =========================================================
    SUPABASE TYPE AUGMENTATION
    -------------------------------------------------------
@@ -213,9 +217,9 @@ export async function createFurniture(
       base_price:       payload.basePrice     ?? 0,
       created_by:       userId,
 
-      width_cm:         dims?.widthCm         ?? null,
-      depth_cm:         dims?.depthCm         ?? null,
-      height_cm:        dims?.heightCm        ?? null,
+      width_cm:         normalizeDimensionCm(dims?.widthCm),
+      depth_cm:         normalizeDimensionCm(dims?.depthCm),
+      height_cm:        normalizeDimensionCm(dims?.heightCm),
 
       model_url:        null,
       model_ar_status:  payload.arReadiness   ?? null,
@@ -302,9 +306,9 @@ export async function updateFurniture(
     description:  payload.description  ?? null,
     base_price:   payload.basePrice     ?? 0,
 
-    width_cm:     dims?.widthCm         ?? null,
-    depth_cm:     dims?.depthCm         ?? null,
-    height_cm:    dims?.heightCm        ?? null,
+    width_cm:     normalizeDimensionCm(dims?.widthCm),
+    depth_cm:     normalizeDimensionCm(dims?.depthCm),
+    height_cm:    normalizeDimensionCm(dims?.heightCm),
 
     updated_at:   new Date().toISOString(),
   };
