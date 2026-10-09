@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { AdminDashboardData } from "@/services/dashboardService";
 import { useUser } from "@/hooks/useUser";
 import { useAdminDashboard } from "@/hooks/useAdminDashboard";
+import AdminDemandForecast from "@/app/components/AdminDemandForecast";
 import { 
   FileText, 
   Hammer, 
@@ -13,7 +14,6 @@ import {
   Package, 
   TrendingUp, 
   Activity, 
-  CheckCircle2, 
   AlertCircle, 
   Users, 
   Calendar, 
@@ -456,27 +456,9 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* CUMULATIVE TOTALS & GATEWAYS */}
+        {/* QUICK MANAGEMENT ACCESS */}
         <div className="space-y-5">
           
-          {/* ARCHIVED VOLUME AGGREGATES */}
-          <div className="bg-white/[0.01] border border-white/[0.08] print:border-black/20 rounded-2xl p-5 space-y-4 shadow-xl print:shadow-none">
-            <h3 className="text-xs font-bold text-white/50 print:text-black/50 uppercase tracking-widest flex items-center gap-2">
-              <CheckCircle2 size={13} className="text-emerald-500/80" /> Lifetime Completed Items
-            </h3>
-            
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-white/[0.01] border border-white/[0.06] print:border-black/10 rounded-xl p-3.5 text-left group hover:bg-white/[0.02] transition">
-                <span className="text-[10px] text-white/40 print:text-black/50 block tracking-wider uppercase font-bold">Store Orders</span>
-                <p className="text-2xl font-extrabold tracking-tight text-white print:text-black mt-1 group-hover:text-emerald-400 transition-colors">{safeData.completedOrdersCount}</p>
-              </div>
-              <div className="bg-white/[0.01] border border-white/[0.06] print:border-black/10 rounded-xl p-3.5 text-left group hover:bg-white/[0.02] transition">
-                <span className="text-[10px] text-white/40 print:text-black/50 block tracking-wider uppercase font-bold">Custom Orders</span>
-                <p className="text-2xl font-extrabold tracking-tight text-white print:text-black mt-1 group-hover:text-emerald-400 transition-colors">{safeData.completedInquiriesCount}</p>
-              </div>
-            </div>
-          </div>
-
           {/* QUICK CHANNELS PANEL */}
           <div className="bg-white/[0.01] border border-white/[0.1] print:border-black/20 rounded-2xl p-5 space-y-4 shadow-2xl print:shadow-none print:break-inside-avoid">
             <h2 className="text-xs font-bold text-white/50 print:text-black/50 uppercase tracking-widest">
@@ -518,6 +500,7 @@ export default function AdminDashboard() {
         </div>
 
       </div>
+      <AdminDemandForecast />
     </main>
   );
 }

@@ -413,14 +413,14 @@ export default function AdminReportsPage() {
                     />
                 </div>
 
-                {/* Best Selling Products + Orders by Status */}
+                {/* Top Products by Revenue + Orders by Status */}
                 <div className="mt-4 grid grid-cols-1 xl:grid-cols-2 gap-4">
                     <div className="bg-[#12100d]/80 border border-white/10 rounded-3xl p-6 print:border-gray-300 print:bg-white">
                         <div className="border-b border-white/10 pb-3 mb-4 flex items-center gap-2 print:border-gray-200">
                             <Package size={15} className="text-[#D4A97A] print:text-gray-700" />
-                            <h2 className="text-sm font-bold text-white tracking-[0.24em] uppercase print:text-black">Best Sellers</h2>
+                            <h2 className="text-sm font-bold text-white tracking-[0.24em] uppercase print:text-black">Top Products by Revenue</h2>
                         </div>
-                        <p className="text-sm text-white/60 mb-4 print:text-gray-600 leading-relaxed">Top products from completed orders that were paid.</p>
+                        <p className="text-sm text-white/60 mb-4 print:text-gray-600 leading-relaxed">Products ranked by revenue from paid, completed orders.</p>
                         {data.topProducts.length === 0 ? (
                             <EmptyState
                                 title="No best sellers yet"
