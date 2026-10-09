@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import type { Order } from "@/types/order";
 import { PaymentType, usePayment } from "@/hooks/usePayment";
 import { usePaymentsQuery } from "@/hooks/useFetchPayments";
@@ -26,6 +27,11 @@ type Props = {
 
 export default function PayModal({ open, onClose, order, inquiry, totalAmount }: Props) {
   const { pay, loading, error, resetError } = usePayment();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // 1. DYNAMICALLY CHOOSE THE SOURCE CONTEXT ID AND ROUTE TYPE
   const activeTargetId = order?.id || inquiry?.id || "";
@@ -129,20 +135,20 @@ export default function PayModal({ open, onClose, order, inquiry, totalAmount }:
     }
   };
 
-  if (!open) return null;
+  if (!open || !mounted) return null;
 
-  return (
+  return createPortal(
     /* ── OVERLAY ── */
     <div
-      className="fixed inset-0 z-[99999] flex justify-center p-4 pt-20 sm:pt-4 pb-6 md:pb-8 backdrop-blur-md overflow-hidden bg-black/75"
+      className="fixed inset-0 z-[99999] flex items-center justify-center overflow-y-auto overscroll-contain p-3 sm:p-4 backdrop-blur-md bg-black/75"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       {/* ── RESPONSIVE SHEET / CONTAINER ── */}
       <div
         className="
-          w-full flex flex-col 
+          w-full min-h-0 flex flex-col
           rounded-2xl max-w-lg
-          h-[calc(100vh-80px)] md:h-[calc(100vh-96px)]
+          max-h-[calc(100vh-1.5rem)] max-h-[calc(100dvh-1.5rem)]
           shadow-[0_24px_64px_rgba(0,0,0,0.85)] transition-all duration-200 overflow-hidden
           border border-white/[0.06] bg-[#0A0705]
         "
@@ -151,7 +157,7 @@ export default function PayModal({ open, onClose, order, inquiry, totalAmount }:
         <div className="h-[1px] w-full bg-gradient-to-r from-transparent via-[#D4A97A]/40 to-transparent shrink-0" />
 
         {/* ── HEADER ── */}
-        <div className="shrink-0 flex items-center justify-between gap-4 px-6 py-4 bg-[#0E0A07] border-b border-white/[0.04]">
+        <div className="shrink-0 flex items-center justify-between gap-4 px-4 py-3 sm:px-6 sm:py-4 bg-[#0E0A07] border-b border-white/[0.04]">
           <div className="min-w-0">
             <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#D4A97A] mb-0.5">
               {contextMeta.typeLabel} Checkout
@@ -177,7 +183,7 @@ export default function PayModal({ open, onClose, order, inquiry, totalAmount }:
         </div>
 
         {/* ── INTERNAL SCROLLABLE CONTENT BLOCK ── */}
-        <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-5 focus:outline-none custom-scrollbar bg-gradient-to-b from-[#0A0705] to-[#070504]">
+        <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-5 focus:outline-none custom-scrollbar bg-gradient-to-b from-[#0A0705] to-[#070504]">
 
           {/* FINANCIAL STAT SUMMARY STRIP */}
           <div className="grid grid-cols-3 divide-x divide-white/[0.04] rounded-xl border border-white/[0.04] bg-[#0E0A07]/50 overflow-hidden shadow-inner">
@@ -266,7 +272,7 @@ export default function PayModal({ open, onClose, order, inquiry, totalAmount }:
         </div>
 
         {/* ── FOOTER DOCK ── */}
-        <div className="shrink-0 border-t border-white/[0.04] bg-[#0E0A07] px-6 py-4">
+        <div className="shrink-0 border-t border-white/[0.04] bg-[#0E0A07] px-4 py-3 sm:px-6 sm:py-4">
           <div className="flex flex-col-reverse sm:flex-row gap-3 w-full">
             <button
               onClick={onClose}
@@ -297,7 +303,8 @@ export default function PayModal({ open, onClose, order, inquiry, totalAmount }:
         </div>
 
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

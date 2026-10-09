@@ -274,10 +274,9 @@ const OrderFullDetailModalInner = ({
 
   return createPortal(
     <div
-      className="fixed inset-0 flex items-center justify-center p-0 sm:p-6 overflow-hidden"
+      className="fixed inset-0 z-[99999] flex items-center justify-center p-0 sm:p-6 overflow-hidden bg-black/75 backdrop-blur-md"
       style={{
         zIndex: 99999,
-        backgroundColor: "transparent",
         opacity: open ? 1 : 0,
         pointerEvents: open ? "auto" : "none",
         transition: "opacity 0.2s ease-in-out",
