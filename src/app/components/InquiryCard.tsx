@@ -159,7 +159,7 @@ export default function InquiryCard({ inquiry, conversation, userId }: InquiryCa
 
   return (
     <>
-      <div className="relative flex flex-col w-full h-full rounded-xl overflow-hidden border border-[#362719] bg-gradient-to-b from-[#120D08] to-[#0A0704] shadow-[0_8px_30px_rgba(0,0,0,0.6)] transition-all duration-200 hover:border-[#D4A97A]/40 p-4 gap-3.5">
+      <div className="relative flex flex-col w-full h-full rounded-xl overflow-hidden border border-[var(--border)] bg-[var(--surface)] shadow-[0_8px_30px_rgba(59,40,27,0.12)] transition-all duration-200 hover:border-[var(--accent)] p-4 gap-3.5">
         
         {/* HEADER BLOCK */}
         <div className="flex items-center justify-between gap-2 border-b border-[#21180F] pb-2.5">

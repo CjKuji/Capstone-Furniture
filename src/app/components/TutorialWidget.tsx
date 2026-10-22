@@ -101,27 +101,27 @@ export default function TutorialWidget() {
       {/* FLOATING ACTION TRIGGER */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="fixed bottom-6 left-6 z-40 flex items-center gap-2 bg-[#D4A97A] hover:bg-[#C49A6C] shadow-[0_8px_24px_rgba(212,169,122,0.2)] px-4 py-2.5 rounded-full font-bold text-[#0E0A06] text-xs uppercase tracking-wider transition-all duration-200 active:scale-95 group"
+        className="fixed bottom-6 left-6 z-40 flex items-center gap-2 bg-[var(--primary)] hover:bg-[var(--primary-hover)] shadow-[0_8px_24px_rgba(59,40,27,0.18)] px-4 py-2.5 rounded-full font-bold text-[var(--primary-foreground)] text-xs uppercase tracking-wider transition-all duration-200 active:scale-95 group"
       >
-        <HelpCircle className="w-4 h-4 text-[#0E0A06]" />
+        <HelpCircle className="w-4 h-4 text-[var(--primary-foreground)]" />
         <span>Interactive Guide</span>
       </button>
 
       {/* FLYOUT MODAL WINDOW */}
       {isOpen && (
-        <div className="fixed inset-x-4 bottom-24 sm:left-auto sm:right-6 z-50 flex flex-col border border-[#362719] bg-gradient-to-b from-[#120D08] to-[#0A0704] shadow-[0_12px_40px_rgba(0,0,0,0.7)] p-4 sm:p-5 rounded-xl w-auto sm:w-[440px] max-h-[82vh] text-white overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-200">
+        <div className="fixed inset-x-4 bottom-24 sm:left-auto sm:right-6 z-50 flex flex-col border border-[var(--border)] bg-[var(--surface)] shadow-[0_12px_40px_rgba(59,40,27,0.16)] p-4 sm:p-5 rounded-xl w-auto sm:w-[440px] max-h-[82vh] text-[var(--text)] overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-200">
           
           {/* HEADER CONTROLS */}
-          <div className="flex justify-between items-center pb-3 border-[#21180F] border-b">
+          <div className="flex justify-between items-center pb-3 border-[var(--border)] border-b">
             <div className="flex items-center gap-1.5">
-              <Compass className="w-4 h-4 text-[#D4A97A]" />
-              <span className="font-mono font-bold text-[10px] text-[#A68056] uppercase tracking-wider">
+              <Compass className="w-4 h-4 text-[var(--primary)]" />
+              <span className="font-mono font-bold text-[10px] text-[var(--primary)] uppercase tracking-wider">
                 Onboarding Simulator
               </span>
             </div>
             <button 
               onClick={closeWidget} 
-              className="text-white/40 hover:text-white transition-colors"
+              className="text-[var(--text-muted)] hover:text-[var(--text)] transition-colors"
               aria-label="Close guide"
             >
               <X className="w-4 h-4" />
@@ -132,24 +132,24 @@ export default function TutorialWidget() {
             {activePipeline === null ? (
               /* MATRIX PATHWAY SELECTOR */
               <div className="space-y-3 mt-3.5">
-                <p className="text-white/50 text-xs leading-relaxed font-medium">
+                <p className="text-[var(--text-muted)] text-xs leading-relaxed font-medium">
                   Select a tailored pipeline pathway below to discover exactly how blueprint milestones and workshop production builds step forward.
                 </p>
                 
                 {/* Pathway A */}
-                <div className="bg-white/[0.01] hover:bg-white/[0.03] p-3.5 border border-[#21180F] hover:border-[#D4A97A]/30 rounded-lg transition-all duration-200 group">
+                <div className="bg-[var(--surface-alt)] hover:bg-[var(--surface)] p-3.5 border border-[var(--border)] hover:border-[var(--accent)] rounded-lg transition-all duration-200 group">
                   <div className="flex items-center gap-2 mb-1.5">
-                    <Layers className="w-4 h-4 text-[#D4A97A] shrink-0" />
-                    <h4 className="font-bold text-sm text-white group-hover:text-[#D4A97A] transition-colors">
+                    <Layers className="w-4 h-4 text-[var(--primary)] shrink-0" />
+                    <h4 className="font-bold text-sm text-[var(--text)] group-hover:text-[var(--primary)] transition-colors">
                       Standard Order Process
                     </h4>
                   </div>
-                  <p className="text-white/40 text-[11px] leading-relaxed">
+                  <p className="text-[var(--text-muted)] text-[11px] leading-relaxed">
                     Learn how to choose catalog designs, configure localized delivery specs, attach reference files, verify line-item adjustments, and converse with creators.
                   </p>
                   <button
                     onClick={() => startPipeline("order")}
-                    className="flex items-center justify-center gap-1.5 bg-[#D4A97A] hover:bg-[#C49A6C] mt-3 py-1.5 rounded-md font-bold text-[#0E0A06] text-xs transition w-full"
+                    className="flex items-center justify-center gap-1.5 bg-[var(--primary)] hover:bg-[var(--primary-hover)] mt-3 py-1.5 rounded-md font-bold text-[var(--primary-foreground)] text-xs transition w-full"
                   >
                     <span>Launch Order Guide</span>
                     <ArrowRight className="w-3.5 h-3.5" />
@@ -157,19 +157,19 @@ export default function TutorialWidget() {
                 </div>
 
                 {/* Pathway B */}
-                <div className="bg-gradient-to-br from-[#1C140C] to-transparent p-3.5 border border-[#362719] hover:border-[#D4A97A]/30 rounded-lg transition-all duration-200 group">
+                <div className="bg-[var(--surface)] p-3.5 border border-[var(--border)] hover:border-[var(--accent)] rounded-lg transition-all duration-200 group">
                   <div className="flex items-center gap-2 mb-1.5">
-                    <Info className="w-4 h-4 text-[#D4A97A] shrink-0" />
-                    <h4 className="font-bold text-sm text-white group-hover:text-[#D4A97A] transition-colors">
+                    <Info className="w-4 h-4 text-[var(--primary)] shrink-0" />
+                    <h4 className="font-bold text-sm text-[var(--text)] group-hover:text-[var(--primary)] transition-colors">
                       Custom Blueprint Inquiries
                     </h4>
                   </div>
-                  <p className="text-white/40 text-[11px] leading-relaxed">
+                  <p className="text-[var(--text-muted)] text-[11px] leading-relaxed">
                     Have unique industrial ideas or architectural dimensions? Discover how to upload technical blueprints, adjust custom statements, and trigger direct active order conversion.
                   </p>
                   <button
                     onClick={() => startPipeline("inquiry")}
-                    className="flex items-center justify-center gap-1.5 bg-white/[0.02] hover:bg-white/[0.06] border border-[#291E13] hover:border-[#362719] mt-3 py-1.5 rounded-md font-bold text-[#D4A97A] text-xs transition-all w-full"
+                    className="flex items-center justify-center gap-1.5 bg-[var(--surface)] hover:bg-[var(--surface-alt)] border border-[var(--border)] hover:border-[var(--accent)] mt-3 py-1.5 rounded-md font-bold text-[var(--primary)] text-xs transition-all w-full"
                   >
                     <span>Explore Blueprint Inquiries</span>
                     <ArrowRight className="w-3.5 h-3.5" />
@@ -177,13 +177,13 @@ export default function TutorialWidget() {
                 </div>
 
                 {/* TRACK TRACKER QUICK INFO FOOTNOTE */}
-                <div className="flex items-start gap-3 bg-[#050402] border border-[#21180F] p-3 rounded-lg">
-                  <div className="p-2 bg-[#D4A97A]/5 border border-[#D4A97A]/10 rounded-md text-[#D4A97A] shrink-0">
+                <div className="flex items-start gap-3 bg-[var(--surface-alt)] border border-[var(--border)] p-3 rounded-lg">
+                  <div className="p-2 bg-[var(--surface)] border border-[var(--border)] rounded-md text-[var(--primary)] shrink-0">
                     <ShoppingBag className="w-3.5 h-3.5" />
                   </div>
                   <div>
-                    <h5 className="font-bold text-[11px] text-white/90 uppercase font-mono tracking-wide">Track Active Projects</h5>
-                    <p className="mt-0.5 text-white/40 text-[11px] leading-relaxed">
+                    <h5 className="font-bold text-[11px] text-[var(--text)] uppercase font-mono tracking-wide">Track Active Projects</h5>
+                    <p className="mt-0.5 text-[var(--text-muted)] text-[11px] leading-relaxed">
                       You can manage your file uploads, execute milestone balances, and open real-time workshop discussions by utilizing your dashboard matrix views.
                     </p>
                   </div>
@@ -193,12 +193,12 @@ export default function TutorialWidget() {
               /* LIVE PIPELINE ACTIVE VIEWPORT */
               <div className="mt-3.5">
                 <div className="flex justify-between items-center mb-3">
-                  <span className="bg-[#D4A97A]/10 border border-[#D4A97A]/20 px-2 py-0.5 rounded text-[#D4A97A] font-mono text-[9px] font-bold uppercase tracking-wider">
+                  <span className="bg-[var(--surface-alt)] border border-[var(--border)] px-2 py-0.5 rounded text-[var(--primary)] font-mono text-[9px] font-bold uppercase tracking-wider">
                     Stage {activeStep + 1} of {currentSteps.length}
                   </span>
                   <button
                     onClick={() => { setActivePipeline(null); setActiveStep(0); }}
-                    className="flex items-center gap-1 text-white/30 hover:text-white/60 font-mono text-[10px] font-bold uppercase tracking-wide transition-colors"
+                    className="flex items-center gap-1 text-[var(--text-muted)] hover:text-[var(--text)] font-mono text-[10px] font-bold uppercase tracking-wide transition-colors"
                   >
                     <Undo2 className="w-3 h-3" /> Reset
                   </button>
@@ -212,10 +212,10 @@ export default function TutorialWidget() {
                       onClick={() => setActiveStep(idx)}
                       className={`h-1 rounded-full transition-all duration-300 flex-1 relative ${
                         idx === activeStep 
-                          ? "bg-[#D4A97A] shadow-[0_0_6px_#D4A97A]" 
+                          ? "bg-[var(--primary)] shadow-[0_0_6px_var(--primary)]" 
                           : idx < activeStep 
-                          ? "bg-[#D4A97A]/30" 
-                          : "bg-white/5"
+                          ? "bg-[var(--primary)]/30" 
+                          : "bg-[var(--border)]"
                       }`}
                       title={`Jump to Step ${idx + 1}`}
                     />
@@ -223,24 +223,24 @@ export default function TutorialWidget() {
                 </div>
 
                 {/* STATIC DISPLACEMENT BOX - LOCKS COMPACT VISUAL DIMENSIONS */}
-                <div className="bg-[#050402] border border-[#21180F] rounded-lg p-3.5 min-h-[144px] flex flex-col justify-start">
-                  <h4 className="font-bold text-white/90 text-sm tracking-tight">
+                <div className="bg-[var(--surface-alt)] border border-[var(--border)] rounded-lg p-3.5 min-h-[144px] flex flex-col justify-start">
+                  <h4 className="font-bold text-[var(--text)] text-sm tracking-tight">
                     {currentSteps[activeStep]?.title}
                   </h4>
-                  <p className="mt-2 text-white/60 text-xs leading-relaxed font-medium">
+                  <p className="mt-2 text-[var(--text-muted)] text-xs leading-relaxed font-medium">
                     {currentSteps[activeStep]?.desc}
                   </p>
                 </div>
 
                 {/* BOTTOM DUAL-DIRECTION NAVIGATION CONTROL PANEL */}
-                <div className="flex items-center justify-between gap-2.5 mt-4 pt-3 border-[#21180F] border-t">
+                <div className="flex items-center justify-between gap-2.5 mt-4 pt-3 border-[var(--border)] border-t">
                   <button
                     onClick={handlePrev}
                     disabled={activeStep === 0}
                     className={`flex items-center justify-center gap-1 h-8 px-3 rounded-md font-bold text-xs transition-all ${
                       activeStep === 0 
-                        ? "opacity-20 cursor-not-allowed text-white/40 border border-transparent" 
-                        : "border border-[#291E13] bg-white/[0.01] text-white/70 hover:text-white hover:bg-white/[0.04]"
+                        ? "opacity-50 cursor-not-allowed text-[var(--text-muted)] border border-transparent" 
+                        : "border border-[var(--border)] bg-[var(--surface)] text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-alt)]"
                     }`}
                   >
                     <ChevronLeft className="w-3.5 h-3.5" />
@@ -249,7 +249,7 @@ export default function TutorialWidget() {
 
                   <button
                     onClick={handleNext}
-                    className="flex items-center justify-center gap-1 bg-[#D4A97A] hover:bg-[#C49A6C] h-8 px-4 rounded-md font-bold text-[#0E0A06] text-xs transition-all shadow-md"
+                    className="flex items-center justify-center gap-1 bg-[var(--primary)] hover:bg-[var(--primary-hover)] h-8 px-4 rounded-md font-bold text-[var(--primary-foreground)] text-xs transition-all shadow-md"
                   >
                     <span>
                       {activeStep === currentSteps.length - 1 ? "Complete Guide" : "Next Stage"}

@@ -165,10 +165,10 @@ export default function Navbar() {
             <button
               onClick={() => { router.push(route); setMenuOpen(false); }}
               className={`flex justify-between items-center py-4 w-full font-medium text-base transition
-                ${active ? "text-[#D4A97A]" : "text-white/70 hover:text-white"}`}
+                ${active ? "text-[var(--primary)]" : "text-[var(--text-muted)] hover:text-[var(--text)]"}`}
             >
               {label}
-              <ChevronRight className={`w-4 h-4 ${active ? "text-[#D4A97A]/50" : "text-white/20"}`} />
+              <ChevronRight className={`w-4 h-4 ${active ? "text-[var(--primary)]/60" : "text-[var(--text-muted)]/40"}`} />
             </button>
           </li>
         );
@@ -178,11 +178,11 @@ export default function Navbar() {
           <button
             onClick={() => router.push(route)}
             className={`relative px-4 py-2 text-sm font-medium tracking-wide transition-colors duration-150
-              ${active ? "text-white" : "text-white/60 hover:text-white"}`}
+              ${active ? "text-[var(--on-wood)]" : "text-[var(--on-wood)]/75 hover:text-[var(--on-wood)]"}`}
           >
             {label}
             {active && (
-              <span className="-bottom-px absolute inset-x-4 bg-[#D4A97A] rounded-full h-[2px]" />
+              <span className="-bottom-px absolute inset-x-4 bg-[var(--accent)] rounded-full h-[2px]" />
             )}
           </button>
         </li>
@@ -194,13 +194,12 @@ export default function Navbar() {
     <>
       {/* ── MAIN NAV ── */}
       <header
-        className={`sticky top-0 w-full transition-all duration-300 ${
-          scrolled ? "shadow-[0_2px_24px_rgba(0,0,0,0.35)]" : ""
-        } bg-[#1C1209]/96 backdrop-blur-md`}
+        className={`sticky top-0 w-full print:hidden transition-shadow duration-300 ${
+          scrolled ? "shadow-[0_2px_24px_rgba(59,40,27,0.10)]" : ""
+        } bg-[var(--wood-dark)]/95 backdrop-blur-md border-b border-[var(--accent)]/30`}
         style={{ zIndex: 50 }}
       >
-        {/* Increased navbar height container to h-16 sm:h-20 */}
-        <div className="flex justify-between items-center gap-2 sm:gap-4 mx-auto px-3 sm:px-6 max-w-7xl h-16 sm:h-20 transition-all duration-300">
+        <div className="flex justify-between items-center gap-2 sm:gap-4 mx-auto px-3 sm:px-6 max-w-7xl h-14 sm:h-16">
 
           {/* LOGO LINK */}
           <button
@@ -208,14 +207,13 @@ export default function Navbar() {
             aria-label="Woodforge Home"
             className="flex items-center shrink-0 group py-1"
           >
-            {/* Slightly larger logo for more presence in the navbar */}
-            <div className="relative w-56 h-14 sm:w-64 sm:h-16 transition-transform group-hover:scale-[1.01] duration-200 overflow-hidden">
+            <div className="relative w-40 h-10 sm:w-48 sm:h-12 transition-transform group-hover:scale-[1.01] duration-200">
               <Image 
                 src="https://havfynxlaoaieomuomzy.supabase.co/storage/v1/object/public/System-Assets/Logo.png"
                 alt="Woodforge Logo"
                 fill
-                sizes="(max-width: 640px) 224px, 256px"
-                className="object-contain object-left brightness-110"
+                sizes="(max-width: 640px) 160px, 192px"
+                className="object-contain object-left"
                 priority
               />
             </div>
@@ -232,7 +230,7 @@ export default function Navbar() {
           <div className="flex items-center gap-0.5 sm:gap-1">
             <div className="hidden md:flex items-center gap-0.5 sm:gap-1">
               {!initialized ? (
-                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-white/10 animate-pulse ml-0.5 sm:ml-1" />
+                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-[var(--surface-alt)] animate-pulse ml-0.5 sm:ml-1" />
               ) : authUser ? (
                 <>
                   {/* ── CART ICON ── */}
@@ -242,12 +240,12 @@ export default function Navbar() {
                     title="Saved designs"
                     className={`relative p-2 rounded-full transition
                       ${onCart
-                        ? "text-[#D4A97A] bg-[#D4A97A]/10"
-                        : "text-white/60 hover:text-white hover:bg-white/10"}`}
+                        ? "text-[var(--wood-dark)] bg-[var(--accent)]"
+                        : "text-[var(--on-wood)] hover:text-[var(--accent)] hover:bg-[var(--on-wood)]/10"}`}
                   >
                     <ShoppingCart className="w-4 h-4 sm:w-5 sm:h-5" />
                     {cartCount > 0 && (
-                      <span className="top-1 right-1 absolute flex justify-center items-center bg-[#D4A97A] rounded-full w-3.5 h-3.5 sm:w-4 sm:h-4 font-bold text-[#1C1209] text-[9px] sm:text-[10px]">
+                      <span className="top-1 right-1 absolute flex justify-center items-center bg-[var(--accent)] rounded-full w-3.5 h-3.5 sm:w-4 sm:h-4 font-bold text-[var(--wood-dark)] text-[9px] sm:text-[10px]">
                         {cartCount > 99 ? "99+" : cartCount}
                       </span>
                     )}
@@ -260,12 +258,12 @@ export default function Navbar() {
                     title="Custom blueprints"
                     className={`relative p-2 rounded-full transition
                       ${onInquiry
-                        ? "text-[#D4A97A] bg-[#D4A97A]/10"
-                        : "text-white/60 hover:text-white hover:bg-white/10"}`}
+                        ? "text-[var(--wood-dark)] bg-[var(--accent)]"
+                        : "text-[var(--on-wood)] hover:text-[var(--accent)] hover:bg-[var(--on-wood)]/10"}`}
                   >
                     <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5" />
                     {inquiryCount > 0 && (
-                      <span className="top-1 right-1 absolute flex justify-center items-center bg-[#D4A97A] rounded-full w-3.5 h-3.5 sm:w-4 sm:h-4 font-bold text-[#1C1209] text-[9px] sm:text-[10px]">
+                      <span className="top-1 right-1 absolute flex justify-center items-center bg-[var(--accent)] rounded-full w-3.5 h-3.5 sm:w-4 sm:h-4 font-bold text-[var(--wood-dark)] text-[9px] sm:text-[10px]">
                         {inquiryCount > 99 ? "99+" : inquiryCount}
                       </span>
                     )}
@@ -278,12 +276,12 @@ export default function Navbar() {
                     title="My orders"
                     className={`relative p-2 rounded-full transition
                       ${onOrders
-                        ? "text-[#D4A97A] bg-[#D4A97A]/10"
-                        : "text-white/60 hover:text-white hover:bg-white/10"}`}
+                        ? "text-[var(--wood-dark)] bg-[var(--accent)]"
+                        : "text-[var(--on-wood)] hover:text-[var(--accent)] hover:bg-[var(--on-wood)]/10"}`}
                   >
                     <ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5" />
                     {orderCount > 0 && (
-                      <span className="top-1 right-1 absolute flex justify-center items-center bg-[#D4A97A] rounded-full w-3.5 h-3.5 sm:w-4 sm:h-4 font-bold text-[#1C1209] text-[9px] sm:text-[10px]">
+                      <span className="top-1 right-1 absolute flex justify-center items-center bg-[var(--accent)] rounded-full w-3.5 h-3.5 sm:w-4 sm:h-4 font-bold text-[var(--wood-dark)] text-[9px] sm:text-[10px]">
                         {orderCount > 99 ? "99+" : orderCount}
                       </span>
                     )}
@@ -295,23 +293,23 @@ export default function Navbar() {
                       onClick={() => setDropdownOpen((p) => !p)}
                       aria-expanded={dropdownOpen}
                       aria-label="User menu"
-                      className="flex justify-center items-center bg-[#D4A97A] hover:opacity-90 rounded-full w-8 h-8 sm:w-9 sm:h-9 font-bold text-[#1C1209] text-xs sm:text-sm transition"
+                      className="flex justify-center items-center bg-[var(--surface)] hover:bg-[var(--surface-alt)] rounded-full w-8 h-8 sm:w-9 sm:h-9 font-bold text-[var(--text)] text-xs sm:text-sm transition"
                     >
                       {initials}
                     </button>
 
                     {dropdownOpen && (
-                      <div className="right-0 absolute bg-[#241810] shadow-2xl mt-3 border border-white/10 rounded-xl ring-1 ring-black/20 w-56 sm:w-60 overflow-hidden">
-                        <div className="flex items-center gap-3 px-4 py-3 border-white/10 border-b">
-                          <div className="flex justify-center items-center bg-[#D4A97A] rounded-full w-8 h-8 sm:w-9 sm:h-9 font-bold text-[#1C1209] text-xs sm:text-sm shrink-0">
+                      <div className="right-0 absolute bg-[var(--surface)] shadow-[0_12px_32px_rgba(59,40,27,0.12)] mt-3 border border-[var(--border)] rounded-xl w-56 sm:w-60 overflow-hidden">
+                        <div className="flex items-center gap-3 px-4 py-3 border-[var(--border)] border-b">
+                          <div className="flex justify-center items-center bg-[var(--primary)] rounded-full w-8 h-8 sm:w-9 sm:h-9 font-bold text-[var(--primary-foreground)] text-xs sm:text-sm shrink-0">
                             {initials}
                           </div>
                           <div className="min-w-0">
-                            <p className="font-medium text-white text-xs sm:text-sm truncate">
+                            <p className="font-medium text-[var(--text)] text-xs sm:text-sm truncate">
                               {authUser.email}
                             </p>
                             {role && (
-                              <p className="text-[#D4A97A] text-[10px] sm:text-xs capitalize">{role}</p>
+                              <p className="text-[var(--primary)] text-[10px] sm:text-xs capitalize">{role}</p>
                             )}
                           </div>
                         </div>
@@ -320,23 +318,23 @@ export default function Navbar() {
                           <button
                             key={label}
                             onClick={() => { setDropdownOpen(false); router.push(route); }}
-                            className="flex items-center gap-3 hover:bg-white/5 px-4 py-3 w-full text-white/70 hover:text-white text-sm text-left transition"
+                            className="flex items-center gap-3 hover:bg-[var(--surface-alt)] px-4 py-3 w-full text-[var(--text-muted)] hover:text-[var(--text)] text-sm text-left transition"
                           >
-                            <span className="text-[#D4A97A]">{icon}</span>
+                            <span className="text-[var(--primary)]">{icon}</span>
                             {label}
                             {badge !== undefined && (
-                              <span className="ml-1 flex items-center justify-center bg-[#D4A97A]/20 text-[#D4A97A] text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px]">
+                              <span className="ml-1 flex items-center justify-center bg-[var(--surface-alt)] text-[var(--primary)] text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px]">
                                 {badge}
                               </span>
                             )}
-                            <ChevronRight className="ml-auto w-3.5 h-3.5 text-white/30" />
+                            <ChevronRight className="ml-auto w-3.5 h-3.5 text-[var(--text-muted)]" />
                           </button>
                         ))}
 
-                        <div className="border-white/10 border-t">
+                        <div className="border-[var(--border)] border-t">
                           <button
                             onClick={handleLogout}
-                            className="flex items-center gap-3 hover:bg-red-950/30 px-4 py-3 w-full text-red-400 hover:text-red-300 text-sm text-left transition"
+                            className="flex items-center gap-3 hover:bg-red-50 px-4 py-3 w-full text-[var(--danger)] hover:text-[var(--danger)] text-sm text-left transition"
                           >
                             <LogOut className="w-4 h-4" />
                             Sign out
@@ -350,13 +348,13 @@ export default function Navbar() {
                 <div className="hidden sm:flex items-center gap-2 ml-2">
                   <button
                     onClick={() => router.push("/auth/login")}
-                    className="px-3 sm:px-4 py-1.5 rounded-full font-medium text-white/70 hover:text-white text-xs sm:text-sm transition"
+                    className="px-3 sm:px-4 py-1.5 rounded-full font-medium text-[var(--on-wood)]/85 hover:text-[var(--on-wood)] text-xs sm:text-sm transition"
                   >
                     Login
                   </button>
                   <button
                     onClick={() => router.push("/auth/register")}
-                    className="bg-[#D4A97A] hover:bg-[#C4976A] px-3 sm:px-4 py-1.5 rounded-full font-semibold text-[#1C1209] text-xs sm:text-sm transition"
+                    className="bg-[var(--primary)] hover:bg-[var(--primary-hover)] px-3 sm:px-4 py-1.5 rounded-full font-semibold text-[var(--primary-foreground)] text-xs sm:text-sm transition"
                   >
                     Get Started
                   </button>
@@ -369,7 +367,7 @@ export default function Navbar() {
               onClick={() => setMenuOpen((p) => !p)}
               aria-label="Toggle menu"
               aria-expanded={menuOpen}
-              className="md:hidden hover:bg-white/10 ml-0.5 p-2 rounded-full text-white/60 hover:text-white transition"
+              className="md:hidden hover:bg-[var(--on-wood)]/10 ml-0.5 p-2 rounded-full text-[var(--on-wood)] hover:text-[var(--accent)] transition"
             >
               {menuOpen
                 ? <X className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -384,45 +382,45 @@ export default function Navbar() {
       {/* MOBILE SLIDE-DOWN MENU */}
       {menuOpen && (
         <div
-          className="md:hidden fixed inset-0 z-40 bg-[#0F0A06]/95 backdrop-blur-md flex flex-col pt-16 sm:pt-20"
+          className="md:hidden fixed inset-0 z-40 bg-[var(--bg)]/95 backdrop-blur-md flex flex-col pt-14 sm:pt-16"
           style={{ top: 0 }}
         >
-          <div className="h-16 sm:h-20 shrink-0" onClick={() => setMenuOpen(false)} />
+          <div className="h-14 sm:h-16 shrink-0" onClick={() => setMenuOpen(false)} />
 
           <nav className="flex-1 overflow-y-auto px-4 py-2">
 
-            <ul className="flex flex-col divide-y divide-white/5">
+            <ul className="flex flex-col divide-y divide-[var(--border)]">
               {renderNavItems(true)}
             </ul>
 
             {!initialized ? (
               <div className="mt-6 space-y-3">
-                <div className="h-12 rounded-full bg-white/5 animate-pulse" />
+                <div className="h-12 rounded-full bg-[var(--surface-alt)] animate-pulse" />
               </div>
             ) : !authUser ? (
               <div className="flex flex-col gap-3 mt-6">
                 <button
                   onClick={() => { router.push("/auth/login"); setMenuOpen(false); }}
-                  className="w-full py-3 border border-white/20 rounded-full font-medium text-white/70 hover:text-white text-sm transition"
+                  className="w-full py-3 border border-[var(--border)] rounded-full font-medium text-[var(--text-muted)] hover:text-[var(--text)] text-sm transition"
                 >
                   Login
                 </button>
                 <button
                   onClick={() => { router.push("/auth/register"); setMenuOpen(false); }}
-                  className="w-full bg-[#D4A97A] hover:bg-[#C4976A] py-3 rounded-full font-semibold text-[#1C1209] text-sm transition"
+                  className="w-full bg-[var(--primary)] hover:bg-[var(--primary-hover)] py-3 rounded-full font-semibold text-[var(--primary-foreground)] text-sm transition"
                 >
                   Get Started
                 </button>
               </div>
             ) : (
-              <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
-                <div className="flex items-center gap-3 px-4 py-4 border-b border-white/10">
-                  <div className="flex justify-center items-center bg-[#D4A97A] rounded-full w-10 h-10 font-bold text-[#1C1209] shrink-0">
+              <div className="mt-6 rounded-2xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden">
+                <div className="flex items-center gap-3 px-4 py-4 border-b border-[var(--border)]">
+                  <div className="flex justify-center items-center bg-[var(--primary)] rounded-full w-10 h-10 font-bold text-[var(--primary-foreground)] shrink-0">
                     {initials}
                   </div>
                   <div className="min-w-0">
-                    <p className="font-medium text-white text-sm truncate">{authUser.email}</p>
-                    {role && <p className="text-[#D4A97A] text-xs capitalize">{role}</p>}
+                    <p className="font-medium text-[var(--text)] text-sm truncate">{authUser.email}</p>
+                    {role && <p className="text-[var(--primary)] text-xs capitalize">{role}</p>}
                   </div>
                 </div>
                 
@@ -430,22 +428,22 @@ export default function Navbar() {
                   <button
                     key={label}
                     onClick={() => { router.push(route); setMenuOpen(false); }}
-                    className="flex items-center gap-3 px-4 py-3.5 w-full text-white/70 hover:text-white hover:bg-white/5 text-sm border-b border-white/5 last:border-b-0 transition"
+                    className="flex items-center gap-3 px-4 py-3.5 w-full text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-alt)] text-sm border-b border-[var(--border)] last:border-b-0 transition"
                   >
-                    <span className="text-[#D4A97A]">{icon}</span>
+                    <span className="text-[var(--primary)]">{icon}</span>
                     {label}
                     {badge !== undefined && (
-                      <span className="ml-1 flex items-center justify-center bg-[#D4A97A]/20 text-[#D4A97A] text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px]">
+                      <span className="ml-1 flex items-center justify-center bg-[var(--surface-alt)] text-[var(--primary)] text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px]">
                         {badge}
                       </span>
                     )}
-                    <ChevronRight className="ml-auto w-3.5 h-3.5 text-white/20" />
+                    <ChevronRight className="ml-auto w-3.5 h-3.5 text-[var(--text-muted)]" />
                   </button>
                 ))}
                 
                 <button
                   onClick={() => { handleLogout(); setMenuOpen(false); }}
-                  className="flex items-center gap-3 px-4 py-3.5 w-full text-red-400 hover:text-red-300 hover:bg-red-950/20 text-sm transition"
+                  className="flex items-center gap-3 px-4 py-3.5 w-full text-[var(--danger)] hover:text-[var(--danger)] hover:bg-red-50 text-sm transition"
                 >
                   <LogOut className="w-4 h-4" />
                   Sign out

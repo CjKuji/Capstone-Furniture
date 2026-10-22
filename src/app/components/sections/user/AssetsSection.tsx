@@ -18,8 +18,8 @@ export default function AssetsSection({ state, onImageClick }: Props) {
 
       {/* HEADER */}
       <div className="flex items-center gap-3">
-        <div className="w-1 h-4 rounded-full" style={{ background: "#D4A97A" }} />
-        <p className="text-xs font-semibold text-white/40 uppercase tracking-widest">
+        <div className="w-1 h-4 rounded-full bg-[var(--accent)]" />
+        <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-widest">
           Gallery
         </p>
       </div>
@@ -33,12 +33,10 @@ export default function AssetsSection({ state, onImageClick }: Props) {
               e.stopPropagation();
               onImageClick?.(images.map(i => ({ url: i.url, id: i.id })), idx);
             }}
-            className="relative group aspect-square rounded-xl overflow-hidden text-left"
+            className="relative group aspect-square rounded-xl overflow-hidden text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
             style={{
-              background: "rgba(255,255,255,0.03)",
-              border: img.isPrimary
-                ? "1.5px solid rgba(212,169,122,0.4)"
-                : "1px solid rgba(255,255,255,0.06)",
+              background: "var(--surface-alt)",
+              border: img.isPrimary ? "1.5px solid var(--accent)" : "1px solid var(--border)",
             }}
           >
             <img
@@ -52,9 +50,9 @@ export default function AssetsSection({ state, onImageClick }: Props) {
               <div
                 className="absolute top-2 left-2 px-2 py-0.5 rounded-full text-[9px] font-semibold"
                 style={{
-                  background: "rgba(212,169,122,0.2)",
-                  border: "1px solid rgba(212,169,122,0.35)",
-                  color: "#D4A97A",
+                  background: "var(--surface)",
+                  border: "1px solid var(--accent)",
+                  color: "var(--primary)",
                 }}
               >
                 Main
@@ -63,15 +61,14 @@ export default function AssetsSection({ state, onImageClick }: Props) {
 
             {/* HOVER OVERLAY */}
             <div
-              className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-              style={{ background: "rgba(212,169,122,0.06)" }}
+              className="absolute inset-0 bg-[var(--primary)]/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
             />
             
             {/* CLICK INDICATOR */}
             {onImageClick && (
               <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                <div className="bg-black/60 backdrop-blur-sm px-2 py-1 rounded-lg border border-white/10">
-                  <Maximize2 className="w-4 h-4 text-white" />
+                <div className="bg-[var(--wood-dark)]/90 backdrop-blur-sm px-2 py-1 rounded-lg border border-[var(--border)]">
+                  <Maximize2 className="w-4 h-4 text-[var(--on-wood)]" />
                 </div>
               </div>
             )}

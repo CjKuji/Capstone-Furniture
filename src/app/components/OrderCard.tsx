@@ -256,20 +256,20 @@ export default function OrderCard({ order: propOrder, userId, conversation: prop
 
   return (
     <>
-      <div className="relative flex flex-col w-full max-w-md mx-auto h-full rounded-2xl overflow-hidden border border-[#423120] bg-gradient-to-b from-[#140F0A] to-[#0E0A06] shadow-[0_12px_40px_rgba(0,0,0,0.7)] transition-all duration-300 hover:border-[#D4A97A]/50">
-        <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-[#D4A97A]/80 to-transparent flex-shrink-0" />
+      <div className="relative flex flex-col w-full h-full rounded-2xl overflow-hidden border border-[var(--border)] bg-[var(--surface)] shadow-[0_8px_28px_rgba(59,40,27,0.10)] transition-all duration-300 hover:border-[var(--accent)]">
+        <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-[var(--accent)] to-transparent flex-shrink-0" />
 
         {/* Header Container */}
         <div className="px-5 pt-4 pb-2 flex-shrink-0">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
-              <p className="text-[9px] font-black tracking-[0.22em] text-[#A68056] uppercase mb-0.5">
+              <p className="text-[9px] font-bold tracking-[0.18em] text-[var(--text-muted)] uppercase mb-0.5">
                 Order Reference
               </p>
-              <h2 className="text-[15px] font-bold text-white tracking-wide truncate">
+              <h2 className="text-[15px] font-bold text-[var(--text)] tracking-wide truncate">
                 {order.order_reference_code || "Pending"}
               </h2>
-              <p className="text-[10px] text-white/40 mt-0.5">
+              <p className="text-[10px] text-[var(--text-muted)] mt-0.5">
                 Ordered on {new Date(order.created_at).toLocaleDateString()}
               </p>
             </div>
@@ -277,12 +277,12 @@ export default function OrderCard({ order: propOrder, userId, conversation: prop
             <div className="flex flex-col items-end gap-2 shrink-0">
               <div className="flex items-center gap-1.5 shrink-0 self-start mt-0.5">
                 {visibleUnreadCount > 0 && (
-                  <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-500/10 border border-rose-500/20 text-rose-400 text-[9px] font-bold tracking-wide uppercase animate-pulse">
+                  <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-[var(--danger-tint)] border border-[var(--danger)]/25 text-[var(--danger)] text-[9px] font-bold tracking-wide uppercase animate-pulse">
                     {visibleUnreadCount} MSG
                   </span>
                 )}
                 <span
-                  className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-[0.15em] border backdrop-blur-sm bg-black/30 shadow-inner ${statusUI?.color}`}
+                  className={`px-3 py-1 rounded-full text-[9px] font-bold uppercase tracking-[0.12em] border border-[var(--border)] ${statusUI?.color}`}
                 >
                   {statusUI?.label || "Processing"}
                 </span>
@@ -292,7 +292,7 @@ export default function OrderCard({ order: propOrder, userId, conversation: prop
                 <button
                   onClick={() => setOpenCancel(true)}
                   disabled={isCancelling}
-                  className="text-[9px] font-black uppercase text-rose-400/80 hover:text-rose-400 tracking-wider transition-colors bg-rose-500/[0.04] border border-rose-500/10 hover:border-rose-500/30 px-2 py-0.5 rounded-md"
+                  className="text-[9px] font-bold uppercase text-[var(--danger)] tracking-wider transition-colors bg-[var(--danger-tint)] border border-[var(--danger)]/20 hover:border-[var(--danger)]/40 px-2 py-0.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
                 >
                   {isCancelling ? "Processing..." : "Cancel Order"}
                 </button>
@@ -308,11 +308,11 @@ export default function OrderCard({ order: propOrder, userId, conversation: prop
 
         {/* Item Specs Brief */}
         <div className="px-5 mb-2.5 flex-shrink-0">
-          <div className="flex items-center gap-2 bg-white/[0.02] border border-[#2A1F14] rounded-xl px-3 py-1.5">
-            <span className="text-[11px] font-black text-[#D4A97A] bg-[#D4A97A]/10 px-1.5 py-0.5 rounded-md">
+          <div className="flex items-center gap-2 bg-[var(--surface-alt)] border border-[var(--border)] rounded-xl px-3 py-1.5">
+            <span className="text-[11px] font-bold text-[var(--primary)] bg-[var(--surface)] px-1.5 py-0.5 rounded-md">
               x{financialData.totalPieces}
             </span>
-            <span className="text-[11.5px] font-semibold text-white/90 tracking-wide">
+            <span className="text-[11.5px] font-semibold text-[var(--text)] tracking-wide">
               Furniture Design Specification
             </span>
           </div>
@@ -320,37 +320,37 @@ export default function OrderCard({ order: propOrder, userId, conversation: prop
 
         {/* Financial Badges Metric Layout */}
         <div className="mx-5 mb-2.5 flex-shrink-0">
-          <div className="grid grid-cols-3 divide-x divide-[#38291A] rounded-t-xl border-t border-x border-[#38291A] bg-[#070503]">
+          <div className="grid grid-cols-3 divide-x divide-[var(--border)] rounded-t-xl border-t border-x border-[var(--border)] bg-[var(--surface-alt)]">
             <FinStat
               label="Total"
               value={`₱${financialData.finalTotal.toLocaleString()}`}
-              color="text-[#E8C98A]"
+              color="text-[var(--primary)]"
             />
             <FinStat
               label="Paid"
               value={paymentsLoading ? "…" : `₱${financialData.totalPaid.toLocaleString()}`}
-              color="text-emerald-400"
+              color="text-[var(--success)]"
             />
             <FinStat
               label="Balance"
               value={`₱${financialData.breakdown.remaining.toLocaleString()}`}
               color={
                 financialData.breakdown.remaining > 0
-                  ? "text-amber-500 font-bold"
-                  : "text-emerald-400"
+                  ? "text-[var(--warning)] font-bold"
+                  : "text-[var(--success)]"
               }
             />
           </div>
-          <div className="flex items-center justify-between border border-[#38291A] bg-[#110B06] px-3 py-1.5 rounded-b-xl text-[10px]">
-            <span className="text-white/40">
+          <div className="flex items-center justify-between border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 rounded-b-xl text-[10px]">
+            <span className="text-[var(--text-muted)]">
               Base:{" "}
-              <span className="text-white/70">
+              <span className="text-[var(--text)]">
                 ₱{financialData.baseTotal.toLocaleString()}
               </span>
             </span>
             <span
               className={`font-semibold ${
-                financialData.chargesTotal >= 0 ? "text-amber-500" : "text-emerald-400"
+                financialData.chargesTotal >= 0 ? "text-[var(--warning)]" : "text-[var(--success)]"
               }`}
             >
               {financialData.chargesTotal >= 0 ? "+" : ""} Adjustments: ₱
@@ -361,15 +361,15 @@ export default function OrderCard({ order: propOrder, userId, conversation: prop
 
         {/* Workflow Message Bubble */}
         <div className="mx-5 mb-2.5 flex-shrink-0">
-          <div className="flex items-start gap-2.5 rounded-xl bg-[#1B120A] border border-[#38291A] px-3.5 py-2 min-h-[50px]">
+          <div className="flex items-start gap-2.5 rounded-xl bg-[var(--surface-alt)] border border-[var(--border)] px-3.5 py-2 min-h-[50px]">
             <div
-              className={`mt-1.5 h-1.5 w-1.5 rounded-full shrink-0 bg-[#D4A97A] ${
+              className={`mt-1.5 h-1.5 w-1.5 rounded-full shrink-0 bg-[var(--accent)] ${
                 ["requested", "accepted", "in_production"].includes(order.order_status)
-                  ? "animate-pulse shadow-[0_0_8px_#D4A97A]"
+                  ? "animate-pulse shadow-[0_0_8px_var(--accent)]"
                   : ""
               }`}
             />
-            <p className="text-[11px] leading-relaxed text-white/70 italic">
+            <p className="text-[11px] leading-relaxed text-[var(--text)] italic">
               {getOrderMessage(order)}
             </p>
           </div>
@@ -389,19 +389,19 @@ export default function OrderCard({ order: propOrder, userId, conversation: prop
         </div>
 
         {/* Actions Footer */}
-        <div className="mt-auto border-t border-[#2A1F14] bg-[#080604] px-5 py-3.5 flex flex-col gap-3 flex-shrink-0">
-          <div className="flex items-center justify-between border-b border-[#1C150E] pb-2 h-7">
+        <div className="mt-auto border-t border-[var(--border)] bg-[var(--surface)] px-5 py-3.5 flex flex-col gap-3 flex-shrink-0">
+          <div className="flex items-center justify-between border-b border-[var(--border)] pb-2 h-7">
             <div className="flex flex-col gap-0.5">
-              <span className="text-[9px] font-black uppercase text-white/30 tracking-widest">
+              <span className="text-[9px] font-bold uppercase text-[var(--text-muted)] tracking-widest">
                 Adjustments ({charges.length})
               </span>
               <span
                 className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border self-start ${
                   order.charge_status === "accepted"
-                    ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
+                    ? "text-[var(--success)] bg-[var(--success-tint)] border-[var(--success)]/25"
                     : order.charge_status === "rejected"
-                    ? "text-rose-400 bg-rose-500/10 border-rose-500/20"
-                    : "text-amber-400 bg-amber-500/10 border-amber-500/20"
+                    ? "text-[var(--danger)] bg-[var(--danger-tint)] border-[var(--danger)]/25"
+                    : "text-[var(--warning)] bg-[var(--warning-tint)] border-[var(--warning)]/25"
                 }`}
               >
                 {order.charge_status || "Pending"}
@@ -409,7 +409,7 @@ export default function OrderCard({ order: propOrder, userId, conversation: prop
             </div>
             <button
               onClick={() => setOpenCharges(true)}
-              className="text-[10px] font-black uppercase text-[#D4A97A] hover:text-[#E5BC8E] transition-colors"
+              className="text-[10px] font-bold uppercase text-[var(--primary)] hover:text-[var(--primary-hover)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] rounded"
             >
               Statement →
             </button>
@@ -418,13 +418,13 @@ export default function OrderCard({ order: propOrder, userId, conversation: prop
           <div className="grid grid-cols-2 gap-2 h-9 shrink-0">
             <button
               onClick={() => setOpenDetail(true)}
-              className="h-full rounded-xl border border-[#38291A] bg-white/[0.04] text-[10px] font-black uppercase text-white/70 hover:bg-white/[0.08] transition-all"
+              className="h-full rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] text-[10px] font-bold uppercase text-[var(--text)] hover:bg-[var(--surface)] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
             >
               Details
             </button>
             <button
               onClick={handleOpenChat}
-              className="relative h-full rounded-xl bg-[#C49A6C] hover:bg-[#D4A97A] text-[10px] font-black uppercase text-[#0E0A06] transition-all"
+              className="relative h-full rounded-xl bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-[10px] font-bold uppercase text-[var(--primary-foreground)] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
             >
               Chat
               {visibleUnreadCount > 0 && (
@@ -439,21 +439,21 @@ export default function OrderCard({ order: propOrder, userId, conversation: prop
             {paymentsLoading ? (
               <button
                 disabled
-                className="h-full w-full rounded-xl bg-white/[0.02] border border-white/5 text-[10px] font-black uppercase text-white/20"
+                className="h-full w-full rounded-xl bg-[var(--surface-alt)] border border-[var(--border)] text-[10px] font-bold uppercase text-[var(--text-muted)]"
               >
                 Checking Financial Ledger...
               </button>
             ) : canPay ? (
               <button
                 onClick={() => setOpenPay(true)}
-                className="h-full w-full rounded-xl bg-gradient-to-r from-[#C49A6C] to-[#E8C98A] text-[10px] font-black uppercase text-[#0E0A06] shadow-lg hover:shadow-[#D4A97A]/20 transition-all active:scale-[0.98]"
+                className="h-full w-full rounded-xl bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-[10px] font-bold uppercase text-[var(--primary-foreground)] shadow-md transition-all active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
               >
                 {payButtonLabel}
               </button>
             ) : (
               <button
                 disabled
-                className="h-full w-full rounded-xl bg-white/[0.02] border border-white/5 text-[10px] font-black uppercase text-white/20 select-none cursor-not-allowed"
+                className="h-full w-full rounded-xl bg-[var(--surface-alt)] border border-[var(--border)] text-[10px] font-bold uppercase text-[var(--text-muted)] select-none cursor-not-allowed"
               >
                 {order.order_status === "cancelled" 
                   ? "Order Cancelled" 
@@ -530,13 +530,13 @@ function ProgressBar({ status }: { status: OrderStatus }) {
         <div key={stage} className="flex items-center flex-1 last:flex-none">
           <div
             className={`h-1.5 w-1.5 rounded-full transition-all duration-500 ${
-              i <= idx ? "bg-[#D4A97A] shadow-[0_0_8px_#D4A97A]" : "bg-white/10"
+              i <= idx ? "bg-[var(--accent)] shadow-[0_0_8px_var(--accent)]" : "bg-[var(--border)]"
             }`}
           />
           {i < stages.length - 1 && (
             <div
               className={`h-[1px] flex-1 mx-1 ${
-                i < idx ? "bg-[#D4A97A]/50" : "bg-white/5"
+                i < idx ? "bg-[var(--accent)]/50" : "bg-[var(--border)]"
               }`}
             />
           )}
@@ -549,7 +549,7 @@ function ProgressBar({ status }: { status: OrderStatus }) {
 function FinStat({ label, value, color }: { label: string; value: string; color: string }) {
   return (
     <div className="flex flex-col items-center py-2">
-      <p className="text-[8px] font-black uppercase text-white/30 mb-0.5 tracking-tighter">
+      <p className="text-[8px] font-bold uppercase text-[var(--text-muted)] mb-0.5 tracking-tighter">
         {label}
       </p>
       <p className={`text-[12px] font-bold tabular-nums ${color}`}>{value}</p>
@@ -560,10 +560,10 @@ function FinStat({ label, value, color }: { label: string; value: string; color:
 function InfoRow({ label, value, truncate }: { label: string; value: string; truncate?: boolean }) {
   return (
     <div className="flex items-baseline justify-between gap-4">
-      <span className="text-[9px] font-black uppercase text-white/35 tracking-widest">
+      <span className="text-[9px] font-bold uppercase text-[var(--text-muted)] tracking-widest">
         {label}
       </span>
-      <span className={`text-[11px] font-medium text-white/80 ${truncate ? "truncate max-w-[180px]" : ""}`}>
+      <span className={`text-[11px] font-medium text-[var(--text)] ${truncate ? "truncate max-w-[180px]" : ""}`}>
         {value}
       </span>
     </div>

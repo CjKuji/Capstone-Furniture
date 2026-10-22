@@ -33,11 +33,11 @@ export default function VariantsSection({
   /* ================= SHARED ROW STYLES ================= */
 
   const rowBase = `
-    w-full flex items-center gap-3 p-3 rounded-xl text-left transition-all duration-200
+    w-full flex items-center gap-3 p-3 rounded-xl text-left transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]
   `.trim();
 
-  const rowActive = `border border-[#D4A97A]/35 bg-[#D4A97A]/[0.06]`;
-  const rowIdle   = `border border-white/[0.06] bg-white/[0.03] hover:border-white/10 hover:bg-white/[0.05]`;
+  const rowActive = `border border-[var(--accent)] bg-[var(--surface-alt)]`;
+  const rowIdle   = `border border-[var(--border)] bg-[var(--surface-alt)]/50 hover:border-[var(--accent)] hover:bg-[var(--surface-alt)]`;
 
   /* ================= THUMBNAIL WRAPPER ================= */
 
@@ -50,8 +50,8 @@ export default function VariantsSection({
 
       {/* HEADER */}
       <div className="flex items-center gap-3">
-        <div className="w-1 h-4 rounded-full" style={{ background: "#D4A97A" }} />
-        <p className="text-xs font-semibold text-white/40 uppercase tracking-widest">
+        <div className="w-1 h-4 rounded-full bg-[var(--accent)]" />
+        <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-widest">
           Finishes &amp; Variants
         </p>
       </div>
@@ -62,24 +62,21 @@ export default function VariantsSection({
         className={`${rowBase} ${active === null ? rowActive : rowIdle}`}
       >
         {/* THUMB */}
-        <div
-          className={thumbBase}
-          style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}
-        >
-          <span className="text-[9px] font-semibold text-white/25 tracking-widest">DEF</span>
+        <div className={`${thumbBase} border border-[var(--border)] bg-[var(--surface)]`}>
+          <span className="text-[9px] font-semibold text-[var(--text-muted)] tracking-widest">DEF</span>
         </div>
 
         {/* LABEL */}
         <div className="flex-1 text-left">
-          <p className="text-sm font-medium text-white">Default Finish</p>
-          <p className="text-xs text-white/30 mt-0.5">Base material · no adjustment</p>
+          <p className="text-sm font-medium text-[var(--text)]">Default Finish</p>
+          <p className="text-xs text-[var(--text-muted)] mt-0.5">Base material · no adjustment</p>
         </div>
 
         {/* ACTIVE DOT */}
         {active === null && (
           <div
             className="shrink-0 w-2 h-2 rounded-full ml-auto"
-            style={{ background: "#D4A97A" }}
+            style={{ background: "var(--accent)" }}
           />
         )}
       </button>
@@ -97,10 +94,7 @@ export default function VariantsSection({
               className={`${rowBase} ${isActive ? rowActive : rowIdle}`}
             >
               {/* THUMB */}
-              <div
-                className={thumbBase}
-                style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}
-              >
+              <div className={`${thumbBase} border border-[var(--border)] bg-[var(--surface)]`}>
                 {v.previewUrl ? (
                   <img
                     src={v.previewUrl}
@@ -108,14 +102,14 @@ export default function VariantsSection({
                     className="w-full h-full object-cover"
                   />
                 ) : (
-                  <span className="text-[9px] text-white/20">N/A</span>
+                  <span className="text-[9px] text-[var(--text-muted)]">N/A</span>
                 )}
               </div>
 
               {/* LABEL */}
               <div className="flex-1 text-left">
-                <p className="text-sm font-medium text-white">{v.name}</p>
-                <p className="text-xs text-white/30 mt-0.5">
+                <p className="text-sm font-medium text-[var(--text)]">{v.name}</p>
+                <p className="text-xs text-[var(--text-muted)] mt-0.5">
                   {v.priceAdjustment
                     ? `+₱${Number(v.priceAdjustment).toLocaleString()}`
                     : "No price adjustment"}
@@ -126,7 +120,7 @@ export default function VariantsSection({
               {isActive && (
                 <div
                   className="shrink-0 w-2 h-2 rounded-full ml-auto"
-                  style={{ background: "#D4A97A" }}
+                  style={{ background: "var(--accent)" }}
                 />
               )}
             </button>

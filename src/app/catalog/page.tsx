@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import { Search, SlidersHorizontal, X, Box, Sparkles } from "lucide-react";
 
-import Navbar from "@/app/components/Navbar";
 import CustomerFurnitureCard from "@/app/components/CustomerCard";
 import Reveal from "@/app/components/Reveal";
 import PageTransition from "@/app/components/PageTransition";
@@ -55,11 +54,9 @@ export default function CatalogPage() {
 
   return (
     <PageTransition>
-    <div className="bg-[#0F0A06] min-h-screen font-sans text-white">
-      <Navbar />
-
+    <div className="bg-[var(--bg)] min-h-screen font-sans text-[var(--text)]">
       {/* ── PAGE HEADER ─────────────────────────────────── */}
-      <section className="px-4 sm:px-6 py-12 border-white/5 border-b">
+      <section className="bg-[var(--surface-alt)] px-4 sm:px-6 py-8 sm:py-9 border-[var(--border)] border-b">
         <div className="mx-auto max-w-7xl">
           <Reveal>
           <p className="mb-2 font-semibold text-[#D4A97A] text-xs uppercase tracking-widest">
@@ -69,7 +66,7 @@ export default function CatalogPage() {
             <div>
               <h1 className="font-bold text-4xl sm:text-5xl leading-tight tracking-tight">
                 Design
-                <span className="text-white/20"> Collection</span>
+                <span className="text-[var(--primary)]"> Collection</span>
               </h1>
               <p className="mt-2 text-white/40 text-sm">
                 Every piece is made to order — browse, customize, and preview in 3D or AR.
@@ -188,7 +185,7 @@ export default function CatalogPage() {
       </div>
 
       {/* ── GRID ────────────────────────────────────────── */}
-      <section className="mx-auto px-4 sm:px-6 py-12 max-w-7xl">
+      <section className="mx-auto px-4 sm:px-6 py-8 sm:py-10 max-w-7xl">
 
         {/* error banner */}
         {isError && (
@@ -212,12 +209,12 @@ export default function CatalogPage() {
         )}
 
         {/* card grid */}
-        <div className="gap-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="gap-4 sm:gap-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {isLoading
             ? Array.from({ length: 8 }).map((_, i) => (
-                <div key={i} className="bg-white/[0.03] border border-white/5 rounded-2xl overflow-hidden">
-                  <div className="bg-white/5 h-56 animate-pulse" />
-                  <div className="space-y-3 p-5">
+                <div key={i} className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl overflow-hidden">
+                  <div className="bg-[var(--surface-alt)] h-44 animate-pulse" />
+                  <div className="space-y-3 p-3.5">
                     <div className="bg-white/5 rounded-full w-3/4 h-4 animate-pulse" />
                     <div className="bg-white/5 rounded-full w-1/2 h-3 animate-pulse" />
                     <div className="bg-white/5 rounded-lg w-full h-8 animate-pulse" />

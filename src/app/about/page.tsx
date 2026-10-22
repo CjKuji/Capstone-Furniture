@@ -20,7 +20,6 @@ import {
   MessageSquare
 } from "lucide-react";
 
-import Navbar from "@/app/components/Navbar";
 import Reveal from "@/app/components/Reveal";
 import PageTransition from "@/app/components/PageTransition";
 import TutorialWidget from "@/app/components/TutorialWidget";
@@ -30,19 +29,15 @@ export default function AboutBLSashFactory() {
 
   return (
     <PageTransition>
-      <div className="relative bg-[#0F0A06] min-h-screen font-sans text-white overflow-x-hidden antialiased print:bg-white print:text-black">
+      <div className="relative bg-[var(--bg)] min-h-screen font-sans text-[var(--text)] overflow-x-hidden antialiased print:bg-white print:text-black">
         
         {/* ═══════════════════════════════════════════════════════
             FIXED NAVBAR BLOCK
         ═══════════════════════════════════════════════════════ */}
-        <div className="fixed top-0 left-0 w-full z-50 print:hidden">
-          <Navbar />
-        </div>
-
         {/* ═══════════════════════════════════════════════════════
             HERO STORY SECTION (Padded for Navbar alignment)
         ═══════════════════════════════════════════════════════ */}
-        <section className="relative px-4 sm:px-6 pt-28 pb-12 max-w-7xl mx-auto space-y-10">
+        <section className="relative px-4 sm:px-6 pt-8 pb-12 max-w-7xl mx-auto space-y-10">
           
           {/* Ambient Glow Blobs matching Home configuration */}
           <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">

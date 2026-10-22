@@ -10,7 +10,6 @@ import {
   ShieldCheck
 } from "lucide-react";
 
-import Navbar from "@/app/components/Navbar";
 import PageTransition from "@/app/components/PageTransition";
 import Reveal from "@/app/components/Reveal";
 import InquiryCard from "@/app/components/InquiryCard";
@@ -164,17 +163,13 @@ function InquiryManagementContent() {
   }, [searchParams, refetch]);
 
   return (
-    <div className="relative bg-[#0F0A06] min-h-screen font-sans text-white antialiased selection:bg-[#D4A97A]/30">
+    <div className="customer-inquiries-page relative bg-[var(--bg)] min-h-screen font-sans text-[var(--text)] antialiased selection:bg-[var(--accent)]/20">
       {/* AMBIENT CANVAS BACKGROUND OVERLAY */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
         <div className="top-0 -right-40 absolute bg-[#7A4E2D]/5 blur-[120px] rounded-full w-[500px] h-[500px]" />
       </div>
 
-      <div className="fixed top-0 left-0 w-full z-50">
-        <Navbar />
-      </div>
-
-      <main className="relative z-10 pt-28 pb-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-8">
+      <main className="relative z-10 pt-8 pb-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-8">
         
         {/* EXECUTIVE HEADER BLOCK */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-white/5">
@@ -247,14 +242,26 @@ function InquiryManagementContent() {
             </button>
           </div>
         ) : !inquiries || inquiries.length === 0 ? (
-          <div className="flex flex-col items-center justify-center p-12 bg-gradient-to-b from-white/[0.02] to-transparent border border-white/5 rounded-3xl border-dashed h-[350px] text-center">
-            <div className="bg-[#D4A97A]/10 p-4 rounded-full border border-[#D4A97A]/20 text-[#D4A97A] mb-4">
-              <Package className="w-8 h-8" />
+          <div className="mx-auto flex max-w-xl flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface)] px-4 py-12 text-center sm:py-14">
+            <div className="mb-1 flex h-12 w-12 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface-alt)] text-[var(--primary)]">
+              <Package className="h-6 w-6" />
             </div>
-            <h3 className="text-base font-bold text-white/80">No Inquiries Found</h3>
-            <p className="text-xs text-white/40 mt-1.5 max-w-xs leading-relaxed">
-              You haven&apos;t submitted any custom requests yet. Click &quot;New Inquiry&quot; to get started with our workshop craftsmen.
-            </p>
+            <div>
+              <h2 className="font-semibold tracking-tight text-[var(--text)]">
+                No inquiries yet.
+              </h2>
+              <p className="mx-auto mt-1 max-w-xs text-xs leading-relaxed text-[var(--text-muted)]">
+                Start a custom request and our workshop team can help bring your idea to life.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleOpenModal}
+              className="mt-1 inline-flex min-h-10 items-center gap-2 rounded-xl bg-[var(--primary)] px-5 py-2.5 text-xs font-semibold text-[var(--primary-foreground)] transition hover:bg-[var(--primary-hover)]"
+            >
+              <Plus className="h-4 w-4" />
+              New Inquiry
+            </button>
           </div>
         ) : (
           /* DISPLAY RENDER GRID MAP SYSTEM (Updated to dynamic 3-column layout) */

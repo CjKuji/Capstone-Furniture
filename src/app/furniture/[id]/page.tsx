@@ -9,7 +9,6 @@ import { useFurniturePublicById } from "@/hooks/useFurnitureById";
 import { useAIChatContext } from "@/app/context/AIChatContext";
 import { useUser } from "@/hooks/useUser"; // ✅ Added to track authentication state
 
-import Navbar from "@/app/components/Navbar";
 import Furniture3DViewer from "@/app/components/Furniture3DViewer";
 import AuthRequiredModal from "@/app/components/AuthRequiredModal";
 import BasicInfoSection from "@/app/components/sections/user/BasicInfoSection";
@@ -112,18 +111,17 @@ export default function FurnitureDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="bg-[#0F0A06] min-h-screen">
-        <Navbar />
-        <div className="flex flex-col lg:flex-row h-[calc(100vh-56px)] sm:h-[calc(100vh-64px)]">
-          <div className="hidden lg:flex flex-1 justify-center items-center border-white/5 border-r">
-            <div className="bg-white/5 rounded-full w-64 h-64 animate-pulse" />
+      <div className="bg-[var(--bg)] h-[calc(100dvh-3.5rem)] sm:h-[calc(100dvh-4rem)] overflow-hidden">
+        <div className="flex flex-col lg:flex-row h-full">
+          <div className="hidden lg:flex flex-1 justify-center items-center border-[var(--border)] border-r">
+            <div className="bg-[var(--surface-alt)] rounded-full w-64 h-64 animate-pulse" />
           </div>
-          <div className="lg:hidden w-full h-56 sm:h-72 bg-white/5 animate-pulse" />
-          <div className="flex-1 space-y-5 p-4 sm:p-8 lg:max-w-md xl:max-w-lg overflow-y-auto">
-            <div className="bg-white/5 rounded-full w-24 h-3 animate-pulse" />
-            <div className="bg-white/5 rounded-full w-2/3 h-7 animate-pulse" />
-            <div className="bg-white/5 rounded-full w-1/3 h-4 animate-pulse" />
-            <div className="bg-white/5 rounded-xl h-20 animate-pulse" />
+          <div className="lg:hidden w-full h-[34dvh] min-h-[220px] bg-[var(--surface-alt)] animate-pulse" />
+          <div className="flex-1 min-h-0 space-y-5 p-4 sm:p-6 lg:max-w-md xl:max-w-lg overflow-y-auto">
+            <div className="bg-[var(--surface-alt)] rounded-full w-24 h-3 animate-pulse" />
+            <div className="bg-[var(--surface-alt)] rounded-full w-2/3 h-7 animate-pulse" />
+            <div className="bg-[var(--surface-alt)] rounded-full w-1/3 h-4 animate-pulse" />
+            <div className="bg-[var(--surface-alt)] rounded-xl h-20 animate-pulse" />
           </div>
         </div>
       </div>
@@ -132,13 +130,12 @@ export default function FurnitureDetailPage() {
 
   if (isError || !safeFurniture) {
     return (
-      <div className="flex flex-col bg-[#0F0A06] min-h-screen">
-        <Navbar />
+      <div className="flex flex-col bg-[var(--bg)] h-[calc(100dvh-3.5rem)] sm:h-[calc(100dvh-4rem)] text-[var(--text)] overflow-hidden">
         <div className="flex flex-col flex-1 justify-center items-center gap-4 px-4 text-center">
-          <p className="text-white/60 text-sm">This item could not be found.</p>
+          <p className="text-[var(--text-muted)] text-sm">This item could not be found.</p>
           <button
             onClick={() => router.push("/catalog")}
-            className="flex items-center gap-2 px-5 py-2 border border-white/10 hover:border-[#D4A97A]/40 rounded-full text-white text-sm transition"
+            className="flex items-center gap-2 min-h-11 px-5 py-2 border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-alt)] rounded-xl text-[var(--primary)] text-sm transition"
           >
             <ArrowLeft className="w-4 h-4" /> Back to catalog
           </button>
@@ -154,30 +151,29 @@ export default function FurnitureDetailPage() {
 
   return (
     <PageTransition>
-      <div className="flex flex-col bg-[#0F0A06] h-screen max-h-screen overflow-hidden text-white">
-        <Navbar />
+      <div className="flex flex-col bg-[var(--bg)] h-[calc(100dvh-3.5rem)] sm:h-[calc(100dvh-4rem)] overflow-hidden text-[var(--text)]">
 
-        <div className="border-white/5 border-b flex-shrink-0">
-          <div className="flex items-center gap-2 mx-auto px-4 sm:px-6 py-2.5 max-w-7xl text-white/30 text-[10px] sm:text-xs">
+        <div className="border-[var(--border)] border-b flex-shrink-0">
+          <div className="flex items-center gap-2 mx-auto px-4 sm:px-6 py-2 max-w-7xl text-[var(--text-muted)] text-[10px] sm:text-xs">
             <button
               onClick={() => router.push("/catalog")}
-              className="hover:text-[#D4A97A] transition"
+              className="hover:text-[var(--primary)] transition"
             >
               Catalog
             </button>
             <ChevronRight className="w-3 h-3 shrink-0" />
-            <span className="max-w-[180px] sm:max-w-xs text-white/50 truncate">
+            <span className="max-w-[180px] sm:max-w-xs text-[var(--text)] truncate">
               {safeFurniture.name}
             </span>
           </div>
         </div>
 
-        <div className="flex flex-col lg:flex-row gap-5 mx-auto px-4 sm:px-6 py-4 w-full max-w-7xl flex-1 min-h-0 overflow-y-auto lg:overflow-hidden">
-          <div className="flex flex-col flex-1 gap-3 min-h-[380px] lg:min-h-0 lg:h-full justify-between">
-            <div className="relative flex-1 w-full bg-[#0A0705] border border-white/5 rounded-2xl overflow-hidden min-h-0">
+        <div className="flex flex-col lg:flex-row gap-3 lg:gap-5 mx-auto px-3 sm:px-6 py-3 sm:py-4 w-full max-w-7xl flex-1 min-h-0 overflow-hidden">
+          <div className="flex flex-col flex-1 min-h-[220px] h-[34dvh] max-h-[360px] shrink-0 lg:h-full lg:max-h-none lg:min-h-0">
+            <div className="group relative flex-1 w-full bg-[var(--surface-alt)] border border-[var(--border)] rounded-2xl overflow-hidden min-h-0">
               {safeFurniture.category?.name && (
                 <div className="top-4 left-4 z-10 absolute">
-                  <span className="bg-black/60 backdrop-blur-sm px-3 py-1 border border-white/10 rounded-full font-medium text-[11px] text-white/50 capitalize">
+                  <span className="bg-[var(--surface)]/90 backdrop-blur-sm px-3 py-1 border border-[var(--border)] rounded-full font-medium text-[11px] text-[var(--text-muted)] capitalize">
                     {safeFurniture.category.name}
                   </span>
                 </div>
@@ -205,43 +201,46 @@ export default function FurnitureDetailPage() {
                     alt={safeFurniture.name}
                     className="max-w-full max-h-full object-contain transition-transform duration-300 hover:scale-[1.02]"
                   />
-                  <div className="absolute bottom-4 right-4 bg-black/60 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-white/10 text-white/70 text-[11px] flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="absolute bottom-4 right-4 bg-[var(--surface)]/90 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-[var(--border)] text-[var(--text)] text-[11px] flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                     <Maximize2 className="w-3 h-3" />
                     Click to expand
                   </div>
                 </div>
               ) : (
-                <div className="absolute inset-0 flex flex-col justify-center items-center gap-3 text-white/20">
-                  <Cpu className="w-10 h-10" />
+                <div className="absolute inset-0 flex flex-col justify-center items-center gap-3 text-[var(--text-muted)]">
+                  <Cpu className="w-10 h-10 opacity-50" />
                   <p className="text-xs">No preview available</p>
                 </div>
               )}
 
               {modelUrl && (
-                <div className="right-4 bottom-4 absolute flex items-center gap-1.5 bg-[#D4A97A]/10 px-3 py-1.5 border border-[#D4A97A]/20 rounded-full text-[#D4A97A] text-[11px]">
+                <div className="right-4 bottom-4 absolute flex items-center gap-1.5 bg-[var(--surface)]/90 px-3 py-1.5 border border-[var(--border)] rounded-full text-[var(--primary)] text-[11px]">
                   <Maximize2 className="w-3 h-3" /> 3D Interactive
                 </div>
               )}
             </div>
           </div>
 
-          <div className="flex flex-col gap-4 w-full lg:w-[380px] xl:w-[440px] shrink-0 lg:h-full lg:overflow-y-auto custom-scrollbar pr-0 lg:pr-1">
-            <Reveal delay={0.05}>
-              <div className="space-y-1">
-                <h1 className="font-bold text-white text-xl sm:text-2xl leading-tight">
+          <div className="customer-furniture-info-scroll flex flex-col gap-3 sm:gap-4 w-full flex-1 min-h-0 lg:flex-none lg:w-[380px] xl:w-[440px] lg:h-full overflow-y-auto overscroll-contain pr-1">
+            <Reveal delay={0.05} className="shrink-0">
+              <div className="space-y-1 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 sm:p-5">
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--primary)]">
+                  Made to order
+                </p>
+                <h1 className="font-bold text-[var(--text)] text-2xl sm:text-3xl leading-tight">
                   {safeFurniture.name}
                 </h1>
                 <div className="flex items-baseline gap-2 pt-0.5">
-                  <span className="font-semibold text-[#D4A97A] text-xl sm:text-2xl">
+                  <span className="font-semibold text-[var(--primary)] text-xl sm:text-2xl">
                     ₱{Number(safeFurniture.base_price ?? 0).toLocaleString()}
                   </span>
-                  <span className="text-white/30 text-xs">starting price</span>
+                  <span className="text-[var(--text-muted)] text-xs">starting price</span>
                 </div>
               </div>
             </Reveal>
 
             {images.length > 0 && (
-              <div className="bg-white/[0.02] p-4 border border-white/5 rounded-2xl">
+              <div className="shrink-0 bg-[var(--surface)] p-4 border border-[var(--border)] rounded-2xl">
                 <AssetsSection 
                   state={{ images }} 
                   onImageClick={(imgs, idx) => {
@@ -252,8 +251,8 @@ export default function FurnitureDetailPage() {
               </div>
             )}
 
-            <Reveal delay={0.12}>
-              <div className="bg-white/[0.02] p-4 border border-white/5 rounded-2xl">
+            <Reveal delay={0.12} className="shrink-0">
+              <div className="bg-[var(--surface)] p-4 border border-[var(--border)] rounded-2xl">
                 <BasicInfoSection
                   state={{
                     name: safeFurniture.name,
@@ -279,8 +278,8 @@ export default function FurnitureDetailPage() {
             </Reveal>
 
             {variants.length > 0 && (
-              <Reveal delay={0.2}>
-                <div className="bg-white/[0.02] p-4 border border-white/5 rounded-2xl">
+              <Reveal delay={0.2} className="shrink-0">
+                <div className="bg-[var(--surface)] p-4 border border-[var(--border)] rounded-2xl">
                   <VariantsSection
                     variants={variants}
                     activeVariantId={previewVariantId}
@@ -290,11 +289,11 @@ export default function FurnitureDetailPage() {
               </Reveal>
             )}
 
-            <Reveal delay={0.28}>
-              <div className="pt-2">
+            <Reveal delay={0.28} className="shrink-0">
+              <div className="pt-1 pb-2">
                 <button
                   onClick={handleOrderClick}
-                  className="bg-[#D4A97A] hover:bg-[#C4976A] shadow-md py-4 rounded-full w-full font-bold text-[#1C1209] text-sm active:scale-[0.99] transition-all"
+                  className="bg-[var(--primary)] hover:bg-[var(--primary-hover)] shadow-md py-3.5 rounded-xl w-full font-semibold text-[var(--primary-foreground)] text-sm active:scale-[0.99] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg)]"
                 >
                   Customize &amp; Order
                 </button>
